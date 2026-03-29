@@ -2,7 +2,8 @@ from django.http import JsonResponse
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from competencies.models import Competence
-from disciplines.models import ProgramDiscipline
+from core.models import EducationalProgram
+from disciplines.models import Discipline, ProgramDiscipline
 
 from .forms import (
     AssessmentItemForm,
@@ -113,45 +114,47 @@ def serialize_assessment_item(item, detailed=False):
     return data
 
 
+def build_assessment_item_queryset(request):
+    queryset = (
+        AssessmentItem.objects.select_related(
+            'program_discipline__educational_program',
+            'program_discipline__discipline',
+            'assessment_item_type',
+        )
+        .order_by('id')
+    )
+
+    program_id = request.GET.get('program')
+    if program_id:
+        queryset = queryset.filter(program_discipline__educational_program_id=program_id)
+
+    discipline_id = request.GET.get('discipline')
+    if discipline_id:
+        queryset = queryset.filter(program_discipline__discipline_id=discipline_id)
+
+    assessment_item_type_id = request.GET.get('assessment_item_type')
+    if assessment_item_type_id:
+        queryset = queryset.filter(assessment_item_type_id=assessment_item_type_id)
+
+    competence_id = request.GET.get('competence')
+    if competence_id:
+        queryset = queryset.extra(
+            where=[
+                'EXISTS (SELECT 1 FROM assessment_item_competence aic '
+                'WHERE aic.assessment_item_id = assessment_item.id '
+                'AND aic.competence_id = %s)'
+            ],
+            params=[competence_id],
+        )
+
+    return queryset
+
+
 class AssessmentItemListView(ListView):
     model = AssessmentItem
 
     def get_queryset(self):
-        queryset = (
-            super()
-            .get_queryset()
-            .select_related(
-                'program_discipline__educational_program',
-                'program_discipline__discipline',
-                'assessment_item_type',
-            )
-            .order_by('id')
-        )
-
-        program_id = self.request.GET.get('program')
-        if program_id:
-            queryset = queryset.filter(program_discipline__educational_program_id=program_id)
-
-        discipline_id = self.request.GET.get('discipline')
-        if discipline_id:
-            queryset = queryset.filter(program_discipline__discipline_id=discipline_id)
-
-        assessment_item_type_id = self.request.GET.get('assessment_item_type')
-        if assessment_item_type_id:
-            queryset = queryset.filter(assessment_item_type_id=assessment_item_type_id)
-
-        competence_id = self.request.GET.get('competence')
-        if competence_id:
-            queryset = queryset.extra(
-                where=[
-                    'EXISTS (SELECT 1 FROM assessment_item_competence aic '
-                    'WHERE aic.assessment_item_id = assessment_item.id '
-                    'AND aic.competence_id = %s)'
-                ],
-                params=[competence_id],
-            )
-
-        return queryset
+        return build_assessment_item_queryset(self.request)
 
     def render_to_response(self, context, **response_kwargs):
         items = [serialize_assessment_item(item) for item in context['object_list']]
@@ -175,6 +178,68 @@ class AssessmentItemDetailView(DetailView):
 
     def render_to_response(self, context, **response_kwargs):
         return JsonResponse({'result': serialize_assessment_item(context['object'], detailed=True)})
+
+
+class AssessmentItemPageListView(ListView):
+    model = AssessmentItem
+    template_name = 'assessment/list.html'
+    context_object_name = 'items'
+    paginate_by = 12
+
+    def get_queryset(self):
+        return build_assessment_item_queryset(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['programs'] = EducationalProgram.objects.order_by('code')
+        context['disciplines'] = Discipline.objects.order_by('name')
+        context['item_types'] = AssessmentItemType.objects.order_by('name')
+        context['selected_program'] = self.request.GET.get('program', '')
+        context['selected_discipline'] = self.request.GET.get('discipline', '')
+        context['selected_assessment_item_type'] = self.request.GET.get('assessment_item_type', '')
+        params = self.request.GET.copy()
+        params.pop('page', None)
+        context['query_params'] = params.urlencode()
+        return context
+
+
+class AssessmentItemPageDetailView(DetailView):
+    model = AssessmentItem
+    template_name = 'assessment/detail.html'
+    context_object_name = 'item'
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .select_related(
+                'program_discipline__educational_program',
+                'program_discipline__discipline',
+                'assessment_item_type',
+            )
+            .prefetch_related(
+                'options',
+                'matching_left_items',
+                'sequence_items',
+                'open_answers',
+            )
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['competences'] = serialize_competences(self.object.id)
+        context['type_name'] = normalize_item_type_name(self.object.assessment_item_type.name)
+        context['options'] = self.object.options.order_by('sort_order', 'id')
+        context['sequence_items'] = self.object.sequence_items.order_by('correct_order', 'id')
+        context['open_answers'] = self.object.open_answers.order_by('id')
+        context['matching_pairs'] = [
+            {
+                'left': left_item,
+                'right': left_item.matched_answer.right_item if hasattr(left_item, 'matched_answer') else None,
+            }
+            for left_item in self.object.matching_left_items.order_by('sort_order', 'id')
+        ]
+        return context
 
 
 class AssessmentItemFormsetMixin:

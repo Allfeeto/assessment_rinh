@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Главная | Assessment RINH{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Система оценочных материалов</h1>
+
+<div class="panel">
+    <h2>Обзор</h2>
+    <div class="stats">
+        <div class="stat">
+            <div class="muted">Программы</div>
+            <div class="stat-value">{{ stats.programs }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Дисциплины</div>
+            <div class="stat-value">{{ stats.disciplines }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Компетенции</div>
+            <div class="stat-value">{{ stats.competences }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Задания</div>
+            <div class="stat-value">{{ stats.assessment_items }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <a class="card" href="/assessment/">
+        <h3>Задания</h3>
+        <div class="muted">Список, фильтрация, просмотр карточки задания</div>
+    </a>
+    <a class="card" href="/disciplines/">
+        <h3>Дисциплины</h3>
+        <div class="muted">Список дисциплин и привязки к программам</div>
+    </a>
+    <a class="card" href="/competencies/">
+        <h3>Компетенции</h3>
+        <div class="muted">Матрица компетенций по программам</div>
+    </a>
+    <a class="card" href="/reports/">
+        <h3>Отчёты</h3>
+        <div class="muted">Сводные таблицы покрытия и распределений</div>
+    </a>
+    <a class="card" href="/export/word/">
+        <h3>Экспорт Word</h3>
+        <div class="muted">Формирование docx по выбранным фильтрам</div>
+    </a>
+    <a class="card" href="/admin/">
+        <h3>Админка</h3>
+        <div class="muted">Управление справочниками и заданиями</div>
+    </a>
+</div>
+{% endblock %}

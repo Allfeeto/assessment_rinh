@@ -1,7 +1,24 @@
 from django.http import JsonResponse
-from django.views.generic import ListView
+from django.views.generic import ListView, TemplateView
 
+from assessment.models import AssessmentItem
+from competencies.models import Competence
+from disciplines.models import Discipline
 from .models import EducationalProgram
+
+
+class HomeView(TemplateView):
+    template_name = 'home.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['stats'] = {
+            'programs': EducationalProgram.objects.count(),
+            'disciplines': Discipline.objects.count(),
+            'competences': Competence.objects.count(),
+            'assessment_items': AssessmentItem.objects.count(),
+        }
+        return context
 
 
 class EducationalProgramListView(ListView):

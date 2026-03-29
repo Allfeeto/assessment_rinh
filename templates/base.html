@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Assessment RINH{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #f5f7f8;
+            --surface: #ffffff;
+            --text: #1f2a2d;
+            --muted: #5f7379;
+            --accent: #116b74;
+            --accent-weak: #d9eef1;
+            --border: #d0dde0;
+            --danger: #9a2a2a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top right, #eaf4f5 0, #f5f7f8 44%),
+                linear-gradient(120deg, #f8fbfb 0%, #eef4f4 100%);
+        }
+        .container {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .navbar-wrap {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .navbar {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 12px 20px;
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .brand {
+            font-weight: 700;
+            font-size: 18px;
+            margin-right: 10px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .nav-link {
+            text-decoration: none;
+            color: var(--text);
+            padding: 8px 11px;
+            border-radius: 9px;
+            border: 1px solid transparent;
+            transition: 0.15s;
+        }
+        .nav-link:hover,
+        .nav-link.active {
+            border-color: var(--border);
+            background: var(--accent-weak);
+            color: var(--accent);
+        }
+        h1, h2, h3 {
+            margin: 0 0 14px;
+            line-height: 1.25;
+            letter-spacing: 0.2px;
+        }
+        .page-title { margin-bottom: 18px; }
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 18px;
+        }
+        .grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 22px rgba(17, 107, 116, 0.12);
+        }
+        .card h3 { margin: 0 0 8px; color: var(--accent); }
+        .muted { color: var(--muted); }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: end;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text);
+        }
+        .field { min-width: 190px; flex: 1 1 190px; }
+        .btn {
+            display: inline-block;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: #fff;
+            text-decoration: none;
+            padding: 9px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn.secondary {
+            background: #fff;
+            color: var(--accent);
+        }
+        .btn:hover { opacity: 0.95; }
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+        }
+        th, td {
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            padding: 10px 8px;
+            vertical-align: top;
+        }
+        th {
+            background: #f1f6f7;
+            color: #294146;
+            font-size: 13px;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+        .pagination {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+        .pagination a,
+        .pagination span {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text);
+            padding: 6px 10px;
+            background: #fff;
+        }
+        .pagination .current {
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .stat {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .stat-value {
+            font-size: 28px;
+            color: var(--accent);
+            font-weight: 700;
+            margin-top: 2px;
+        }
+        .alert {
+            background: #ffeaea;
+            border: 1px solid #efb9b9;
+            color: var(--danger);
+            border-radius: 9px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        .inline-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .inline-list li {
+            background: #f1f6f7;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 13px;
+        }
+        @media (max-width: 700px) {
+            .navbar { padding: 10px 14px; }
+            .container { padding: 14px; }
+            .brand { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<header class="navbar-wrap">
+    <nav class="navbar">
+        <a href="/" class="brand">Assessment RINH</a>
+        <a href="/assessment/" class="nav-link {% if request.path|slice:':11' == '/assessment/' %}active{% endif %}">Задания</a>
+        <a href="/disciplines/" class="nav-link {% if request.path|slice:':12' == '/disciplines/' %}active{% endif %}">Дисциплины</a>
+        <a href="/competencies/" class="nav-link {% if request.path|slice:':13' == '/competencies/' %}active{% endif %}">Компетенции</a>
+        <a href="/reports/" class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}">Отчёты</a>
+        <a href="/export/word/" class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}">Экспорт Word</a>
+        <a href="/admin/" class="nav-link">Админка</a>
+    </nav>
+</header>
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

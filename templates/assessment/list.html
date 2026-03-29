@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Задания{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Задания</h1>
+
+<div class="panel">
+    <form method="get" class="form-row">
+        <div class="field">
+            <label for="id_program">Программа</label>
+            <select id="id_program" name="program">
+                <option value="">Все</option>
+                {% for program in programs %}
+                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
+                        {{ program.code }} — {{ program.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_discipline">Дисциплина</label>
+            <select id="id_discipline" name="discipline">
+                <option value="">Все</option>
+                {% for discipline in disciplines %}
+                    <option value="{{ discipline.id }}" {% if selected_discipline == discipline.id|stringformat:"s" %}selected{% endif %}>
+                        {{ discipline.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_type">Тип задания</label>
+            <select id="id_type" name="assessment_item_type">
+                <option value="">Все</option>
+                {% for item_type in item_types %}
+                    <option value="{{ item_type.id }}" {% if selected_assessment_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>
+                        {{ item_type.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn" type="submit">Применить</button>
+        <a class="btn secondary" href="/assessment/">Сбросить</a>
+    </form>
+</div>
+
+<div class="panel table-wrap">
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Текст</th>
+            <th>Программа</th>
+            <th>Дисциплина</th>
+            <th>Тип</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.text|truncatechars:140 }}</td>
+                <td>{{ item.program_discipline.educational_program.code }}</td>
+                <td>
+                    <a href="/disciplines/{{ item.program_discipline.discipline_id }}/">
+                        {{ item.program_discipline.discipline.name }}
+                    </a>
+                </td>
+                <td>{{ item.assessment_item_type.name }}</td>
+                <td><a class="btn secondary" href="/assessment/{{ item.id }}/">Открыть</a></td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="6" class="muted">Ничего не найдено.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if is_paginated %}
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}">Первая</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Стр. {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Вперёд</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

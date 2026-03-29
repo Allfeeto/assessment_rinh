@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Компетенции{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Компетенции</h1>
+
+<div class="panel">
+    <form method="get" class="form-row">
+        <div class="field">
+            <label for="id_program">Программа</label>
+            <select id="id_program" name="program">
+                <option value="">Все</option>
+                {% for program in programs %}
+                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
+                        {{ program.code }} — {{ program.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_competence_type">Тип компетенции</label>
+            <select id="id_competence_type" name="competence_type">
+                <option value="">Все</option>
+                {% for competence_type in competence_types %}
+                    <option value="{{ competence_type.id }}" {% if selected_competence_type == competence_type.id|stringformat:"s" %}selected{% endif %}>
+                        {{ competence_type.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn" type="submit">Применить</button>
+        <a class="btn secondary" href="/competencies/">Сбросить</a>
+    </form>
+</div>
+
+<div class="panel table-wrap">
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th>Наименование</th>
+            <th>Тип</th>
+            <th>Программа</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for competence in competences %}
+            <tr>
+                <td>{{ competence.code }}</td>
+                <td>{{ competence.name }}</td>
+                <td>{{ competence.competence_type.name }}</td>
+                <td>{{ competence.educational_program.code }}</td>
+                <td>
+                    <a class="btn secondary" href="/reports/?program={{ competence.educational_program_id }}&competence={{ competence.id }}">Отчёт</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5" class="muted">Компетенции не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if is_paginated %}
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}">Первая</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Стр. {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Вперёд</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

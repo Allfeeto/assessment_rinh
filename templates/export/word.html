@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Экспорт Word{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Экспорт в Word</h1>
+
+<div class="panel">
+    {% if form.errors %}
+        <div class="alert">
+            {{ form.errors }}
+        </div>
+    {% endif %}
+
+    <form method="get" action="/export/word/" class="form-row">
+        <div class="field">
+            <label for="id_program_id">Программа</label>
+            <select id="id_program_id" name="program_id" required>
+                <option value="">Выберите программу</option>
+                {% for program in programs %}
+                    <option value="{{ program.id }}" {% if request.GET.program_id == program.id|stringformat:"s" %}selected{% endif %}>
+                        {{ program.code }} — {{ program.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="id_discipline_id">Дисциплина</label>
+            <select id="id_discipline_id" name="discipline_id" required>
+                <option value="">Выберите дисциплину</option>
+                {% for discipline in disciplines %}
+                    <option value="{{ discipline.id }}" {% if request.GET.discipline_id == discipline.id|stringformat:"s" %}selected{% endif %}>
+                        {{ discipline.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="id_assessment_item_type">Тип задания</label>
+            <select id="id_assessment_item_type" name="assessment_item_type">
+                <option value="">Все</option>
+                {% for item_type in assessment_item_types %}
+                    <option value="{{ item_type.id }}" {% if request.GET.assessment_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>
+                        {{ item_type.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="id_competence">Компетенция</label>
+            <select id="id_competence" name="competence">
+                <option value="">Все</option>
+                {% for competence in competences %}
+                    <option value="{{ competence.id }}" {% if request.GET.competence == competence.id|stringformat:"s" %}selected{% endif %}>
+                        {{ competence.code }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button class="btn" type="submit">Скачать Word</button>
+    </form>
+</div>
+{% endblock %}

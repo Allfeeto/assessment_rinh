@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Задание {{ item.id }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Задание #{{ item.id }}</h1>
+
+<div class="panel">
+    <p><strong>Текст:</strong> {{ item.text }}</p>
+    <p><strong>Программа:</strong> {{ item.program_discipline.educational_program.code }} — {{ item.program_discipline.educational_program.name }}</p>
+    <p><strong>Дисциплина:</strong>
+        <a href="/disciplines/{{ item.program_discipline.discipline_id }}/">{{ item.program_discipline.discipline.name }}</a>
+    </p>
+    <p><strong>Тип задания:</strong> {{ item.assessment_item_type.name }}</p>
+    <a class="btn secondary" href="/assessment/">← К списку заданий</a>
+</div>
+
+<div class="panel">
+    <h2>Компетенции</h2>
+    {% if competences %}
+        <ul class="inline-list">
+            {% for competence in competences %}
+                <li>{{ competence.code }} ({{ competence.type }})</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="muted">Компетенции не указаны.</p>
+    {% endif %}
+</div>
+
+{% if type_name == 'один' or type_name == 'несколько' %}
+    <div class="panel table-wrap">
+        <h2>Варианты ответа</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Порядок</th>
+                <th>Текст</th>
+                <th>Верный</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for option in options %}
+                <tr>
+                    <td>{{ option.sort_order }}</td>
+                    <td>{{ option.text }}</td>
+                    <td>{% if option.is_correct %}Да{% else %}Нет{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3" class="muted">Варианты не заполнены.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% elif type_name == 'соответствие' %}
+    <div class="panel table-wrap">
+        <h2>Соответствия</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Левая часть</th>
+                <th>Правая часть</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for pair in matching_pairs %}
+                <tr>
+                    <td>{{ pair.left.label }}. {{ pair.left.text }}</td>
+                    <td>
+                        {% if pair.right %}
+                            {{ pair.right.label }}. {{ pair.right.text }}
+                        {% else %}
+                            <span class="muted">Не указано</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2" class="muted">Пары не заполнены.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% elif type_name == 'последовательность' %}
+    <div class="panel table-wrap">
+        <h2>Последовательность</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Порядок</th>
+                <th>Элемент</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for sequence_item in sequence_items %}
+                <tr>
+                    <td>{{ sequence_item.correct_order }}</td>
+                    <td>{{ sequence_item.text }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2" class="muted">Элементы не заполнены.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% elif type_name == 'открытый' %}
+    <div class="panel">
+        <h2>Эталонные ответы</h2>
+        <ul>
+            {% for answer in open_answers %}
+                <li>{{ answer.text }}</li>
+            {% empty %}
+                <li class="muted">Ответы не заполнены.</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+{% endblock %}
