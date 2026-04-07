@@ -4,19 +4,18 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
-from assessment.forms import normalize_item_type_name
-from assessment.models import AssessmentItem
+from assessment.models import AssessmentItem, AssessmentItemRow
 from disciplines.models import ProgramDiscipline
 
 
-def _build_queryset(program_id, discipline_id, filters):
+def _filtered_items(program_id, discipline_id, filters):
     queryset = (
         AssessmentItem.objects.select_related(
-            'program_discipline__educational_program',
-            'program_discipline__discipline',
             'assessment_item_type',
+            'program_discipline__discipline',
+            'program_discipline__educational_program__program_profile',
         )
-        .prefetch_related('options', 'matching_left_items', 'sequence_items', 'open_answers')
+        .prefetch_related('rows')
         .filter(
             program_discipline__educational_program_id=program_id,
             program_discipline__discipline_id=discipline_id,
@@ -24,46 +23,71 @@ def _build_queryset(program_id, discipline_id, filters):
         .order_by('id')
     )
 
-    assessment_item_type_id = filters.get('assessment_item_type')
-    if assessment_item_type_id:
-        queryset = queryset.filter(assessment_item_type_id=assessment_item_type_id)
+    if filters.get('assessment_item_type_id'):
+        queryset = queryset.filter(assessment_item_type_id=filters['assessment_item_type_id'])
 
-    competence_id = filters.get('competence')
-    if competence_id:
+    if filters.get('competence_id'):
         queryset = queryset.extra(
             where=[
                 'EXISTS (SELECT 1 FROM assessment_item_competence aic '
                 'WHERE aic.assessment_item_id = assessment_item.id '
                 'AND aic.competence_id = %s)'
             ],
-            params=[competence_id],
+            params=[filters['competence_id']],
         )
 
     return queryset
 
 
-def _format_assessment_item(index, item):
-    lines = [f'{index}. {item.text}', f'Тип задания: {item.assessment_item_type.name}']
-    item_type_name = normalize_item_type_name(item.assessment_item_type.name)
+def _format_item(index, item):
+    lines = [f'{index}. {item.prompt_text}', f'Тип: {item.assessment_item_type.name}']
+    if item.instruction_text:
+        lines.append(f'Инструкция: {item.instruction_text}')
 
-    if item_type_name in {'один', 'несколько'}:
-        for option in item.options.order_by('sort_order', 'id'):
-            marker = '[+]' if option.is_correct else '[ ]'
-            lines.append(f'  {marker} {option.sort_order}. {option.text}')
+    item_type = item.assessment_item_type.name.lower()
+    rows = list(item.rows.all())
 
-    elif item_type_name == 'соответствие':
-        for left_item in item.matching_left_items.order_by('sort_order', 'id'):
-            right_item = left_item.matched_answer.right_item if hasattr(left_item, 'matched_answer') else None
-            right_repr = f'{right_item.label}) {right_item.text}' if right_item else 'не задано'
-            lines.append(f'  {left_item.label}) {left_item.text} -> {right_repr}')
+    if item_type in {'single_choice', 'multiple_choice'}:
+        option_rows = [row for row in rows if row.row_kind == AssessmentItemRow.KIND_OPTION]
+        option_rows.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        for row in option_rows:
+            marker = '[+]' if row.is_correct else '[ ]'
+            lines.append(f'  {marker} {row.left_text or ""}')
 
-    elif item_type_name == 'последовательность':
-        for sequence_item in item.sequence_items.order_by('correct_order', 'id'):
-            lines.append(f'  {sequence_item.correct_order}. {sequence_item.text}')
+    elif item_type == 'matching':
+        if item.left_column_title or item.right_column_title:
+            lines.append(
+                f'  Колонки: {item.left_column_title or "Левая"} | {item.right_column_title or "Правая"}'
+            )
+        pair_rows = [row for row in rows if row.row_kind == AssessmentItemRow.KIND_MATCH_PAIR]
+        pair_rows.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        for row in pair_rows:
+            left_label = f'{row.left_label} ' if row.left_label else ''
+            right_label = f'{row.right_label} ' if row.right_label else ''
+            lines.append(
+                f'  Пара: {left_label}{row.left_text or ""} -> {right_label}{row.right_text or ""}'
+            )
 
-    elif item_type_name == 'открытый':
-        for open_answer in item.open_answers.order_by('id'):
-            lines.append(f'  - {open_answer.text}')
+        distractors = [
+            row for row in rows if row.row_kind == AssessmentItemRow.KIND_MATCH_RIGHT_DISTRACTOR
+        ]
+        distractors.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        if distractors:
+            lines.append('  Дистракторы справа:')
+            for row in distractors:
+                right_label = f'{row.right_label} ' if row.right_label else ''
+                lines.append(f'    - {right_label}{row.right_text or ""}')
+
+    elif item_type == 'sequence':
+        sequence_rows = [row for row in rows if row.row_kind == AssessmentItemRow.KIND_SEQUENCE]
+        sequence_rows.sort(key=lambda row: (row.correct_order or 9999, row.id))
+        for row in sequence_rows:
+            lines.append(f'  {row.correct_order}. {row.left_text or ""}')
+
+    elif item_type == 'open_answer':
+        open_rows = [row for row in rows if row.row_kind == AssessmentItemRow.KIND_OPEN_ANSWER]
+        for row in open_rows:
+            lines.append(f'  - {row.open_answer_text or ""}')
 
     return '\n'.join(lines)
 
@@ -73,51 +97,43 @@ def generate_docx(program_id, discipline_id, filters):
     from docxtpl import DocxTemplate
 
     program_discipline = (
-        ProgramDiscipline.objects.select_related('educational_program', 'discipline')
-        .filter(
-            educational_program_id=program_id,
-            discipline_id=discipline_id,
-        )
+        ProgramDiscipline.objects.select_related('educational_program__program_profile', 'discipline')
+        .filter(educational_program_id=program_id, discipline_id=discipline_id)
         .first()
     )
+
     if not program_discipline:
         raise ValueError('Связка программы и дисциплины не найдена.')
 
-    queryset = _build_queryset(program_id, discipline_id, filters)
-
-    body = '\n\n'.join(
-        _format_assessment_item(index, item)
-        for index, item in enumerate(queryset, start=1)
-    )
+    items = _filtered_items(program_id, discipline_id, filters)
+    body = '\n\n'.join(_format_item(index, item) for index, item in enumerate(items, start=1))
     if not body:
         body = 'По выбранным фильтрам задания не найдены.'
 
-    template_fd, template_name = tempfile.mkstemp(suffix='.docx')
-    os.close(template_fd)
-    Path(template_name).unlink(missing_ok=True)
+    fd, template_path = tempfile.mkstemp(suffix='.docx')
+    os.close(fd)
+    Path(template_path).unlink(missing_ok=True)
 
-    template_document = Document()
-    template_document.add_heading('Оценочные материалы', level=1)
-    template_document.add_paragraph('Программа: {{ program_name }}')
-    template_document.add_paragraph('Дисциплина: {{ discipline_name }}')
-    template_document.add_paragraph('Дата формирования: {{ generated_at }}')
-    template_document.add_paragraph('{{ body }}')
-    template_document.save(template_name)
+    template = Document()
+    template.add_heading('Оценочные материалы', level=1)
+    template.add_paragraph('Программа: {{ program_name }}')
+    template.add_paragraph('Дисциплина: {{ discipline_name }}')
+    template.add_paragraph('Дата: {{ generated_at }}')
+    template.add_paragraph('{{ content }}')
+    template.save(template_path)
 
-    doc_template = DocxTemplate(template_name)
-    doc_template.render(
+    doc = DocxTemplate(template_path)
+    doc.render(
         {
-            'program_name': f'{program_discipline.educational_program.code} {program_discipline.educational_program.name}',
+            'program_name': str(program_discipline.educational_program),
             'discipline_name': program_discipline.discipline.name,
             'generated_at': datetime.now().strftime('%d.%m.%Y %H:%M'),
-            'body': body,
+            'content': body,
         }
     )
 
-    output = BytesIO()
-    doc_template.save(output)
-    output.seek(0)
-
-    Path(template_name).unlink(missing_ok=True)
-
-    return output.getvalue()
+    out = BytesIO()
+    doc.save(out)
+    out.seek(0)
+    Path(template_path).unlink(missing_ok=True)
+    return out.getvalue()

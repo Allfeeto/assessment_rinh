@@ -13,8 +13,13 @@ class DisciplineAdmin(admin.ModelAdmin):
 class ProgramDisciplineAdmin(admin.ModelAdmin):
     list_display = ('id', 'educational_program', 'discipline')
     search_fields = (
-        'educational_program__code',
-        'educational_program__name',
+        'educational_program__program_profile__code',
+        'educational_program__program_profile__name',
         'discipline__name',
     )
-    list_filter = ('educational_program', 'discipline')
+    list_filter = (
+        'educational_program__program_profile__training_direction__education_level',
+        'educational_program__program_profile__training_direction',
+        'educational_program__program_profile',
+        'educational_program__admission_year',
+    )

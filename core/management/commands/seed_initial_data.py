@@ -1,32 +1,36 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from assessment.models import AssessmentItemType
-from competencies.models import CompetenceType
+from core.models import (
+    AcademicDegree,
+    AcademicTitle,
+    AssessmentItemType,
+    CompetenceType,
+    EducationLevel,
+)
 
 
 class Command(BaseCommand):
-    help = 'Заполнение типов компетенций и типов заданий начальными данными.'
+    help = 'Заполнение базовых справочников новой схемы БД.'
 
     def handle(self, *args, **options):
+        education_levels = ['бакалавриат', 'магистратура', 'специалитет']
         competence_types = ['УК', 'ОПК', 'ПК']
-        assessment_item_types = [
-            'соответствие',
-            'последовательность',
-            'несколько',
-            'один',
-            'открытый',
-        ]
+        assessment_types = ['single_choice', 'multiple_choice', 'matching', 'sequence', 'open_answer']
+        academic_degrees = ['кандидат наук', 'доктор наук']
+        academic_titles = ['доцент', 'профессор']
 
         with transaction.atomic():
-            for name in competence_types:
-                _, created = CompetenceType.objects.get_or_create(name=name)
-                action = 'создан' if created else 'уже существует'
-                self.stdout.write(f'Тип компетенции "{name}" {action}.')
+            self._seed(EducationLevel, education_levels)
+            self._seed(CompetenceType, competence_types)
+            self._seed(AssessmentItemType, assessment_types)
+            self._seed(AcademicDegree, academic_degrees)
+            self._seed(AcademicTitle, academic_titles)
 
-            for name in assessment_item_types:
-                _, created = AssessmentItemType.objects.get_or_create(name=name)
-                action = 'создан' if created else 'уже существует'
-                self.stdout.write(f'Тип задания "{name}" {action}.')
+        self.stdout.write(self.style.SUCCESS('Справочники заполнены.'))
 
-        self.stdout.write(self.style.SUCCESS('Начальные данные успешно загружены.'))
+    def _seed(self, model, values):
+        for value in values:
+            _, created = model.objects.get_or_create(name=value)
+            msg = 'создано' if created else 'уже было'
+            self.stdout.write(f'{model._meta.verbose_name}: "{value}" — {msg}.')

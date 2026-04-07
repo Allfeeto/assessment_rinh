@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+
+<div class="panel">
+    {% if form.non_field_errors %}
+        <div class="alert">
+            {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% for field in form %}
+            <div class="field" style="margin-bottom: 12px;">
+                <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}
+                    <small class="helptext">{{ field.help_text }}</small>
+                {% endif %}
+                {% if field.errors %}
+                    <ul class="errors">
+                        {% for error in field.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <div class="actions">
+            <button class="btn" type="submit">{{ submit_text|default:"Сохранить" }}</button>
+            {% if list_url_name %}
+                <a class="btn secondary" href="{% url list_url_name %}">Отмена</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    function updateOptions(parentSelect, childSelect) {
+        const template = childSelect.dataset.fetchUrl;
+        if (!template) {
+            return;
+        }
+
+        const parentValue = parentSelect.value;
+        const selectedBefore = Array.from(childSelect.options)
+            .filter(option => option.selected)
+            .map(option => option.value);
+
+        if (!parentValue) {
+            if (childSelect.multiple) {
+                childSelect.innerHTML = '';
+            } else {
+                childSelect.innerHTML = '<option value="">---------</option>';
+            }
+            return;
+        }
+
+        const url = template.replace('{value}', encodeURIComponent(parentValue));
+        fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(response => response.json())
+            .then(data => {
+                const results = data.results || [];
+                const restored = new Set(selectedBefore);
+
+                if (childSelect.multiple) {
+                    childSelect.innerHTML = '';
+                } else {
+                    childSelect.innerHTML = '<option value="">---------</option>';
+                }
+
+                results.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = String(item.id);
+                    option.textContent = item.label;
+                    if (restored.has(String(item.id))) {
+                        option.selected = true;
+                    }
+                    childSelect.appendChild(option);
+                });
+            })
+            .catch(() => {
+            });
+    }
+
+    document.querySelectorAll('select[data-dependent-child]').forEach(parentSelect => {
+        const childId = parentSelect.dataset.dependentChild;
+        const childSelect = document.getElementById(childId);
+        if (!childSelect) {
+            return;
+        }
+
+        parentSelect.addEventListener('change', () => updateOptions(parentSelect, childSelect));
+
+        if (parentSelect.value) {
+            updateOptions(parentSelect, childSelect);
+        }
+    });
+})();
+</script>
+{% endblock %}

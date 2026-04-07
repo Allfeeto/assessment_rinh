@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core.apps.CoreConfig',
+    'teachers.apps.TeachersConfig',
+    'programs.apps.ProgramsConfig',
     'competencies.apps.CompetenciesConfig',
     'disciplines.apps.DisciplinesConfig',
     'assessment.apps.AssessmentConfig',

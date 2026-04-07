@@ -1,31 +1,17 @@
 from django.db import models
 
 
-class CompetenceType(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.TextField(unique=True, verbose_name='Наименование типа')
-
-    class Meta:
-        managed = False
-        db_table = 'competence_type'
-        verbose_name = 'Тип компетенции'
-        verbose_name_plural = 'Типы компетенций'
-
-    def __str__(self):
-        return self.name
-
-
 class Competence(models.Model):
     id = models.AutoField(primary_key=True)
     educational_program = models.ForeignKey(
-        'core.EducationalProgram',
+        'programs.EducationalProgram',
         on_delete=models.CASCADE,
         db_column='educational_program_id',
         related_name='competences',
         verbose_name='Образовательная программа',
     )
     competence_type = models.ForeignKey(
-        CompetenceType,
+        'core.CompetenceType',
         on_delete=models.PROTECT,
         db_column='competence_type_id',
         related_name='competences',
@@ -39,10 +25,15 @@ class Competence(models.Model):
         db_table = 'competence'
         verbose_name = 'Компетенция'
         verbose_name_plural = 'Компетенции'
-        unique_together = (('educational_program', 'code'),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('educational_program', 'code'),
+                name='competence_educational_program_id_code_key',
+            )
+        ]
 
     def __str__(self):
-        return f'{self.code} {self.name}'
+        return f'{self.code} — {self.name}'
 
 
 class DisciplineCompetence(models.Model):
@@ -52,7 +43,7 @@ class DisciplineCompetence(models.Model):
         on_delete=models.CASCADE,
         db_column='program_discipline_id',
         related_name='discipline_competences',
-        verbose_name='Дисциплина программы',
+        verbose_name='Дисциплина учебного плана',
     )
     competence = models.ForeignKey(
         Competence,
@@ -67,7 +58,12 @@ class DisciplineCompetence(models.Model):
         db_table = 'discipline_competence'
         verbose_name = 'Связь дисциплины и компетенции'
         verbose_name_plural = 'Связи дисциплин и компетенций'
-        unique_together = (('program_discipline', 'competence'),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('program_discipline', 'competence'),
+                name='discipline_competence_program_discipline_id_competence_id_key',
+            )
+        ]
 
     def __str__(self):
         return f'{self.program_discipline} -> {self.competence.code}'

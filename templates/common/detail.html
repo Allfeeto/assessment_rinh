@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+
+<div class="panel">
+    <div class="actions" style="margin-bottom: 12px;">
+        {% if list_url_name %}
+            <a class="btn secondary" href="{% url list_url_name %}">К списку</a>
+        {% endif %}
+        {% if update_url_name %}
+            <a class="btn" href="{% url update_url_name object.pk %}">Редактировать</a>
+        {% endif %}
+        {% if delete_url_name %}
+            <a class="btn danger" href="{% url delete_url_name object.pk %}">Удалить</a>
+        {% endif %}
+    </div>
+
+    <table>
+        <tbody>
+        {% for label, value in display_fields %}
+            <tr>
+                <th style="width: 260px;">{{ label }}</th>
+                <td>{{ value|default:"" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

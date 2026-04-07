@@ -3,17 +3,18 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Assessment RINH{% endblock %}</title>
+    <title>{% block title %}Система оценочных материалов{% endblock %}</title>
     <style>
         :root {
-            --bg: #f5f7f8;
+            --bg: #f4f7f8;
             --surface: #ffffff;
-            --text: #1f2a2d;
-            --muted: #5f7379;
-            --accent: #116b74;
-            --accent-weak: #d9eef1;
-            --border: #d0dde0;
-            --danger: #9a2a2a;
+            --text: #1f2e33;
+            --muted: #5f7077;
+            --accent: #1a6a73;
+            --accent-soft: #e3f0f2;
+            --border: #d1dee2;
+            --danger: #992f2f;
+            --danger-soft: #ffefef;
         }
         * { box-sizing: border-box; }
         body {
@@ -21,122 +22,165 @@
             font-family: "Trebuchet MS", "Segoe UI", sans-serif;
             color: var(--text);
             background:
-                radial-gradient(circle at top right, #eaf4f5 0, #f5f7f8 44%),
-                linear-gradient(120deg, #f8fbfb 0%, #eef4f4 100%);
+                radial-gradient(circle at top left, #eef6f7 0, #f4f7f8 45%),
+                linear-gradient(135deg, #f8fbfb 0, #eef2f3 100%);
         }
-        .container {
-            max-width: 1180px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .navbar-wrap {
+        .topbar {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
             z-index: 20;
         }
-        .navbar {
-            max-width: 1180px;
+        .topbar-inner {
+            max-width: 1280px;
             margin: 0 auto;
-            padding: 12px 20px;
+            padding: 10px 16px;
             display: flex;
-            gap: 14px;
+            gap: 10px;
             align-items: center;
             flex-wrap: wrap;
         }
         .brand {
             font-weight: 700;
-            font-size: 18px;
-            margin-right: 10px;
             color: var(--accent);
             text-decoration: none;
+            margin-right: 6px;
         }
         .nav-link {
             text-decoration: none;
             color: var(--text);
-            padding: 8px 11px;
-            border-radius: 9px;
+            padding: 7px 10px;
+            border-radius: 8px;
             border: 1px solid transparent;
-            transition: 0.15s;
         }
         .nav-link:hover,
         .nav-link.active {
             border-color: var(--border);
-            background: var(--accent-weak);
+            background: var(--accent-soft);
             color: var(--accent);
         }
-        h1, h2, h3 {
-            margin: 0 0 14px;
-            line-height: 1.25;
-            letter-spacing: 0.2px;
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 18px;
         }
-        .page-title { margin-bottom: 18px; }
         .panel {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 16px;
-            margin-bottom: 18px;
+            margin-bottom: 14px;
         }
-        .grid {
-            display: grid;
-            gap: 14px;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        h1, h2, h3 {
+            margin: 0 0 14px;
+            line-height: 1.25;
         }
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 14px;
-            text-decoration: none;
-            color: inherit;
-            transition: transform .15s ease, box-shadow .15s ease;
+        .page-title {
+            margin-bottom: 14px;
         }
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 22px rgba(17, 107, 116, 0.12);
-        }
-        .card h3 { margin: 0 0 8px; color: var(--accent); }
-        .muted { color: var(--muted); }
-        .form-row {
+        .title-row {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
-            gap: 10px;
-            align-items: end;
+            margin-bottom: 10px;
         }
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 4px;
+        .breadcrumbs {
+            margin-bottom: 12px;
             font-size: 14px;
+            color: var(--muted);
         }
-        input[type="text"], input[type="number"], select {
-            width: 100%;
-            padding: 9px 10px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: #fff;
-            color: var(--text);
+        .breadcrumbs a {
+            color: var(--accent);
+            text-decoration: none;
         }
-        .field { min-width: 190px; flex: 1 1 190px; }
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         .btn {
-            display: inline-block;
             border: 1px solid var(--accent);
             background: var(--accent);
             color: #fff;
-            text-decoration: none;
-            padding: 9px 14px;
             border-radius: 8px;
+            padding: 8px 13px;
+            text-decoration: none;
+            display: inline-block;
             cursor: pointer;
-            font-size: 14px;
+            font: inherit;
         }
         .btn.secondary {
             background: #fff;
             color: var(--accent);
         }
-        .btn:hover { opacity: 0.95; }
-        .table-wrap { overflow-x: auto; }
+        .btn.danger {
+            border-color: var(--danger);
+            background: var(--danger);
+            color: #fff;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .field {
+            min-width: 180px;
+            flex: 1 1 180px;
+        }
+        .field.checkbox {
+            min-width: auto;
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding-top: 22px;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px 9px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font: inherit;
+            color: var(--text);
+            background: #fff;
+        }
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+        }
+        .helptext {
+            display: block;
+            color: var(--muted);
+            margin-top: 4px;
+            font-size: 13px;
+        }
+        .errors {
+            color: var(--danger);
+            margin: 5px 0 0;
+            padding-left: 18px;
+        }
+        .alert {
+            border: 1px solid #efb3b3;
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-radius: 9px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -144,99 +188,95 @@
         }
         th, td {
             border-bottom: 1px solid var(--border);
+            padding: 9px 8px;
             text-align: left;
-            padding: 10px 8px;
             vertical-align: top;
         }
         th {
-            background: #f1f6f7;
-            color: #294146;
-            font-size: 13px;
-            letter-spacing: 0.35px;
+            background: #f0f5f6;
+            color: #284147;
             text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: .3px;
         }
+        .table-wrap { overflow-x: auto; }
+        .muted { color: var(--muted); }
         .pagination {
             display: flex;
             gap: 8px;
-            align-items: center;
-            margin-top: 14px;
+            margin-top: 12px;
             flex-wrap: wrap;
         }
         .pagination a,
         .pagination span {
+            padding: 6px 9px;
             border: 1px solid var(--border);
             border-radius: 8px;
             text-decoration: none;
             color: var(--text);
-            padding: 6px 10px;
             background: #fff;
         }
         .pagination .current {
-            border-color: var(--accent);
             color: var(--accent);
+            border-color: var(--accent);
             font-weight: 700;
         }
-        .stats {
+        .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 12px;
         }
-        .stat {
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
             background: #fff;
+            padding: 14px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 22px rgba(26, 106, 115, .12);
+        }
+        .card h3 { margin: 0 0 6px; color: var(--accent); }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+        .stat {
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 12px;
+            padding: 10px;
+            background: #fff;
         }
         .stat-value {
-            font-size: 28px;
+            font-size: 24px;
             color: var(--accent);
             font-weight: 700;
-            margin-top: 2px;
-        }
-        .alert {
-            background: #ffeaea;
-            border: 1px solid #efb9b9;
-            color: var(--danger);
-            border-radius: 9px;
-            padding: 10px;
-            margin-bottom: 12px;
-        }
-        .inline-list {
-            margin: 0;
-            padding: 0;
-            list-style: none;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .inline-list li {
-            background: #f1f6f7;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 5px 10px;
-            font-size: 13px;
-        }
-        @media (max-width: 700px) {
-            .navbar { padding: 10px 14px; }
-            .container { padding: 14px; }
-            .brand { width: 100%; }
         }
     </style>
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-<header class="navbar-wrap">
-    <nav class="navbar">
-        <a href="/" class="brand">Assessment RINH</a>
-        <a href="/assessment/" class="nav-link {% if request.path|slice:':11' == '/assessment/' %}active{% endif %}">Задания</a>
-        <a href="/disciplines/" class="nav-link {% if request.path|slice:':12' == '/disciplines/' %}active{% endif %}">Дисциплины</a>
-        <a href="/competencies/" class="nav-link {% if request.path|slice:':13' == '/competencies/' %}active{% endif %}">Компетенции</a>
-        <a href="/reports/" class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}">Отчёты</a>
-        <a href="/export/word/" class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}">Экспорт Word</a>
-        <a href="/admin/" class="nav-link">Админка</a>
-    </nav>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="/">Assessment RINH</a>
+        <a class="nav-link {% if request.path|slice:':12' == '/assessment/' %}active{% endif %}" href="/assessment/">Задания</a>
+        <a class="nav-link {% if request.path|slice:':10' == '/teachers/' %}active{% endif %}" href="/teachers/">Кафедры и преподаватели</a>
+        <a class="nav-link {% if request.path|slice:':10' == '/programs/' %}active{% endif %}" href="/programs/">Программы</a>
+        <a class="nav-link {% if request.path|slice:':13' == '/disciplines/' %}active{% endif %}" href="/disciplines/">Дисциплины</a>
+        <a class="nav-link {% if request.path|slice:':14' == '/competencies/' %}active{% endif %}" href="/competencies/">Компетенции</a>
+        <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
+        <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
+        <a class="nav-link {% if request.path|slice:':6' == '/core/' %}active{% endif %}" href="/core/education-levels/">Справочники</a>
+        <a class="nav-link" href="/admin/">Админка</a>
+    </div>
 </header>
 <main class="container">
     {% block content %}{% endblock %}
 </main>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

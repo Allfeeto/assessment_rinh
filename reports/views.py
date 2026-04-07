@@ -1,234 +1,167 @@
 from django.db.models import Count, F, Q
-from django.http import JsonResponse
-from django.views import View
 from django.views.generic import TemplateView
 
-from assessment.models import AssessmentItemType
+from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
-from core.models import EducationalProgram
-from disciplines.models import Discipline, ProgramDiscipline
+from core.models import AssessmentItemType
+from disciplines.models import Discipline
+from programs.models import EducationalProgram
+
+from .forms import ReportFilterForm
 
 
-class DisciplineCompetenceCountReportView(View):
-    def get(self, request, *args, **kwargs):
-        queryset = DisciplineCompetence.objects.select_related(
-            'program_discipline__discipline',
-            'program_discipline__educational_program',
-            'competence',
-        )
-
-        program_id = request.GET.get('program')
-        if program_id:
-            queryset = queryset.filter(program_discipline__educational_program_id=program_id)
-
-        discipline_id = request.GET.get('discipline')
-        if discipline_id:
-            queryset = queryset.filter(program_discipline__discipline_id=discipline_id)
-
-        rows = list(
-            queryset.values(
-                'program_discipline__discipline_id',
-                'program_discipline__discipline__name',
-                'competence_id',
-                'competence__code',
-                'competence__name',
-            )
-            .annotate(
-                links_count=Count('id'),
-                assessment_items_count=Count(
-                    'competence__assessment_item_links__assessment_item',
-                    filter=Q(
-                        competence__assessment_item_links__assessment_item__program_discipline=F(
-                            'program_discipline'
-                        )
-                    ),
-                    distinct=True,
-                ),
-            )
-            .order_by('program_discipline__discipline__name', 'competence__code')
-        )
-
-        return JsonResponse({'results': rows, 'count': len(rows)})
-
-
-class ProgramCompetenceCoverageReportView(View):
-    def get(self, request, *args, **kwargs):
-        queryset = Competence.objects.select_related('educational_program', 'competence_type')
-
-        program_id = request.GET.get('program')
-        if program_id:
-            queryset = queryset.filter(educational_program_id=program_id)
-
-        queryset = queryset.annotate(
-            disciplines_count=Count('discipline_competences__program_discipline', distinct=True),
-            assessment_items_count=Count(
-                'assessment_item_links__assessment_item',
-                distinct=True,
-            ),
-        ).order_by('educational_program__code', 'code')
-
-        totals = dict(
-            ProgramDiscipline.objects.values('educational_program_id')
-            .annotate(total=Count('id'))
-            .values_list('educational_program_id', 'total')
-        )
-
-        data = []
-        for competence in queryset:
-            total_disciplines = totals.get(competence.educational_program_id, 0)
-            coverage_percent = 0
-            if total_disciplines:
-                coverage_percent = round((competence.disciplines_count / total_disciplines) * 100, 2)
-
-            data.append(
-                {
-                    'program_id': competence.educational_program_id,
-                    'program_code': competence.educational_program.code,
-                    'competence_id': competence.id,
-                    'competence_code': competence.code,
-                    'competence_name': competence.name,
-                    'competence_type': competence.competence_type.name,
-                    'disciplines_count': competence.disciplines_count,
-                    'total_disciplines': total_disciplines,
-                    'coverage_percent': coverage_percent,
-                    'assessment_items_count': competence.assessment_items_count,
-                }
-            )
-
-        return JsonResponse({'results': data, 'count': len(data)})
-
-
-class AssessmentByTypeReportView(View):
-    def get(self, request, *args, **kwargs):
-        filters = Q()
-
-        program_id = request.GET.get('program')
-        if program_id:
-            filters &= Q(assessment_items__program_discipline__educational_program_id=program_id)
-
-        discipline_id = request.GET.get('discipline')
-        if discipline_id:
-            filters &= Q(assessment_items__program_discipline__discipline_id=discipline_id)
-
-        competence_id = request.GET.get('competence')
-        if competence_id:
-            filters &= Q(assessment_items__competence_links__competence_id=competence_id)
-
-        rows = list(
-            AssessmentItemType.objects.annotate(
-                items_count=Count('assessment_items', filter=filters, distinct=True)
-            )
-            .values('id', 'name', 'items_count')
-            .order_by('name')
-        )
-
-        return JsonResponse({'results': rows, 'count': len(rows)})
-
-
-class ReportsPageView(TemplateView):
+class ReportsDashboardView(TemplateView):
     template_name = 'reports/report.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        program_id = self.request.GET.get('program')
-        discipline_id = self.request.GET.get('discipline')
-        competence_id = self.request.GET.get('competence')
+        form = ReportFilterForm(self.request.GET or None)
+        form.is_valid()
+        cleaned = form.cleaned_data if form.is_valid() else {}
 
-        discipline_competence_queryset = DisciplineCompetence.objects.select_related(
+        educational_program = cleaned.get('educational_program')
+        discipline = cleaned.get('discipline')
+        competence = cleaned.get('competence')
+        assessment_item_type = cleaned.get('assessment_item_type')
+
+        item_filters = Q()
+        if educational_program:
+            item_filters &= Q(program_discipline__educational_program=educational_program)
+        if discipline:
+            item_filters &= Q(program_discipline__discipline=discipline)
+        if assessment_item_type:
+            item_filters &= Q(assessment_item_type=assessment_item_type)
+
+        assessment_items = AssessmentItem.objects.filter(item_filters)
+
+        if competence:
+            assessment_items = assessment_items.extra(
+                where=[
+                    'EXISTS (SELECT 1 FROM assessment_item_competence aic '
+                    'WHERE aic.assessment_item_id = assessment_item.id '
+                    'AND aic.competence_id = %s)'
+                ],
+                params=[competence.id],
+            )
+
+        filtered_item_ids = assessment_items.values('id')
+
+        report_by_type = list(
+            AssessmentItemType.objects.annotate(
+                total=Count(
+                    'assessment_items',
+                    filter=Q(assessment_items__id__in=filtered_item_ids),
+                    distinct=True,
+                )
+            )
+            .values('name', 'total')
+            .order_by('name')
+        )
+
+        report_by_program = list(
+            EducationalProgram.objects.select_related('program_profile', 'department')
+            .annotate(
+                total=Count(
+                    'program_disciplines__assessment_items',
+                    filter=Q(program_disciplines__assessment_items__id__in=filtered_item_ids),
+                    distinct=True,
+                )
+            )
+            .values(
+                'id',
+                'program_profile__code',
+                'program_profile__name',
+                'department__short_name',
+                'admission_year',
+                'total',
+            )
+            .order_by('program_profile__code', 'admission_year')
+        )
+
+        report_by_discipline = list(
+            Discipline.objects.annotate(
+                total=Count(
+                    'program_disciplines__assessment_items',
+                    filter=Q(program_disciplines__assessment_items__id__in=filtered_item_ids),
+                    distinct=True,
+                )
+            )
+            .values('id', 'name', 'total')
+            .order_by('name')
+        )
+
+        competence_coverage_qs = Competence.objects.select_related(
+            'educational_program__program_profile',
+            'competence_type',
+        )
+        if educational_program:
+            competence_coverage_qs = competence_coverage_qs.filter(educational_program=educational_program)
+        if competence:
+            competence_coverage_qs = competence_coverage_qs.filter(pk=competence.pk)
+
+        competence_coverage = list(
+            competence_coverage_qs.annotate(
+                items_count=Count(
+                    'assessment_item_links__assessment_item',
+                    filter=Q(assessment_item_links__assessment_item__id__in=filtered_item_ids),
+                    distinct=True,
+                )
+            )
+            .values(
+                'id',
+                'code',
+                'name',
+                'competence_type__name',
+                'educational_program__program_profile__code',
+                'items_count',
+            )
+            .order_by('educational_program__program_profile__code', 'code')
+        )
+
+        discipline_competence_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
-            'program_discipline__educational_program',
             'competence',
         )
-        if program_id:
-            discipline_competence_queryset = discipline_competence_queryset.filter(
-                program_discipline__educational_program_id=program_id
+        if educational_program:
+            discipline_competence_qs = discipline_competence_qs.filter(
+                program_discipline__educational_program=educational_program
             )
-        if discipline_id:
-            discipline_competence_queryset = discipline_competence_queryset.filter(
-                program_discipline__discipline_id=discipline_id
+        if discipline:
+            discipline_competence_qs = discipline_competence_qs.filter(
+                program_discipline__discipline=discipline
             )
+        if competence:
+            discipline_competence_qs = discipline_competence_qs.filter(competence=competence)
 
-        report_discipline_competence = list(
-            discipline_competence_queryset.values(
+        discipline_competence_report = list(
+            discipline_competence_qs.values(
                 'program_discipline__discipline__name',
                 'competence__code',
                 'competence__name',
             )
-            .annotate(links_count=Count('id'))
+            .annotate(
+                items_count=Count(
+                    'competence__assessment_item_links__assessment_item',
+                    filter=Q(
+                        competence__assessment_item_links__assessment_item__id__in=filtered_item_ids
+                    )
+                    & Q(
+                        competence__assessment_item_links__assessment_item__program_discipline=F(
+                            'program_discipline'
+                        )
+                    ),
+                    distinct=True,
+                )
+            )
             .order_by('program_discipline__discipline__name', 'competence__code')
         )
 
-        competence_coverage_queryset = Competence.objects.select_related(
-            'educational_program',
-            'competence_type',
-        )
-        if program_id:
-            competence_coverage_queryset = competence_coverage_queryset.filter(
-                educational_program_id=program_id
-            )
-
-        competence_coverage_queryset = competence_coverage_queryset.annotate(
-            disciplines_count=Count('discipline_competences__program_discipline', distinct=True),
-            assessment_items_count=Count(
-                'assessment_item_links__assessment_item',
-                distinct=True,
-            ),
-        ).order_by('educational_program__code', 'code')
-
-        totals = dict(
-            ProgramDiscipline.objects.values('educational_program_id')
-            .annotate(total=Count('id'))
-            .values_list('educational_program_id', 'total')
-        )
-
-        report_competence_coverage = []
-        for competence in competence_coverage_queryset:
-            total_disciplines = totals.get(competence.educational_program_id, 0)
-            coverage_percent = (
-                round((competence.disciplines_count / total_disciplines) * 100, 2)
-                if total_disciplines
-                else 0
-            )
-            report_competence_coverage.append(
-                {
-                    'program_code': competence.educational_program.code,
-                    'competence_code': competence.code,
-                    'competence_name': competence.name,
-                    'competence_type': competence.competence_type.name,
-                    'disciplines_count': competence.disciplines_count,
-                    'coverage_percent': coverage_percent,
-                    'assessment_items_count': competence.assessment_items_count,
-                }
-            )
-
-        assessment_filters = Q()
-        if program_id:
-            assessment_filters &= Q(
-                assessment_items__program_discipline__educational_program_id=program_id
-            )
-        if discipline_id:
-            assessment_filters &= Q(
-                assessment_items__program_discipline__discipline_id=discipline_id
-            )
-        if competence_id:
-            assessment_filters &= Q(assessment_items__competence_links__competence_id=competence_id)
-
-        report_assessment_by_type = list(
-            AssessmentItemType.objects.annotate(
-                items_count=Count('assessment_items', filter=assessment_filters, distinct=True)
-            )
-            .values('name', 'items_count')
-            .order_by('name')
-        )
-
-        context['programs'] = EducationalProgram.objects.order_by('code')
-        context['disciplines'] = Discipline.objects.order_by('name')
-        context['competences'] = Competence.objects.order_by('code')
-        context['selected_program'] = program_id or ''
-        context['selected_discipline'] = discipline_id or ''
-        context['selected_competence'] = competence_id or ''
-        context['report_discipline_competence'] = report_discipline_competence
-        context['report_competence_coverage'] = report_competence_coverage
-        context['report_assessment_by_type'] = report_assessment_by_type
+        context['form'] = form
+        context['assessment_items_count'] = assessment_items.count()
+        context['report_by_type'] = report_by_type
+        context['report_by_program'] = report_by_program
+        context['report_by_discipline'] = report_by_discipline
+        context['competence_coverage'] = competence_coverage
+        context['discipline_competence_report'] = discipline_competence_report
         return context

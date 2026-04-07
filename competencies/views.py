@@ -1,75 +1,135 @@
 from django.http import JsonResponse
-from django.views.generic import ListView
 
-from core.models import EducationalProgram
+from core.view_helpers import (
+    NamedCreateView,
+    NamedDeleteView,
+    NamedDetailView,
+    NamedListView,
+    NamedUpdateView,
+)
+from disciplines.models import ProgramDiscipline
 
-from .models import Competence, CompetenceType
+from .forms import CompetenceForm, DisciplineCompetenceForm
+from .models import Competence, DisciplineCompetence
 
 
-class CompetenceListView(ListView):
+class CompetenceListView(NamedListView):
     model = Competence
-
-    def get_queryset(self):
-        queryset = (
-            super()
-            .get_queryset()
-            .select_related('educational_program', 'competence_type')
-            .order_by('code')
-        )
-
-        program_id = self.request.GET.get('program')
-        if program_id:
-            queryset = queryset.filter(educational_program_id=program_id)
-
-        competence_type_id = self.request.GET.get('competence_type')
-        if competence_type_id:
-            queryset = queryset.filter(competence_type_id=competence_type_id)
-
-        return queryset
-
-    def render_to_response(self, context, **response_kwargs):
-        data = [
-            {
-                'id': competence.id,
-                'code': competence.code,
-                'name': competence.name,
-                'competence_type': competence.competence_type.name,
-                'program_id': competence.educational_program_id,
-            }
-            for competence in context['object_list']
-        ]
-        return JsonResponse({'results': data, 'count': len(data)})
+    title = 'Компетенции'
+    search_fields = ('code', 'name', 'educational_program__program_profile__code')
+    list_columns = (
+        ('ID', 'id'),
+        ('Код', 'code'),
+        ('Наименование', 'name'),
+        ('Тип', 'competence_type.name'),
+        ('Программа', 'educational_program'),
+    )
+    create_url_name = 'competencies_competence_create'
+    detail_url_name = 'competencies_competence_detail'
+    update_url_name = 'competencies_competence_update'
+    delete_url_name = 'competencies_competence_delete'
 
 
-class CompetencePageListView(ListView):
+class CompetenceDetailView(NamedDetailView):
     model = Competence
-    template_name = 'competencies/list.html'
-    context_object_name = 'competences'
-    paginate_by = 15
+    title = 'Карточка компетенции'
+    list_url_name = 'competencies_competence_list'
+    update_url_name = 'competencies_competence_update'
+    delete_url_name = 'competencies_competence_delete'
+    detail_fields = (
+        ('ID', 'id'),
+        ('Код', 'code'),
+        ('Наименование', 'name'),
+        ('Тип', 'competence_type.name'),
+        ('Программа', 'educational_program'),
+    )
 
-    def get_queryset(self):
-        queryset = (
-            Competence.objects.select_related('educational_program', 'competence_type')
-            .order_by('code')
+
+class CompetenceCreateView(NamedCreateView):
+    model = Competence
+    form_class = CompetenceForm
+    title = 'Создать компетенцию'
+    list_url_name = 'competencies_competence_list'
+
+
+class CompetenceUpdateView(NamedUpdateView):
+    model = Competence
+    form_class = CompetenceForm
+    title = 'Редактировать компетенцию'
+    list_url_name = 'competencies_competence_list'
+
+
+class CompetenceDeleteView(NamedDeleteView):
+    model = Competence
+    title = 'Удалить компетенцию'
+    list_url_name = 'competencies_competence_list'
+
+
+class DisciplineCompetenceListView(NamedListView):
+    model = DisciplineCompetence
+    title = 'Матрица дисциплина → компетенция'
+    search_fields = (
+        'program_discipline__discipline__name',
+        'competence__code',
+        'competence__name',
+    )
+    list_columns = (
+        ('ID', 'id'),
+        ('Дисциплина учебного плана', 'program_discipline'),
+        ('Компетенция', 'competence'),
+    )
+    create_url_name = 'competencies_discipline_competence_create'
+    detail_url_name = 'competencies_discipline_competence_detail'
+    update_url_name = 'competencies_discipline_competence_update'
+    delete_url_name = 'competencies_discipline_competence_delete'
+
+
+class DisciplineCompetenceDetailView(NamedDetailView):
+    model = DisciplineCompetence
+    title = 'Карточка связи дисциплины и компетенции'
+    list_url_name = 'competencies_discipline_competence_list'
+    update_url_name = 'competencies_discipline_competence_update'
+    delete_url_name = 'competencies_discipline_competence_delete'
+    detail_fields = (
+        ('ID', 'id'),
+        ('Дисциплина учебного плана', 'program_discipline'),
+        ('Компетенция', 'competence'),
+    )
+
+
+class DisciplineCompetenceCreateView(NamedCreateView):
+    model = DisciplineCompetence
+    form_class = DisciplineCompetenceForm
+    title = 'Создать связь дисциплины и компетенции'
+    list_url_name = 'competencies_discipline_competence_list'
+
+
+class DisciplineCompetenceUpdateView(NamedUpdateView):
+    model = DisciplineCompetence
+    form_class = DisciplineCompetenceForm
+    title = 'Редактировать связь дисциплины и компетенции'
+    list_url_name = 'competencies_discipline_competence_list'
+
+
+class DisciplineCompetenceDeleteView(NamedDeleteView):
+    model = DisciplineCompetence
+    title = 'Удалить связь дисциплины и компетенции'
+    list_url_name = 'competencies_discipline_competence_list'
+
+
+def competences_by_program_discipline(request):
+    program_discipline_id = request.GET.get('program_discipline_id')
+    queryset = Competence.objects.order_by('code')
+    if program_discipline_id:
+        educational_program_id = (
+            ProgramDiscipline.objects.filter(pk=program_discipline_id)
+            .values_list('educational_program_id', flat=True)
+            .first()
         )
+        if educational_program_id:
+            queryset = queryset.filter(educational_program_id=educational_program_id)
+        else:
+            queryset = queryset.none()
 
-        program_id = self.request.GET.get('program')
-        if program_id:
-            queryset = queryset.filter(educational_program_id=program_id)
-
-        competence_type_id = self.request.GET.get('competence_type')
-        if competence_type_id:
-            queryset = queryset.filter(competence_type_id=competence_type_id)
-
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['programs'] = EducationalProgram.objects.order_by('code')
-        context['competence_types'] = CompetenceType.objects.order_by('name')
-        context['selected_program'] = self.request.GET.get('program', '')
-        context['selected_competence_type'] = self.request.GET.get('competence_type', '')
-        params = self.request.GET.copy()
-        params.pop('page', None)
-        context['query_params'] = params.urlencode()
-        return context
+    data = [{'id': obj.id, 'label': f'{obj.code} — {obj.name}'} for obj in queryset]
+    return JsonResponse({'results': data})

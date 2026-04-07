@@ -1,77 +1,43 @@
 from django.contrib import admin
 
-from .models import (
-    AssessmentItem,
-    AssessmentItemCompetence,
-    AssessmentItemType,
-    AssessmentMatchLeftItem,
-    AssessmentMatchRightItem,
-    AssessmentOpenAnswer,
-    AssessmentOption,
-    AssessmentSequenceItem,
-)
+from .models import AssessmentItem, AssessmentItemRow
+from .services import get_competences_for_item
 
 
-class AssessmentOptionInline(admin.TabularInline):
-    model = AssessmentOption
-    extra = 1
-
-
-class AssessmentMatchingLeftInline(admin.TabularInline):
-    model = AssessmentMatchLeftItem
-    extra = 1
-
-
-class AssessmentMatchingRightInline(admin.TabularInline):
-    model = AssessmentMatchRightItem
-    extra = 1
-
-
-class AssessmentSequenceInline(admin.TabularInline):
-    model = AssessmentSequenceItem
-    extra = 1
-
-
-class AssessmentOpenAnswerInline(admin.TabularInline):
-    model = AssessmentOpenAnswer
-    extra = 1
-
-
-@admin.register(AssessmentItemType)
-class AssessmentItemTypeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
-    search_fields = ('name',)
+class AssessmentItemRowInline(admin.TabularInline):
+    model = AssessmentItemRow
+    extra = 0
 
 
 @admin.register(AssessmentItem)
 class AssessmentItemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'program_discipline', 'assessment_item_type', 'short_text')
+    list_display = ('id', 'program_discipline', 'assessment_item_type', 'short_prompt', 'competence_codes')
     search_fields = (
-        'text',
-        'program_discipline__educational_program__code',
-        'program_discipline__educational_program__name',
+        'prompt_text',
         'program_discipline__discipline__name',
+        'program_discipline__educational_program__program_profile__code',
     )
     list_filter = (
         'assessment_item_type',
-        'program_discipline__educational_program',
+        'program_discipline__educational_program__program_profile__training_direction__education_level',
+        'program_discipline__educational_program__program_profile__training_direction',
+        'program_discipline__educational_program__program_profile',
         'program_discipline__discipline',
     )
-    inlines = (
-        AssessmentOptionInline,
-        AssessmentMatchingLeftInline,
-        AssessmentMatchingRightInline,
-        AssessmentSequenceInline,
-        AssessmentOpenAnswerInline,
-    )
+    inlines = (AssessmentItemRowInline,)
 
     @staticmethod
-    def short_text(obj):
-        return obj.text[:120]
+    def short_prompt(obj):
+        return obj.prompt_text[:120]
+
+    @staticmethod
+    def competence_codes(obj):
+        competences = get_competences_for_item(obj.id)
+        return ', '.join(comp.code for comp in competences)
 
 
-@admin.register(AssessmentItemCompetence)
-class AssessmentItemCompetenceAdmin(admin.ModelAdmin):
-    list_display = ('assessment_item', 'competence')
-    search_fields = ('assessment_item__text', 'competence__code', 'competence__name')
-    list_filter = ('competence__competence_type',)
+@admin.register(AssessmentItemRow)
+class AssessmentItemRowAdmin(admin.ModelAdmin):
+    list_display = ('id', 'assessment_item', 'row_kind', 'left_text', 'right_text', 'is_correct', 'sort_order', 'correct_order')
+    search_fields = ('left_text', 'right_text', 'open_answer_text', 'assessment_item__prompt_text')
+    list_filter = ('row_kind',)

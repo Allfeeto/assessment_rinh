@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+
+<div class="panel">
+    <p>Вы действительно хотите удалить запись?</p>
+    <p><strong>{{ object }}</strong></p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="actions">
+            <button class="btn danger" type="submit">Удалить</button>
+            {% if list_url_name %}
+                <a class="btn secondary" href="{% url list_url_name %}">Отмена</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}

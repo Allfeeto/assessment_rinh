@@ -6,11 +6,31 @@
 <h1 class="page-title">Система оценочных материалов</h1>
 
 <div class="panel">
-    <h2>Обзор</h2>
+    <h2>Обзор данных</h2>
     <div class="stats">
         <div class="stat">
-            <div class="muted">Программы</div>
-            <div class="stat-value">{{ stats.programs }}</div>
+            <div class="muted">Уровни образования</div>
+            <div class="stat-value">{{ stats.education_levels }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Кафедры</div>
+            <div class="stat-value">{{ stats.departments }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Преподаватели</div>
+            <div class="stat-value">{{ stats.teachers }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Направления</div>
+            <div class="stat-value">{{ stats.training_directions }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Профили</div>
+            <div class="stat-value">{{ stats.program_profiles }}</div>
+        </div>
+        <div class="stat">
+            <div class="muted">Образовательные программы</div>
+            <div class="stat-value">{{ stats.educational_programs }}</div>
         </div>
         <div class="stat">
             <div class="muted">Дисциплины</div>
@@ -30,27 +50,35 @@
 <div class="grid">
     <a class="card" href="/assessment/">
         <h3>Задания</h3>
-        <div class="muted">Список, фильтрация, просмотр карточки задания</div>
+        <div class="muted">Создание, редактирование, фильтрация, компетенции и строки заданий.</div>
+    </a>
+    <a class="card" href="/teachers/">
+        <h3>Кафедры и преподаватели</h3>
+        <div class="muted">Работа с кафедрами, заведующими и карточками преподавателей.</div>
+    </a>
+    <a class="card" href="/programs/">
+        <h3>Направления, профили, программы</h3>
+        <div class="muted">Иерархия учебных планов и данные по годам набора.</div>
     </a>
     <a class="card" href="/disciplines/">
         <h3>Дисциплины</h3>
-        <div class="muted">Список дисциплин и привязки к программам</div>
+        <div class="muted">Справочник дисциплин и привязка к образовательным программам.</div>
     </a>
     <a class="card" href="/competencies/">
         <h3>Компетенции</h3>
-        <div class="muted">Матрица компетенций по программам</div>
+        <div class="muted">Компетенции программ и матрица дисциплина → компетенция.</div>
     </a>
     <a class="card" href="/reports/">
         <h3>Отчёты</h3>
-        <div class="muted">Сводные таблицы покрытия и распределений</div>
+        <div class="muted">Покрытие компетенций, сводка по типам, программам и дисциплинам.</div>
     </a>
     <a class="card" href="/export/word/">
         <h3>Экспорт Word</h3>
-        <div class="muted">Формирование docx по выбранным фильтрам</div>
+        <div class="muted">Скачивание оценочных материалов с учётом фильтров.</div>
     </a>
-    <a class="card" href="/admin/">
-        <h3>Админка</h3>
-        <div class="muted">Управление справочниками и заданиями</div>
+    <a class="card" href="/core/education-levels/">
+        <h3>Справочники</h3>
+        <div class="muted">Уровни, типы компетенций и заданий, степени и звания.</div>
     </a>
 </div>
 {% endblock %}

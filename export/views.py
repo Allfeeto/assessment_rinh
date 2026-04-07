@@ -1,11 +1,6 @@
-from django.shortcuts import render
 from django.http import HttpResponse
+from django.shortcuts import render
 from django.views import View
-
-from assessment.models import AssessmentItemType
-from competencies.models import Competence
-from core.models import EducationalProgram
-from disciplines.models import Discipline
 
 from .forms import WordExportForm
 from .services import generate_docx
@@ -14,47 +9,37 @@ from .services import generate_docx
 class WordExportView(View):
     template_name = 'export/word.html'
 
-    @staticmethod
-    def _build_context(form):
-        return {
-            'form': form,
-            'programs': EducationalProgram.objects.order_by('code'),
-            'disciplines': Discipline.objects.order_by('name'),
-            'assessment_item_types': AssessmentItemType.objects.order_by('name'),
-            'competences': Competence.objects.order_by('code'),
-        }
-
     def get(self, request, *args, **kwargs):
-        has_export_params = bool(request.GET.get('program_id') or request.GET.get('discipline_id'))
-        form = WordExportForm(request.GET if has_export_params else None)
+        has_params = bool(request.GET.get('educational_program') or request.GET.get('discipline'))
+        form = WordExportForm(request.GET if has_params else None)
 
-        if not has_export_params:
-            return render(request, self.template_name, self._build_context(form))
+        if not has_params:
+            return render(request, self.template_name, {'form': form})
 
         if not form.is_valid():
-            return render(request, self.template_name, self._build_context(form), status=400)
+            return render(request, self.template_name, {'form': form}, status=400)
 
-        payload = form.cleaned_data
-        filters = {
-            'assessment_item_type': payload.get('assessment_item_type'),
-            'competence': payload.get('competence'),
-        }
+        educational_program = form.cleaned_data['educational_program']
+        discipline = form.cleaned_data['discipline']
+        assessment_item_type = form.cleaned_data.get('assessment_item_type')
+        competence = form.cleaned_data.get('competence')
 
         try:
             content = generate_docx(
-                program_id=payload['program_id'],
-                discipline_id=payload['discipline_id'],
-                filters=filters,
+                program_id=educational_program.id,
+                discipline_id=discipline.id,
+                filters={
+                    'assessment_item_type_id': assessment_item_type.id if assessment_item_type else None,
+                    'competence_id': competence.id if competence else None,
+                },
             )
-        except ValueError as error:
-            form.add_error(None, str(error))
-            return render(request, self.template_name, self._build_context(form), status=404)
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+            return render(request, self.template_name, {'form': form}, status=404)
 
         filename = (
-            f"assessment_program_{payload['program_id']}"
-            f"_discipline_{payload['discipline_id']}.docx"
+            f'assessment_program_{educational_program.id}_discipline_{discipline.id}.docx'
         )
-
         response = HttpResponse(
             content,
             content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',

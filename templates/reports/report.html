@@ -8,103 +8,88 @@
 <div class="panel">
     <form method="get" class="form-row">
         <div class="field">
-            <label for="id_program">Программа</label>
-            <select id="id_program" name="program">
-                <option value="">Все</option>
-                {% for program in programs %}
-                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
-                        {{ program.code }} — {{ program.name }}
-                    </option>
-                {% endfor %}
-            </select>
+            <label for="{{ form.educational_program.id_for_label }}">{{ form.educational_program.label }}</label>
+            {{ form.educational_program }}
         </div>
         <div class="field">
-            <label for="id_discipline">Дисциплина</label>
-            <select id="id_discipline" name="discipline">
-                <option value="">Все</option>
-                {% for discipline in disciplines %}
-                    <option value="{{ discipline.id }}" {% if selected_discipline == discipline.id|stringformat:"s" %}selected{% endif %}>
-                        {{ discipline.name }}
-                    </option>
-                {% endfor %}
-            </select>
+            <label for="{{ form.discipline.id_for_label }}">{{ form.discipline.label }}</label>
+            {{ form.discipline }}
         </div>
         <div class="field">
-            <label for="id_competence">Компетенция</label>
-            <select id="id_competence" name="competence">
-                <option value="">Все</option>
-                {% for competence in competences %}
-                    <option value="{{ competence.id }}" {% if selected_competence == competence.id|stringformat:"s" %}selected{% endif %}>
-                        {{ competence.code }}
-                    </option>
-                {% endfor %}
-            </select>
+            <label for="{{ form.competence.id_for_label }}">{{ form.competence.label }}</label>
+            {{ form.competence }}
         </div>
-        <button class="btn" type="submit">Применить</button>
-        <a class="btn secondary" href="/reports/">Сбросить</a>
+        <div class="field">
+            <label for="{{ form.assessment_item_type.id_for_label }}">{{ form.assessment_item_type.label }}</label>
+            {{ form.assessment_item_type }}
+        </div>
+        <div class="actions">
+            <button class="btn" type="submit">Применить</button>
+            <a class="btn secondary" href="/reports/">Сбросить</a>
+        </div>
     </form>
 </div>
 
+<div class="panel">
+    <h2>Всего заданий по фильтру: {{ assessment_items_count }}</h2>
+</div>
+
 <div class="panel table-wrap">
-    <h2>Дисциплина → Компетенции → Count</h2>
+    <h2>Покрытие компетенций заданиями (по образовательной программе)</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Программа</th>
+            <th>Код компетенции</th>
+            <th>Компетенция</th>
+            <th>Тип</th>
+            <th>Количество заданий</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in competence_coverage %}
+            <tr>
+                <td>{{ row.educational_program__program_profile__code }}</td>
+                <td>{{ row.code }}</td>
+                <td>{{ row.name }}</td>
+                <td>{{ row.competence_type__name }}</td>
+                <td>{{ row.items_count }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5" class="muted">Нет данных.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Дисциплина → компетенция → количество заданий</h2>
     <table>
         <thead>
         <tr>
             <th>Дисциплина</th>
             <th>Код компетенции</th>
             <th>Компетенция</th>
-            <th>Count</th>
+            <th>Количество заданий</th>
         </tr>
         </thead>
         <tbody>
-        {% for row in report_discipline_competence %}
+        {% for row in discipline_competence_report %}
             <tr>
                 <td>{{ row.program_discipline__discipline__name }}</td>
                 <td>{{ row.competence__code }}</td>
                 <td>{{ row.competence__name }}</td>
-                <td>{{ row.links_count }}</td>
+                <td>{{ row.items_count }}</td>
             </tr>
         {% empty %}
-            <tr><td colspan="4" class="muted">Данных нет.</td></tr>
+            <tr><td colspan="4" class="muted">Нет данных.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
 
 <div class="panel table-wrap">
-    <h2>Компетенции программы → Покрытие</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Программа</th>
-            <th>Код</th>
-            <th>Компетенция</th>
-            <th>Тип</th>
-            <th>Покрыто дисциплинами</th>
-            <th>Покрытие, %</th>
-            <th>Заданий</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in report_competence_coverage %}
-            <tr>
-                <td>{{ row.program_code }}</td>
-                <td>{{ row.competence_code }}</td>
-                <td>{{ row.competence_name }}</td>
-                <td>{{ row.competence_type }}</td>
-                <td>{{ row.disciplines_count }}</td>
-                <td>{{ row.coverage_percent }}</td>
-                <td>{{ row.assessment_items_count }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="7" class="muted">Данных нет.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<div class="panel table-wrap">
-    <h2>Задания по типам</h2>
+    <h2>Количество заданий по типам</h2>
     <table>
         <thead>
         <tr>
@@ -113,13 +98,61 @@
         </tr>
         </thead>
         <tbody>
-        {% for row in report_assessment_by_type %}
+        {% for row in report_by_type %}
             <tr>
                 <td>{{ row.name }}</td>
-                <td>{{ row.items_count }}</td>
+                <td>{{ row.total }}</td>
             </tr>
         {% empty %}
-            <tr><td colspan="2" class="muted">Данных нет.</td></tr>
+            <tr><td colspan="2" class="muted">Нет данных.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Количество заданий по программам</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Профиль</th>
+            <th>Кафедра</th>
+            <th>Год набора</th>
+            <th>Количество</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in report_by_program %}
+            <tr>
+                <td>{{ row.program_profile__code }} — {{ row.program_profile__name }}</td>
+                <td>{{ row.department__short_name }}</td>
+                <td>{{ row.admission_year }}</td>
+                <td>{{ row.total }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4" class="muted">Нет данных.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Количество заданий по дисциплинам</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Дисциплина</th>
+            <th>Количество</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in report_by_discipline %}
+            <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.total }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">Нет данных.</td></tr>
         {% endfor %}
         </tbody>
     </table>

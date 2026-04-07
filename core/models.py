@@ -15,45 +15,57 @@ class EducationLevel(models.Model):
         return self.name
 
 
-class Department(models.Model):
+class CompetenceType(models.Model):
     id = models.AutoField(primary_key=True)
-    short_name = models.TextField(verbose_name='Краткое наименование')
-    full_name = models.TextField(verbose_name='Полное наименование')
+    name = models.TextField(unique=True, verbose_name='Наименование')
 
     class Meta:
         managed = False
-        db_table = 'department'
-        verbose_name = 'Кафедра'
-        verbose_name_plural = 'Кафедры'
+        db_table = 'competence_type'
+        verbose_name = 'Тип компетенции'
+        verbose_name_plural = 'Типы компетенций'
 
     def __str__(self):
-        return self.short_name
+        return self.name
 
 
-class EducationalProgram(models.Model):
+class AssessmentItemType(models.Model):
     id = models.AutoField(primary_key=True)
-    education_level = models.ForeignKey(
-        EducationLevel,
-        on_delete=models.PROTECT,
-        db_column='education_level_id',
-        related_name='educational_programs',
-        verbose_name='Уровень образования',
-    )
-    department = models.ForeignKey(
-        Department,
-        on_delete=models.PROTECT,
-        db_column='department_id',
-        related_name='educational_programs',
-        verbose_name='Кафедра',
-    )
-    code = models.TextField(unique=True, verbose_name='Код программы')
-    name = models.TextField(verbose_name='Наименование программы')
+    name = models.TextField(unique=True, verbose_name='Наименование')
 
     class Meta:
         managed = False
-        db_table = 'educational_program'
-        verbose_name = 'Образовательная программа'
-        verbose_name_plural = 'Образовательные программы'
+        db_table = 'assessment_item_type'
+        verbose_name = 'Тип задания'
+        verbose_name_plural = 'Типы заданий'
 
     def __str__(self):
-        return f'{self.code} {self.name}'
+        return self.name
+
+
+class AcademicDegree(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.TextField(unique=True, verbose_name='Наименование')
+
+    class Meta:
+        managed = False
+        db_table = 'academic_degree'
+        verbose_name = 'Учёная степень'
+        verbose_name_plural = 'Учёные степени'
+
+    def __str__(self):
+        return self.name
+
+
+class AcademicTitle(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.TextField(unique=True, verbose_name='Наименование')
+
+    class Meta:
+        managed = False
+        db_table = 'academic_title'
+        verbose_name = 'Учёное звание'
+        verbose_name_plural = 'Учёные звания'
+
+    def __str__(self):
+        return self.name
