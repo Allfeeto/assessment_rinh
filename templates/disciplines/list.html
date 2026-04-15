@@ -13,7 +13,7 @@
         </div>
         <div class="field">
             <label for="id_program">Образовательная программа</label>
-            <select id="id_program" name="educational_program">
+            <select id="id_program" name="educational_program" data-autocomplete-kind="educational_program" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите профиль, кафедру или год набора">
                 <option value="">Все программы</option>
                 {% for program in educational_programs %}
                     <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>{{ program }}</option>

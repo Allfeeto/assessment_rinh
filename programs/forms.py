@@ -1,5 +1,7 @@
 from django import forms
 
+from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
 
 
@@ -20,53 +22,57 @@ class ProgramProfileForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['training_direction'].queryset = self.fields['training_direction'].queryset.order_by('code')
+        selected_direction_id = None
+        if self.is_bound:
+            selected_direction_id = self.data.get('training_direction')
+        elif self.instance and self.instance.pk:
+            selected_direction_id = self.instance.training_direction_id
+
+        base_direction_qs = TrainingDirection.objects.order_by('code')
+        self.fields['training_direction'].queryset = autocomplete_queryset(base_direction_qs, selected_direction_id)
+        apply_autocomplete_attrs(
+            self.fields['training_direction'],
+            kind='training_direction',
+            placeholder='Введите код или наименование направления',
+        )
 
 
 class EducationalProgramForm(forms.ModelForm):
-    training_direction = forms.ModelChoiceField(
-        queryset=TrainingDirection.objects.all(),
-        required=True,
-        label='Направление',
-    )
-
     class Meta:
         model = EducationalProgram
-        fields = ('training_direction', 'program_profile', 'department', 'admission_year')
-        widgets = {
-            'training_direction': forms.Select(attrs={'data-dependent-child': 'id_program_profile'}),
-            'program_profile': forms.Select(
-                attrs={
-                    'data-fetch-url': '/programs/profiles-by-direction/?direction_id={value}',
-                }
-            ),
-        }
+        fields = ('program_profile', 'department', 'admission_year')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['training_direction'].queryset = TrainingDirection.objects.order_by('code')
 
-        direction_id = None
+        selected_profile_id = None
+        selected_department_id = None
         if self.is_bound:
-            direction_id = self.data.get('training_direction')
+            selected_profile_id = self.data.get('program_profile')
+            selected_department_id = self.data.get('department')
         elif self.instance and self.instance.pk:
-            direction_id = self.instance.program_profile.training_direction_id
-            self.fields['training_direction'].initial = direction_id
+            selected_profile_id = self.instance.program_profile_id
+            selected_department_id = self.instance.department_id
 
-        profiles = ProgramProfile.objects.select_related('training_direction').order_by('code')
-        if direction_id:
-            profiles = profiles.filter(training_direction_id=direction_id)
-        else:
-            profiles = profiles.none()
-        self.fields['program_profile'].queryset = profiles
+        base_profile_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
+        self.fields['program_profile'].queryset = autocomplete_queryset(base_profile_qs, selected_profile_id)
+        apply_autocomplete_attrs(
+            self.fields['program_profile'],
+            kind='program_profile',
+            placeholder='Введите код или название профиля',
+        )
+
+        base_department_qs = self.fields['department'].queryset.order_by('number')
+        self.fields['department'].queryset = autocomplete_queryset(base_department_qs, selected_department_id)
+        apply_autocomplete_attrs(
+            self.fields['department'],
+            kind='department',
+            placeholder='Введите номер или название кафедры',
+        )
+
+        self.fields['program_profile'].help_text = (
+            'Направление определяется автоматически по выбранному профилю.'
+        )
 
     def clean(self):
-        cleaned_data = super().clean()
-        direction = cleaned_data.get('training_direction')
-        profile = cleaned_data.get('program_profile')
-        if not direction:
-            self.add_error('training_direction', 'Выберите направление подготовки.')
-            return cleaned_data
-        if direction and profile and profile.training_direction_id != direction.id:
-            self.add_error('program_profile', 'Профиль должен принадлежать выбранному направлению.')
-        return cleaned_data
+        return super().clean()

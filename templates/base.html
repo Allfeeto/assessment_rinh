@@ -168,6 +168,50 @@
             margin-top: 4px;
             font-size: 13px;
         }
+        .autocomplete-shell {
+            position: relative;
+            width: 100%;
+        }
+        .autocomplete-input {
+            width: 100%;
+            padding: 8px 9px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font: inherit;
+            color: var(--text);
+            background: #fff;
+        }
+        .autocomplete-menu {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 4px);
+            max-height: 240px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 8px 22px rgba(26, 106, 115, .12);
+            z-index: 40;
+            display: none;
+        }
+        .autocomplete-item {
+            padding: 8px 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eef2f3;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: 0;
+        }
+        .autocomplete-item:hover,
+        .autocomplete-item.active {
+            background: var(--accent-soft);
+            color: var(--accent);
+        }
+        .autocomplete-empty {
+            padding: 8px 10px;
+            color: var(--muted);
+        }
         .errors {
             color: var(--danger);
             margin: 5px 0 0;
@@ -277,6 +321,284 @@
 <main class="container">
     {% block content %}{% endblock %}
 </main>
+<script>
+(function () {
+    function parseExtraParams(raw) {
+        if (!raw) {
+            return new URLSearchParams();
+        }
+        try {
+            return new URLSearchParams(raw);
+        } catch (e) {
+            return new URLSearchParams();
+        }
+    }
+
+    function ensureOption(select, id, label) {
+        const value = String(id);
+        let option = Array.from(select.options).find(item => item.value === value);
+        if (!option) {
+            option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+        } else {
+            option.textContent = label;
+        }
+        option.selected = true;
+    }
+
+    function buildLookupUrl(select, query) {
+        const baseUrl = select.dataset.autocompleteUrl || '/core/lookup/';
+        const kind = select.dataset.autocompleteKind;
+        if (!kind) {
+            return null;
+        }
+
+        const params = new URLSearchParams();
+        params.set('kind', kind);
+        params.set('q', query || '');
+        params.set('limit', '20');
+
+        const parentId = select.dataset.autocompleteParent;
+        const parentParam = select.dataset.autocompleteParentParam;
+        if (parentId && parentParam) {
+            const parentField = document.getElementById(parentId);
+            const parentValue = parentField ? parentField.value : '';
+            if (parentValue) {
+                params.set(parentParam, parentValue);
+            } else if (select.dataset.autocompleteParentRequired === '1') {
+                return null;
+            }
+        }
+
+        const extraParams = parseExtraParams(select.dataset.autocompleteExtra);
+        extraParams.forEach((value, key) => params.set(key, value));
+
+        const hasQuery = baseUrl.indexOf('?') >= 0;
+        const separator = hasQuery ? '&' : '?';
+        return baseUrl + separator + params.toString();
+    }
+
+    function initAutocomplete(select) {
+        if (select.dataset.autocompleteReady === '1') {
+            return;
+        }
+        if (!select.dataset.autocompleteKind) {
+            return;
+        }
+
+        select.dataset.autocompleteReady = '1';
+        select.style.display = 'none';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'autocomplete-shell';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'autocomplete-input';
+        input.autocomplete = 'off';
+        input.placeholder = select.dataset.autocompletePlaceholder || 'Начните вводить для поиска';
+        if (select.id) {
+            input.id = select.id + '__search';
+            const label = document.querySelector('label[for="' + select.id + '"]');
+            if (label) {
+                label.setAttribute('for', input.id);
+            }
+        }
+
+        const menu = document.createElement('div');
+        menu.className = 'autocomplete-menu';
+
+        const selectedOption = select.options[select.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+            input.value = selectedOption.textContent || '';
+        }
+
+        wrapper.appendChild(input);
+        wrapper.appendChild(menu);
+        select.parentNode.insertBefore(wrapper, select.nextSibling);
+
+        let activeController = null;
+
+        function closeMenu() {
+            menu.style.display = 'none';
+            menu.innerHTML = '';
+        }
+
+        function setInputStateByParent() {
+            const parentId = select.dataset.autocompleteParent;
+            if (!parentId || select.dataset.autocompleteParentRequired !== '1') {
+                input.disabled = false;
+                return;
+            }
+            const parentField = document.getElementById(parentId);
+            const hasParentValue = parentField && parentField.value;
+            input.disabled = !hasParentValue;
+            if (input.disabled) {
+                input.value = '';
+                select.value = '';
+                closeMenu();
+            }
+        }
+
+        function renderResults(results) {
+            menu.innerHTML = '';
+            if (!results.length) {
+                const empty = document.createElement('div');
+                empty.className = 'autocomplete-empty';
+                empty.textContent = 'Ничего не найдено';
+                menu.appendChild(empty);
+                menu.style.display = 'block';
+                return;
+            }
+
+            results.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'autocomplete-item';
+                row.textContent = item.label;
+                row.dataset.id = String(item.id);
+                row.dataset.label = item.label;
+                row.addEventListener('mousedown', event => {
+                    event.preventDefault();
+                    ensureOption(select, item.id, item.label);
+                    input.value = item.label;
+                    closeMenu();
+                    select.dispatchEvent(new Event('change', {bubbles: true}));
+                });
+                menu.appendChild(row);
+            });
+            menu.style.display = 'block';
+        }
+
+        function fetchResults(query) {
+            const endpoint = buildLookupUrl(select, query);
+            if (!endpoint) {
+                closeMenu();
+                return;
+            }
+
+            if (activeController) {
+                activeController.abort();
+            }
+            activeController = new AbortController();
+
+            fetch(endpoint, {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                signal: activeController.signal,
+            })
+                .then(response => response.json())
+                .then(data => renderResults(data.results || []))
+                .catch(() => {
+                });
+        }
+
+        input.addEventListener('input', () => {
+            select.value = '';
+            const query = input.value.trim();
+            if (!query) {
+                closeMenu();
+                return;
+            }
+            fetchResults(query);
+        });
+
+        input.addEventListener('focus', () => {
+            const query = input.value.trim();
+            if (query) {
+                fetchResults(query);
+            }
+        });
+
+        document.addEventListener('click', event => {
+            if (!wrapper.contains(event.target)) {
+                closeMenu();
+            }
+        });
+
+        const parentId = select.dataset.autocompleteParent;
+        if (parentId) {
+            const parentField = document.getElementById(parentId);
+            if (parentField) {
+                parentField.addEventListener('change', () => {
+                    input.value = '';
+                    select.value = '';
+                    closeMenu();
+                    setInputStateByParent();
+                });
+            }
+        }
+
+        setInputStateByParent();
+    }
+
+    function initDependentSelects() {
+        function updateOptions(parentSelect, childSelect) {
+            const template = childSelect.dataset.fetchUrl;
+            if (!template) {
+                return;
+            }
+
+            const parentValue = parentSelect.value;
+            const selectedBefore = Array.from(childSelect.options)
+                .filter(option => option.selected)
+                .map(option => option.value);
+
+            if (!parentValue) {
+                if (childSelect.multiple) {
+                    childSelect.innerHTML = '';
+                } else {
+                    childSelect.innerHTML = '<option value="">---------</option>';
+                }
+                return;
+            }
+
+            const url = template.replace('{value}', encodeURIComponent(parentValue));
+            fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                .then(response => response.json())
+                .then(data => {
+                    const results = data.results || [];
+                    const restored = new Set(selectedBefore);
+
+                    if (childSelect.multiple) {
+                        childSelect.innerHTML = '';
+                    } else {
+                        childSelect.innerHTML = '<option value="">---------</option>';
+                    }
+
+                    results.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = String(item.id);
+                        option.textContent = item.label;
+                        if (restored.has(String(item.id))) {
+                            option.selected = true;
+                        }
+                        childSelect.appendChild(option);
+                    });
+                })
+                .catch(() => {
+                });
+        }
+
+        document.querySelectorAll('select[data-dependent-child]').forEach(parentSelect => {
+            const childId = parentSelect.dataset.dependentChild;
+            const childSelect = document.getElementById(childId);
+            if (!childSelect) {
+                return;
+            }
+
+            parentSelect.addEventListener('change', () => updateOptions(parentSelect, childSelect));
+
+            if (parentSelect.value) {
+                updateOptions(parentSelect, childSelect);
+            }
+        });
+    }
+
+    document.querySelectorAll('select[data-autocomplete-kind]').forEach(initAutocomplete);
+    initDependentSelects();
+})();
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

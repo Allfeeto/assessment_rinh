@@ -1,3 +1,5 @@
+from django.views.generic import TemplateView
+
 from core.view_helpers import (
     NamedCreateView,
     NamedDeleteView,
@@ -8,6 +10,16 @@ from core.view_helpers import (
 
 from .forms import DepartmentForm, TeacherForm
 from .models import Department, Teacher
+
+
+class TeachersDashboardView(TemplateView):
+    template_name = 'teachers/dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['departments'] = Department.objects.select_related('head_teacher').order_by('number')
+        context['teachers'] = Teacher.objects.select_related('department').order_by('full_name')
+        return context
 
 
 class DepartmentListView(NamedListView):

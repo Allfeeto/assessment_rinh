@@ -11,6 +11,7 @@ from .views import (
     ProgramProfileDetailView,
     ProgramProfileListView,
     ProgramProfileUpdateView,
+    ProgramsDashboardView,
     TrainingDirectionCreateView,
     TrainingDirectionDeleteView,
     TrainingDirectionDetailView,
@@ -20,7 +21,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path('', EducationalProgramListView.as_view(), name='programs_root'),
+    path('', ProgramsDashboardView.as_view(), name='programs_root'),
 
     path('directions/', TrainingDirectionListView.as_view(), name='programs_direction_list'),
     path('directions/create/', TrainingDirectionCreateView.as_view(), name='programs_direction_create'),

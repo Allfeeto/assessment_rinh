@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.views.generic import TemplateView
 
 from core.view_helpers import (
     NamedCreateView,
@@ -10,6 +11,20 @@ from core.view_helpers import (
 
 from .forms import EducationalProgramForm, ProgramProfileForm, TrainingDirectionForm
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
+
+
+class ProgramsDashboardView(TemplateView):
+    template_name = 'programs/dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['directions'] = TrainingDirection.objects.select_related('education_level').order_by('code')
+        context['profiles'] = ProgramProfile.objects.select_related('training_direction').order_by('code')
+        context['programs'] = EducationalProgram.objects.select_related(
+            'program_profile__training_direction',
+            'department',
+        ).order_by('program_profile__code', 'admission_year')
+        return context
 
 
 class TrainingDirectionListView(NamedListView):

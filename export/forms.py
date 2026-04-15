@@ -2,6 +2,7 @@ from django import forms
 
 from assessment.services import get_item_type_ui_name
 from competencies.models import Competence, DisciplineCompetence
+from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.models import AssessmentItemType
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram
@@ -42,28 +43,46 @@ class WordExportForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields['educational_program'].queryset = EducationalProgram.objects.select_related(
+        program_id = None
+        discipline_id = None
+        selected_competence_id = None
+        if self.is_bound:
+            program_id = self.data.get('educational_program')
+            discipline_id = self.data.get('discipline')
+            selected_competence_id = self.data.get('competence')
+        else:
+            program = self.initial.get('educational_program')
+            discipline = self.initial.get('discipline')
+            competence = self.initial.get('competence')
+            program_id = program.id if hasattr(program, 'id') else program
+            discipline_id = discipline.id if hasattr(discipline, 'id') else discipline
+            selected_competence_id = competence.id if hasattr(competence, 'id') else competence
+
+        base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
         ).order_by('program_profile__code', 'admission_year')
-        self.fields['discipline'].queryset = Discipline.objects.order_by('name')
+        self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, program_id)
+        apply_autocomplete_attrs(
+            self.fields['educational_program'],
+            kind='educational_program',
+            placeholder='Введите профиль, кафедру или год набора',
+        )
+
+        base_discipline_qs = Discipline.objects.order_by('name')
+        self.fields['discipline'].queryset = autocomplete_queryset(base_discipline_qs, discipline_id)
+        apply_autocomplete_attrs(
+            self.fields['discipline'],
+            kind='discipline',
+            placeholder='Введите наименование дисциплины',
+        )
+
         self.fields['assessment_item_type'].queryset = AssessmentItemType.objects.order_by('name')
 
         competence_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
         ).order_by('code')
-
-        program_id = None
-        discipline_id = None
-        if self.is_bound:
-            program_id = self.data.get('educational_program')
-            discipline_id = self.data.get('discipline')
-        else:
-            program = self.initial.get('educational_program')
-            discipline = self.initial.get('discipline')
-            program_id = program.id if hasattr(program, 'id') else program
-            discipline_id = discipline.id if hasattr(discipline, 'id') else discipline
 
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
@@ -81,7 +100,18 @@ class WordExportForm(forms.Form):
             else:
                 competence_qs = competence_qs.none()
 
+        if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
+            competence_qs = Competence.objects.filter(pk=selected_competence_id)
+
         self.fields['competence'].queryset = competence_qs
+        apply_autocomplete_attrs(
+            self.fields['competence'],
+            kind='competence',
+            placeholder='Введите код или наименование компетенции',
+            parent_field_id='id_educational_program',
+            parent_param='educational_program_id',
+            parent_required=True,
+        )
 
     def clean(self):
         cleaned_data = super().clean()

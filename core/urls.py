@@ -27,10 +27,12 @@ from .views import (
     EducationLevelListView,
     EducationLevelUpdateView,
     HomeView,
+    lookup_options,
 )
 
 urlpatterns = [
     path('', HomeView.as_view(), name='core_home'),
+    path('lookup/', lookup_options, name='core_lookup'),
 
     path('education-levels/', EducationLevelListView.as_view(), name='core_education_level_list'),
     path('education-levels/create/', EducationLevelCreateView.as_view(), name='core_education_level_create'),

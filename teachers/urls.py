@@ -11,10 +11,11 @@ from .views import (
     TeacherDetailView,
     TeacherListView,
     TeacherUpdateView,
+    TeachersDashboardView,
 )
 
 urlpatterns = [
-    path('', DepartmentListView.as_view(), name='teachers_root'),
+    path('', TeachersDashboardView.as_view(), name='teachers_root'),
 
     path('departments/', DepartmentListView.as_view(), name='teachers_department_list'),
     path('departments/create/', DepartmentCreateView.as_view(), name='teachers_department_create'),

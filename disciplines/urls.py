@@ -11,12 +11,14 @@ from .views import (
     ProgramDisciplineDeleteView,
     ProgramDisciplineDetailView,
     ProgramDisciplineListView,
+    ProgramDisciplineManagerView,
     ProgramDisciplineUpdateView,
     program_discipline_by_program,
 )
 
 urlpatterns = [
-    path('', DisciplinesDashboardView.as_view(), name='disciplines_root'),
+    path('', ProgramDisciplineManagerView.as_view(), name='disciplines_root'),
+    path('overview/', DisciplinesDashboardView.as_view(), name='disciplines_overview'),
 
     path('list/', DisciplineListView.as_view(), name='disciplines_discipline_list'),
     path('list/create/', DisciplineCreateView.as_view(), name='disciplines_discipline_create'),

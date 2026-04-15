@@ -1,5 +1,10 @@
+from django.contrib import messages
+from django.db import IntegrityError
 from django.db.models import Count
 from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.views import View
 from django.views.generic import TemplateView
 
 from programs.models import EducationalProgram
@@ -12,8 +17,67 @@ from core.view_helpers import (
     NamedUpdateView,
 )
 
-from .forms import DisciplineForm, ProgramDisciplineForm
+from .forms import DisciplineForm, ProgramDisciplineForm, ProgramDisciplineManageForm
 from .models import Discipline, ProgramDiscipline
+
+
+class ProgramDisciplineManagerView(View):
+    template_name = 'disciplines/manage_program_disciplines.html'
+
+    @staticmethod
+    def _get_selected_program_id(request, form=None):
+        if form is not None and form.is_bound:
+            return (form.data.get('educational_program') or '').strip()
+        return (request.GET.get('educational_program') or '').strip()
+
+    def _build_context(self, request, form):
+        selected_program_id = self._get_selected_program_id(request, form=form)
+
+        selected_program = None
+        existing_program_disciplines = ProgramDiscipline.objects.none()
+        if selected_program_id:
+            selected_program = (
+                EducationalProgram.objects.select_related('program_profile', 'department')
+                .filter(pk=selected_program_id)
+                .first()
+            )
+            existing_program_disciplines = ProgramDiscipline.objects.select_related('discipline').filter(
+                educational_program_id=selected_program_id
+            ).order_by('discipline__name')
+
+        return {
+            'form': form,
+            'selected_program': selected_program,
+            'existing_program_disciplines': existing_program_disciplines,
+        }
+
+    def get(self, request, *args, **kwargs):
+        selected_program_id = self._get_selected_program_id(request)
+        initial = {'educational_program': selected_program_id} if selected_program_id else None
+        form = ProgramDisciplineManageForm(initial=initial)
+        return render(request, self.template_name, self._build_context(request, form))
+
+    def post(self, request, *args, **kwargs):
+        form = ProgramDisciplineManageForm(request.POST)
+
+        if form.is_valid():
+            educational_program = form.cleaned_data['educational_program']
+            discipline = form.cleaned_data['discipline']
+
+            try:
+                ProgramDiscipline.objects.create(
+                    educational_program=educational_program,
+                    discipline=discipline,
+                )
+            except IntegrityError:
+                form.add_error('discipline', 'Эта дисциплина уже добавлена в выбранный учебный план.')
+            else:
+                messages.success(request, 'Дисциплина успешно добавлена в учебный план.')
+                return redirect(
+                    f"{reverse('disciplines_root')}?educational_program={educational_program.id}"
+                )
+
+        return render(request, self.template_name, self._build_context(request, form))
 
 
 class DisciplinesDashboardView(TemplateView):

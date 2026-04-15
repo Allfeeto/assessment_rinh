@@ -4,8 +4,10 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
+from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from competencies.models import Competence, DisciplineCompetence
 from core.models import AssessmentItemType
+from disciplines.models import ProgramDiscipline
 
 from .models import AssessmentItem, AssessmentItemRow
 from .services import (
@@ -45,9 +47,7 @@ class AssessmentItemForm(forms.ModelForm):
         queryset=Competence.objects.none(),
         required=False,
         label='Проверяемая компетенция',
-        widget=forms.Select(
-            attrs={'data-fetch-url': '/competencies/by-program-discipline/?program_discipline_id={value}&linked_only=1'}
-        ),
+        widget=forms.Select(),
     )
 
     class Meta:
@@ -62,15 +62,24 @@ class AssessmentItemForm(forms.ModelForm):
             'right_column_title',
         )
         widgets = {
-            'program_discipline': forms.Select(attrs={'data-dependent-child': 'id_competence'}),
             'prompt_text': forms.Textarea(attrs={'rows': 4}),
             'instruction_text': forms.Textarea(attrs={'rows': 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['assessment_item_type'].queryset = self.fields['assessment_item_type'].queryset.order_by('name')
-        self.fields['program_discipline'].queryset = self.fields['program_discipline'].queryset.select_related(
+        self.fields['assessment_item_type'].queryset = AssessmentItemType.objects.order_by('name')
+
+        program_discipline_id = None
+        selected_competence_id = None
+        if self.is_bound:
+            program_discipline_id = self.data.get('program_discipline')
+            selected_competence_id = self.data.get('competence')
+        elif self.instance and self.instance.pk:
+            program_discipline_id = self.instance.program_discipline_id
+            selected_competence_id = self.instance.competence_id
+
+        base_program_discipline_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'discipline',
         ).order_by(
@@ -78,12 +87,15 @@ class AssessmentItemForm(forms.ModelForm):
             'educational_program__admission_year',
             'discipline__name',
         )
-
-        program_discipline_id = None
-        if self.is_bound:
-            program_discipline_id = self.data.get('program_discipline')
-        elif self.instance and self.instance.pk:
-            program_discipline_id = self.instance.program_discipline_id
+        self.fields['program_discipline'].queryset = autocomplete_queryset(
+            base_program_discipline_qs,
+            program_discipline_id,
+        )
+        apply_autocomplete_attrs(
+            self.fields['program_discipline'],
+            kind='program_discipline',
+            placeholder='Введите программу или дисциплину',
+        )
 
         competence_queryset = Competence.objects.none()
         if program_discipline_id:
@@ -94,9 +106,21 @@ class AssessmentItemForm(forms.ModelForm):
                 id__in=linked_competence_ids
             ).order_by('code')
 
+        if selected_competence_id and not competence_queryset.filter(pk=selected_competence_id).exists():
+            competence_queryset = Competence.objects.filter(pk=selected_competence_id)
+
         self.fields['competence'].queryset = competence_queryset
         self.fields['competence'].help_text = (
             'Доступны только компетенции, связанные с выбранной дисциплиной учебного плана.'
+        )
+        apply_autocomplete_attrs(
+            self.fields['competence'],
+            kind='competence',
+            placeholder='Введите код или наименование компетенции',
+            parent_field_id='id_program_discipline',
+            parent_param='program_discipline_id',
+            parent_required=True,
+            extra_params={'linked_only': 1},
         )
 
         if self.instance and self.instance.pk and not self.is_bound:

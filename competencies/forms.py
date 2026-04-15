@@ -1,5 +1,9 @@
 from django import forms
 
+from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from disciplines.models import ProgramDiscipline
+from programs.models import EducationalProgram
+
 from .models import Competence, DisciplineCompetence
 
 
@@ -10,10 +14,22 @@ class CompetenceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['educational_program'].queryset = self.fields['educational_program'].queryset.select_related(
+        selected_program_id = None
+        if self.is_bound:
+            selected_program_id = self.data.get('educational_program')
+        elif self.instance and self.instance.pk:
+            selected_program_id = self.instance.educational_program_id
+
+        base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
         ).order_by('program_profile__code', 'admission_year')
+        self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, selected_program_id)
+        apply_autocomplete_attrs(
+            self.fields['educational_program'],
+            kind='educational_program',
+            placeholder='Введите профиль, кафедру или год набора',
+        )
         self.fields['competence_type'].queryset = self.fields['competence_type'].queryset.order_by('name')
 
 
@@ -21,16 +37,19 @@ class DisciplineCompetenceForm(forms.ModelForm):
     class Meta:
         model = DisciplineCompetence
         fields = ('program_discipline', 'competence')
-        widgets = {
-            'program_discipline': forms.Select(attrs={'data-dependent-child': 'id_competence'}),
-            'competence': forms.Select(
-                attrs={'data-fetch-url': '/competencies/by-program-discipline/?program_discipline_id={value}'}
-            ),
-        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['program_discipline'].queryset = self.fields['program_discipline'].queryset.select_related(
+        selected_program_discipline_id = None
+        selected_competence_id = None
+        if self.is_bound:
+            selected_program_discipline_id = self.data.get('program_discipline')
+            selected_competence_id = self.data.get('competence')
+        elif self.instance and self.instance.pk:
+            selected_program_discipline_id = self.instance.program_discipline_id
+            selected_competence_id = self.instance.competence_id
+
+        base_program_discipline_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'discipline',
         ).order_by(
@@ -38,17 +57,21 @@ class DisciplineCompetenceForm(forms.ModelForm):
             'educational_program__admission_year',
             'discipline__name',
         )
-        program_discipline_id = None
-        if self.is_bound:
-            program_discipline_id = self.data.get('program_discipline')
-        elif self.instance and self.instance.pk:
-            program_discipline_id = self.instance.program_discipline_id
+        self.fields['program_discipline'].queryset = autocomplete_queryset(
+            base_program_discipline_qs,
+            selected_program_discipline_id,
+        )
+        apply_autocomplete_attrs(
+            self.fields['program_discipline'],
+            kind='program_discipline',
+            placeholder='Введите программу или дисциплину',
+        )
 
         competence_qs = Competence.objects.none()
-        if program_discipline_id:
+        if selected_program_discipline_id:
             educational_program_id = (
-                self.fields['program_discipline'].queryset
-                .filter(pk=program_discipline_id)
+                base_program_discipline_qs
+                .filter(pk=selected_program_discipline_id)
                 .values_list('educational_program_id', flat=True)
                 .first()
             )
@@ -59,7 +82,18 @@ class DisciplineCompetenceForm(forms.ModelForm):
                     .order_by('code')
                 )
 
+        if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
+            competence_qs = Competence.objects.filter(pk=selected_competence_id)
+
         self.fields['competence'].queryset = competence_qs
+        apply_autocomplete_attrs(
+            self.fields['competence'],
+            kind='competence',
+            placeholder='Введите код или наименование компетенции',
+            parent_field_id='id_program_discipline',
+            parent_param='program_discipline_id',
+            parent_required=True,
+        )
 
     def clean(self):
         cleaned_data = super().clean()

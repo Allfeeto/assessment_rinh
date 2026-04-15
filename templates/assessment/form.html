@@ -240,8 +240,6 @@
 <script>
 (function () {
     const typeSelect = document.getElementById('id_assessment_item_type');
-    const programDisciplineSelect = document.getElementById('id_program_discipline');
-    const competenceSelect = document.getElementById('id_competence');
     const addRowButton = document.getElementById('add-row');
     const totalFormsInput = document.getElementById('id_rows-TOTAL_FORMS');
     const rowsBody = document.getElementById('rows-body');
@@ -256,41 +254,6 @@
         isCorrect: document.querySelectorAll('.col-is-correct'),
         openAnswer: document.querySelectorAll('.col-open-answer')
     };
-
-    function fetchDependentOptions(parentSelect, childSelect) {
-        const template = childSelect.dataset.fetchUrl;
-        if (!template) {
-            return;
-        }
-
-        const value = parentSelect.value;
-        const selectedBefore = childSelect.value;
-
-        if (!value) {
-            childSelect.innerHTML = '<option value="">---------</option>';
-            return;
-        }
-
-        const url = template.replace('{value}', encodeURIComponent(value));
-        fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-            .then(response => response.json())
-            .then(data => {
-                const results = data.results || [];
-                childSelect.innerHTML = '<option value="">---------</option>';
-
-                results.forEach(item => {
-                    const option = document.createElement('option');
-                    option.value = String(item.id);
-                    option.textContent = item.label;
-                    if (selectedBefore && selectedBefore === String(item.id)) {
-                        option.selected = true;
-                    }
-                    childSelect.appendChild(option);
-                });
-            })
-            .catch(() => {
-            });
-    }
 
     function inferTypeCode() {
         const option = typeSelect && typeSelect.options[typeSelect.selectedIndex];
@@ -371,15 +334,6 @@
         totalFormsInput.value = String(current + 1);
         bindRowButtons(rowsBody.lastElementChild.closest('tbody'));
         applyTypeVisibility();
-    }
-
-    if (programDisciplineSelect && competenceSelect) {
-        programDisciplineSelect.addEventListener('change', () => {
-            fetchDependentOptions(programDisciplineSelect, competenceSelect);
-        });
-        if (programDisciplineSelect.value) {
-            fetchDependentOptions(programDisciplineSelect, competenceSelect);
-        }
     }
 
     if (typeSelect) {

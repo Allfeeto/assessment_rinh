@@ -1,8 +1,10 @@
+from django.db.models import Q
+from django.http import JsonResponse
 from django.views.generic import TemplateView
 
 from assessment.models import AssessmentItem
-from competencies.models import Competence
-from disciplines.models import Discipline
+from competencies.models import Competence, DisciplineCompetence
+from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 from teachers.models import Department, Teacher
 
@@ -241,3 +243,183 @@ class AcademicTitleDeleteView(NamedDeleteView):
     model = AcademicTitle
     title = 'Удалить учёное звание'
     list_url_name = 'core_academic_title_list'
+
+
+def lookup_options(request):
+    kind = (request.GET.get('kind') or '').strip()
+    query = (request.GET.get('q') or '').strip()
+
+    try:
+        limit = int(request.GET.get('limit', 20))
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 50))
+
+    if kind == 'department':
+        queryset = Department.objects.order_by('number')
+        if query:
+            queryset = queryset.filter(
+                Q(number__icontains=query)
+                | Q(short_name__icontains=query)
+                | Q(full_name__icontains=query)
+            )
+        results = [
+            {'id': obj.id, 'label': f'{obj.number} — {obj.short_name}'}
+            for obj in queryset[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'teacher':
+        queryset = Teacher.objects.select_related('department').order_by('full_name')
+        department_id = request.GET.get('department_id')
+        if department_id:
+            queryset = queryset.filter(department_id=department_id)
+        if query:
+            queryset = queryset.filter(
+                Q(full_name__icontains=query)
+                | Q(department__number__icontains=query)
+                | Q(department__short_name__icontains=query)
+            )
+        results = [
+            {'id': obj.id, 'label': f'{obj.full_name} ({obj.department.short_name})'}
+            for obj in queryset[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'training_direction':
+        queryset = TrainingDirection.objects.order_by('code')
+        if query:
+            queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))
+        results = [
+            {'id': obj.id, 'label': f'{obj.code} — {obj.name}'}
+            for obj in queryset[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'program_profile':
+        queryset = ProgramProfile.objects.select_related('training_direction').order_by('code')
+        direction_id = request.GET.get('training_direction_id')
+        if direction_id:
+            queryset = queryset.filter(training_direction_id=direction_id)
+        if query:
+            queryset = queryset.filter(
+                Q(code__icontains=query)
+                | Q(name__icontains=query)
+                | Q(training_direction__code__icontains=query)
+                | Q(training_direction__name__icontains=query)
+            )
+        results = [
+            {
+                'id': obj.id,
+                'label': f'{obj.code} — {obj.name} ({obj.training_direction.code})',
+            }
+            for obj in queryset[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'educational_program':
+        queryset = EducationalProgram.objects.select_related(
+            'program_profile__training_direction',
+            'department',
+        ).order_by('program_profile__code', 'admission_year')
+        if query:
+            filters = (
+                Q(program_profile__code__icontains=query)
+                | Q(program_profile__name__icontains=query)
+                | Q(program_profile__training_direction__code__icontains=query)
+                | Q(department__number__icontains=query)
+                | Q(department__short_name__icontains=query)
+            )
+            if query.isdigit():
+                filters |= Q(admission_year=int(query))
+            queryset = queryset.filter(filters)
+        results = [{'id': obj.id, 'label': str(obj)} for obj in queryset[:limit]]
+        return JsonResponse({'results': results})
+
+    if kind == 'discipline':
+        queryset = Discipline.objects.order_by('name')
+        exclude_program_id = request.GET.get('exclude_program_id')
+        if exclude_program_id:
+            linked_ids = ProgramDiscipline.objects.filter(
+                educational_program_id=exclude_program_id
+            ).values_list('discipline_id', flat=True)
+            queryset = queryset.exclude(id__in=linked_ids)
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        results = [{'id': obj.id, 'label': obj.name} for obj in queryset[:limit]]
+        return JsonResponse({'results': results})
+
+    if kind == 'program_discipline':
+        queryset = ProgramDiscipline.objects.select_related(
+            'educational_program__program_profile',
+            'educational_program__department',
+            'discipline',
+        ).order_by(
+            'educational_program__program_profile__code',
+            'educational_program__admission_year',
+            'discipline__name',
+        )
+        educational_program_id = request.GET.get('educational_program_id')
+        if educational_program_id:
+            queryset = queryset.filter(educational_program_id=educational_program_id)
+        if query:
+            filters = (
+                Q(discipline__name__icontains=query)
+                | Q(educational_program__program_profile__code__icontains=query)
+                | Q(educational_program__program_profile__name__icontains=query)
+                | Q(educational_program__department__short_name__icontains=query)
+            )
+            if query.isdigit():
+                filters |= Q(educational_program__admission_year=int(query))
+            queryset = queryset.filter(filters)
+        results = [
+            {'id': obj.id, 'label': f'{obj.educational_program} | {obj.discipline.name}'}
+            for obj in queryset[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'competence':
+        queryset = Competence.objects.select_related(
+            'educational_program__program_profile',
+            'competence_type',
+        ).order_by('code')
+
+        educational_program_id = request.GET.get('educational_program_id')
+        program_discipline_id = request.GET.get('program_discipline_id')
+        linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
+
+        if program_discipline_id:
+            program_id = (
+                ProgramDiscipline.objects.filter(pk=program_discipline_id)
+                .values_list('educational_program_id', flat=True)
+                .first()
+            )
+            if program_id:
+                queryset = queryset.filter(educational_program_id=program_id)
+                if linked_only:
+                    linked_ids = DisciplineCompetence.objects.filter(
+                        program_discipline_id=program_discipline_id
+                    ).values_list('competence_id', flat=True)
+                    queryset = queryset.filter(id__in=linked_ids)
+            else:
+                queryset = queryset.none()
+        elif educational_program_id:
+            queryset = queryset.filter(educational_program_id=educational_program_id)
+
+        if query:
+            queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))
+
+        results = [
+            {'id': obj.id, 'label': f'{obj.code} — {obj.name}'}
+            for obj in queryset.distinct()[:limit]
+        ]
+        return JsonResponse({'results': results})
+
+    if kind == 'assessment_item_type':
+        queryset = AssessmentItemType.objects.order_by('name')
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        results = [{'id': obj.id, 'label': obj.name} for obj in queryset[:limit]]
+        return JsonResponse({'results': results})
+
+    return JsonResponse({'results': []})
