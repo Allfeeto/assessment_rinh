@@ -58,13 +58,11 @@ class AssessmentItemForm(forms.ModelForm):
             'assessment_item_type',
             'competence',
             'prompt_text',
-            'instruction_text',
             'left_column_title',
             'right_column_title',
         )
         widgets = {
             'prompt_text': forms.Textarea(attrs={'rows': 4}),
-            'instruction_text': forms.Textarea(attrs={'rows': 3}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -182,7 +180,7 @@ class AssessmentItemRowForm(forms.ModelForm):
             'left_text': forms.Textarea(attrs={'rows': 2}),
             'right_text': forms.Textarea(attrs={'rows': 2}),
             'sort_order': forms.HiddenInput(),
-            'correct_order': forms.NumberInput(attrs={'min': 1}),
+            'correct_order': forms.HiddenInput(),
             'open_answer_text': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -197,7 +195,6 @@ class BaseAssessmentItemRowFormSet(BaseInlineFormSet):
                 _clean_text(cleaned_data.get('left_text')),
                 _clean_text(cleaned_data.get('right_text')),
                 _clean_text(cleaned_data.get('open_answer_text')),
-                cleaned_data.get('correct_order') not in (None, ''),
                 bool(cleaned_data.get('is_correct')),
             ]
         )
@@ -302,37 +299,25 @@ class BaseAssessmentItemRowFormSet(BaseInlineFormSet):
         if len(active_rows) < 2:
             raise ValidationError('Для задания на последовательность нужно минимум два шага.')
 
-        orders = []
-        for form, cleaned_data in active_rows:
+        for index, (form, cleaned_data) in enumerate(active_rows, start=1):
             left_text = _clean_text(cleaned_data.get('left_text'))
             right_text = _clean_text(cleaned_data.get('right_text'))
             answer_text = _clean_text(cleaned_data.get('open_answer_text'))
-            correct_order = cleaned_data.get('correct_order')
 
             if not left_text:
                 raise ValidationError('Для задания на последовательность заполните текст каждого шага.')
-            if correct_order in (None, ''):
-                raise ValidationError('Для задания на последовательность укажите правильный порядок для каждого шага.')
             if right_text or answer_text or cleaned_data.get('is_correct'):
                 raise ValidationError(
-                    'Для задания на последовательность используются только текст шага и правильный порядок.'
+                    'Для задания на последовательность используется только текст шага.'
                 )
-
-            orders.append(int(correct_order))
 
             form.instance.left_text = left_text
             form.instance.right_text = None
-            form.instance.correct_order = int(correct_order)
+            # Верный порядок для последовательности назначается автоматически
+            # в порядке заполнения строк формы.
+            form.instance.correct_order = index
             form.instance.open_answer_text = None
             form.instance.is_correct = None
-
-        if len(orders) != len(set(orders)):
-            raise ValidationError('Значения правильного порядка должны быть уникальными.')
-
-        sorted_orders = sorted(orders)
-        expected = list(range(1, len(sorted_orders) + 1))
-        if sorted_orders != expected:
-            raise ValidationError('Правильный порядок должен образовывать непрерывную последовательность от 1 до N.')
 
     def _validate_open_rows(self, active_rows):
         if not active_rows:

@@ -27,7 +27,6 @@ class AssessmentItem(models.Model):
         verbose_name='Тип задания',
     )
     prompt_text = models.TextField(verbose_name='Текст задания')
-    instruction_text = models.TextField(blank=True, null=True, verbose_name='Инструкция')
     left_column_title = models.TextField(blank=True, null=True, verbose_name='Заголовок левой колонки')
     right_column_title = models.TextField(blank=True, null=True, verbose_name='Заголовок правой колонки')
 
@@ -42,7 +41,14 @@ class AssessmentItem(models.Model):
 
     @property
     def item_type_ui_name(self):
+        override = getattr(self, '_item_type_ui_name_override', None)
+        if override:
+            return override
         return get_item_type_ui_name(self.assessment_item_type.name)
+
+    @item_type_ui_name.setter
+    def item_type_ui_name(self, value):
+        self._item_type_ui_name_override = value
 
 
 class AssessmentItemRow(models.Model):

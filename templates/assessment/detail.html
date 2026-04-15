@@ -34,10 +34,6 @@
             <th>Текст задания</th>
             <td>{{ item.prompt_text|linebreaksbr }}</td>
         </tr>
-        <tr>
-            <th>Инструкция</th>
-            <td>{{ item.instruction_text|default:"—"|linebreaksbr }}</td>
-        </tr>
         {% if item_type_code == 'matching' %}
             <tr>
                 <th>Заголовок левой колонки</th>

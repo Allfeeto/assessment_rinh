@@ -75,18 +75,6 @@
             {% endif %}
         </div>
 
-        <div class="field" style="margin-bottom: 12px;">
-            <label for="{{ form.instruction_text.id_for_label }}">{{ form.instruction_text.label }}</label>
-            {{ form.instruction_text }}
-            {% if form.instruction_text.errors %}
-                <ul class="errors">
-                    {% for error in form.instruction_text.errors %}
-                        <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-
         <div class="form-row" id="matching-columns-block">
             <div class="field">
                 <label for="{{ form.left_column_title.id_for_label }}">{{ form.left_column_title.label }}</label>
@@ -123,7 +111,6 @@
                 <tr>
                     <th class="col-left">Текст слева</th>
                     <th class="col-right">Текст справа</th>
-                    <th class="col-correct-order">Правильный порядок</th>
                     <th class="col-is-correct">Верный ответ</th>
                     <th class="col-open-answer">Допустимый ответ</th>
                     <th>Действия</th>
@@ -156,16 +143,6 @@
                                 </ul>
                             {% endif %}
                         </td>
-                        <td class="col-correct-order">
-                            {{ row_form.correct_order }}
-                            {% if row_form.correct_order.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.correct_order.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
                         <td class="col-is-correct">
                             {{ row_form.is_correct }}
                             {% if row_form.is_correct.errors %}
@@ -193,7 +170,7 @@
                     </tr>
                     {% if row_form.non_field_errors %}
                         <tr>
-                            <td colspan="6">
+                            <td colspan="5">
                                 <ul class="errors">
                                     {% for error in row_form.non_field_errors %}
                                         <li>{{ error }}</li>
@@ -218,7 +195,6 @@
                 {% endfor %}
                 <td class="col-left">{{ formset.empty_form.left_text }}</td>
                 <td class="col-right">{{ formset.empty_form.right_text }}</td>
-                <td class="col-correct-order">{{ formset.empty_form.correct_order }}</td>
                 <td class="col-is-correct">{{ formset.empty_form.is_correct }}</td>
                 <td class="col-open-answer">{{ formset.empty_form.open_answer_text }}</td>
                 <td>
@@ -250,7 +226,6 @@
     const columns = {
         left: document.querySelectorAll('.col-left'),
         right: document.querySelectorAll('.col-right'),
-        correctOrder: document.querySelectorAll('.col-correct-order'),
         isCorrect: document.querySelectorAll('.col-is-correct'),
         openAnswer: document.querySelectorAll('.col-open-answer')
     };
@@ -290,7 +265,6 @@
 
         setColumnVisibility('.col-left', ['single', 'multiple', 'matching', 'sequence'].includes(typeCode));
         setColumnVisibility('.col-right', typeCode === 'matching');
-        setColumnVisibility('.col-correct-order', typeCode === 'sequence');
         setColumnVisibility('.col-is-correct', ['single', 'multiple'].includes(typeCode));
         setColumnVisibility('.col-open-answer', typeCode === 'open');
 
@@ -303,7 +277,7 @@
         } else if (typeCode === 'matching') {
             rowHelp.textContent = 'Заполнены левая и правая часть — корректная пара. Заполнена только правая часть — правый дистрактор.';
         } else if (typeCode === 'sequence') {
-            rowHelp.textContent = 'Для каждого шага укажите текст и правильный порядок (1..N).';
+            rowHelp.textContent = 'Добавьте шаги в логическом порядке. Правильная последовательность назначается автоматически.';
         } else if (typeCode === 'open') {
             rowHelp.textContent = 'Добавьте один или несколько допустимых вариантов ответа.';
         } else {
