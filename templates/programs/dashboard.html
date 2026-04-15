@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Направления, профили, программы{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Направления, профили и образовательные программы</h1>
+
+<div class="panel">
+    <div class="actions">
+        <a class="btn" href="{% url 'programs_direction_create' %}">Создать направление</a>
+        <a class="btn" href="{% url 'programs_profile_create' %}">Создать профиль</a>
+        <a class="btn" href="{% url 'programs_educational_program_create' %}">Создать образовательную программу</a>
+    </div>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Направления</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th>Наименование</th>
+            <th>Уровень</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for direction in directions %}
+            <tr>
+                <td>{{ direction.code }}</td>
+                <td>{{ direction.name }}</td>
+                <td>{{ direction.education_level.name }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'programs_direction_update' direction.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'programs_direction_delete' direction.id %}">Удалить</a>
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4" class="muted">Направления пока не добавлены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Профили</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th>Наименование</th>
+            <th>Направление</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for profile in profiles %}
+            <tr>
+                <td>{{ profile.code }}</td>
+                <td>{{ profile.name }}</td>
+                <td>{{ profile.training_direction.code }} — {{ profile.training_direction.name }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'programs_profile_update' profile.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'programs_profile_delete' profile.id %}">Удалить</a>
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4" class="muted">Профили пока не добавлены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Образовательные программы</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Профиль</th>
+            <th>Направление</th>
+            <th>Кафедра</th>
+            <th>Год набора</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for program in programs %}
+            <tr>
+                <td>{{ program.program_profile.code }} — {{ program.program_profile.name }}</td>
+                <td>{{ program.program_profile.training_direction.code }}</td>
+                <td>{{ program.department.short_name }}</td>
+                <td>{{ program.admission_year }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'programs_educational_program_update' program.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'programs_educational_program_delete' program.id %}">Удалить</a>
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5" class="muted">Образовательные программы пока не добавлены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

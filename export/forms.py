@@ -1,6 +1,6 @@
 from django import forms
 
-from assessment.services import get_item_type_ui_name
+from assessment.services import get_item_type_ui_name, get_ui_assessment_item_types_queryset
 from competencies.models import Competence, DisciplineCompetence
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.models import AssessmentItemType
@@ -77,7 +77,7 @@ class WordExportForm(forms.Form):
             placeholder='Введите наименование дисциплины',
         )
 
-        self.fields['assessment_item_type'].queryset = AssessmentItemType.objects.order_by('name')
+        self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
 
         competence_qs = Competence.objects.select_related(
             'competence_type',

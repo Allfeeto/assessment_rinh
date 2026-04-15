@@ -13,6 +13,7 @@ from .forms import AssessmentItemForm, AssessmentItemRowCreateFormSet, Assessmen
 from .models import AssessmentItem
 from .services import (
     get_item_type_ui_name,
+    get_ui_assessment_item_types_queryset,
     infer_item_type_code,
     prettify_db_error,
     split_rows_for_detail,
@@ -134,7 +135,7 @@ class AssessmentItemListView(ListView):
         context['program_profiles'] = profiles
         context['educational_programs'] = programs
         context['disciplines'] = Discipline.objects.order_by('name')
-        assessment_item_types = list(AssessmentItemType.objects.order_by('name'))
+        assessment_item_types = list(get_ui_assessment_item_types_queryset())
         for item_type in assessment_item_types:
             item_type.ui_name = get_item_type_ui_name(item_type.name)
         context['assessment_item_types'] = assessment_item_types
@@ -150,9 +151,6 @@ class AssessmentItemListView(ListView):
             'competence': self.request.GET.get('competence', ''),
             'q': self.request.GET.get('q', ''),
         }
-
-        for item in context['items']:
-            item.item_type_ui_name = get_item_type_ui_name(item.assessment_item_type.name)
 
         params = self.request.GET.copy()
         params.pop('page', None)

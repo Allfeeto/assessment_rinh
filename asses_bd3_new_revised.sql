@@ -429,8 +429,12 @@ EXECUTE FUNCTION check_assessment_item_relation_integrity();
 
 -- Проверка строк задания с учетом типа задания.
 -- Логика опирается на стандартные значения справочника assessment_item_type.name.
-CREATE OR REPLACE FUNCTION check_assessment_item_row_by_type()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.check_assessment_item_row_by_type()
+    RETURNS trigger
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE NOT LEAKPROOF
+AS $BODY$
 DECLARE
     v_item_type_name TEXT;
     v_left_text  TEXT := NULLIF(BTRIM(COALESCE(NEW.left_text, '')), '');
@@ -447,7 +451,7 @@ BEGIN
         RAISE EXCEPTION 'Не найден тип задания для assessment_item_id=%', NEW.assessment_item_id;
     END IF;
 
-    IF v_item_type_name IN ('выбор одного ответа', 'выбор нескольких ответов') THEN
+    IF v_item_type_name IN ('Задание закрытого типа с выбором одного верного ответа из предложенных', 'Задание закрытого типа с выбором нескольких верных ответов из предложенных') THEN
         IF v_left_text IS NULL THEN
             RAISE EXCEPTION 'Для заданий с выбором ответа left_text обязателен';
         END IF;
@@ -461,7 +465,7 @@ BEGIN
             RAISE EXCEPTION 'Для заданий с выбором ответа correct_order должен быть NULL';
         END IF;
 
-    ELSIF v_item_type_name = 'установление соответствия' THEN
+    ELSIF v_item_type_name = 'Задание закрытого типа на установление соответствия' THEN
         IF v_right_text IS NULL THEN
             RAISE EXCEPTION 'Для задания на соответствие right_text обязателен';
         END IF;
@@ -476,7 +480,7 @@ BEGIN
         END IF;
         -- left_text может быть NULL: это правый дистрактор.
 
-    ELSIF v_item_type_name = 'установление последовательности' THEN
+    ELSIF v_item_type_name = 'Задание закрытого типа на установление последовательности' THEN
         IF v_left_text IS NULL THEN
             RAISE EXCEPTION 'Для задания на последовательность left_text обязателен';
         END IF;
@@ -487,7 +491,7 @@ BEGIN
             RAISE EXCEPTION 'Для задания на последовательность допускаются только left_text, sort_order, correct_order';
         END IF;
 
-    ELSIF v_item_type_name = 'открытый ответ' THEN
+    ELSIF v_item_type_name = 'Задание открытого типа с развернутым ответом.' THEN
         IF v_answer_text IS NULL THEN
             RAISE EXCEPTION 'Для задания типа открытый ответ open_answer_text обязателен';
         END IF;
@@ -501,6 +505,7 @@ BEGIN
 
     RETURN NEW;
 END;
+
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_check_assessment_item_row_by_type

@@ -10,10 +10,10 @@ TYPE_OPEN = 'open'
 TYPE_UNKNOWN = 'unknown'
 
 TYPE_UI_LABELS = {
-    TYPE_MATCHING: 'Задание закрытой формы на установление соответствия',
+    TYPE_MATCHING: 'Задание закрытого типа на установление соответствия',
     TYPE_SEQUENCE: 'Задание закрытого типа на установление последовательности',
-    TYPE_MULTIPLE: 'Задание закрытого типа с выбором нескольких верных ответов из четырех предложенных',
-    TYPE_SINGLE: 'Задание закрытого типа с выбором одного верного ответа из четырех предложенных',
+    TYPE_MULTIPLE: 'Задание закрытого типа с выбором нескольких верных ответов из предложенных',
+    TYPE_SINGLE: 'Задание закрытого типа с выбором одного верного ответа из предложенных',
     TYPE_OPEN: 'Задание открытого типа с развернутым ответом',
 }
 
@@ -38,6 +38,13 @@ def infer_item_type_code(type_name: str | None) -> str:
 def get_item_type_ui_name(type_name: str | None) -> str:
     code = infer_item_type_code(type_name)
     return TYPE_UI_LABELS.get(code, type_name or '')
+
+
+def get_ui_assessment_item_types_queryset():
+    from core.models import AssessmentItemType
+
+    ui_qs = AssessmentItemType.objects.filter(name__istartswith='Задание').order_by('name')
+    return ui_qs if ui_qs.exists() else AssessmentItemType.objects.order_by('name')
 
 
 def split_rows_for_detail(type_name: str | None, rows: Iterable):
@@ -128,5 +135,10 @@ def prettify_db_error(exc: Exception) -> str:
         return 'Заведующий кафедрой должен быть преподавателем этой же кафедры.'
     if 'должны принадлежать одному educational_program' in first_lower:
         return 'Выбраны данные из разных образовательных программ. Проверьте выбранные значения.'
+    if 'неизвестный тип задания' in first_lower:
+        return (
+            'Не удалось сопоставить тип задания для сохранения. '
+            'Проверьте тип задания и повторите попытку.'
+        )
 
     return first_line

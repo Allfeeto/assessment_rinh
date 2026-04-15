@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Дисциплины учебного плана{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Управление дисциплинами учебного плана</h1>
+
+{% if messages %}
+    <div class="panel">
+        {% for message in messages %}
+            <div class="alert" style="margin-bottom: 8px;">{{ message }}</div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="panel">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="field" style="margin-bottom: 12px;">
+            <label for="{{ form.educational_program.id_for_label }}">{{ form.educational_program.label }} *</label>
+            {{ form.educational_program }}
+            {% if form.educational_program.errors %}
+                <ul class="errors">
+                    {% for error in form.educational_program.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        <div class="field" style="margin-bottom: 12px;">
+            <label for="{{ form.discipline.id_for_label }}">{{ form.discipline.label }} *</label>
+            {{ form.discipline }}
+            {% if form.discipline.errors %}
+                <ul class="errors">
+                    {% for error in form.discipline.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        {% if form.non_field_errors %}
+            <div class="alert">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="actions">
+            <button class="btn" type="submit">Добавить дисциплину в учебный план</button>
+            <a class="btn secondary" href="{% url 'disciplines_discipline_create' %}">Создать новую дисциплину</a>
+            <a class="btn secondary" href="{% url 'disciplines_overview' %}">Общий обзор дисциплин</a>
+        </div>
+    </form>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Уже добавленные дисциплины{% if selected_program %}: {{ selected_program }}{% endif %}</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>ID связи</th>
+            <th>Дисциплина</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for pd in existing_program_disciplines %}
+            <tr>
+                <td>{{ pd.id }}</td>
+                <td>{{ pd.discipline.name }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="3" class="muted">
+                    {% if selected_program %}
+                        Для выбранной программы дисциплины пока не добавлены.
+                    {% else %}
+                        Сначала выберите образовательную программу.
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

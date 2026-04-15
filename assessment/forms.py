@@ -18,6 +18,7 @@ from .services import (
     TYPE_SINGLE,
     TYPE_UNKNOWN,
     get_item_type_ui_name,
+    get_ui_assessment_item_types_queryset,
     infer_item_type_code,
 )
 
@@ -68,7 +69,7 @@ class AssessmentItemForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['assessment_item_type'].queryset = AssessmentItemType.objects.order_by('name')
+        self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
 
         program_discipline_id = None
         selected_competence_id = None
