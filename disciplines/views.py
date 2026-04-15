@@ -1,4 +1,8 @@
+from django.db.models import Count
 from django.http import JsonResponse
+from django.views.generic import TemplateView
+
+from programs.models import EducationalProgram
 
 from core.view_helpers import (
     NamedCreateView,
@@ -12,9 +16,53 @@ from .forms import DisciplineForm, ProgramDisciplineForm
 from .models import Discipline, ProgramDiscipline
 
 
+class DisciplinesDashboardView(TemplateView):
+    template_name = 'disciplines/list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        educational_program_id = self.request.GET.get('educational_program', '').strip()
+        search = self.request.GET.get('q', '').strip()
+
+        disciplines = Discipline.objects.annotate(
+            programs_count=Count('program_disciplines', distinct=True),
+            items_count=Count('program_disciplines__assessment_items', distinct=True),
+        ).order_by('name')
+
+        if search:
+            disciplines = disciplines.filter(name__icontains=search)
+
+        program_disciplines = ProgramDiscipline.objects.select_related(
+            'educational_program__program_profile',
+            'educational_program__department',
+            'discipline',
+        ).annotate(
+            competences_count=Count('discipline_competences', distinct=True),
+            items_count=Count('assessment_items', distinct=True),
+        ).order_by(
+            'educational_program__program_profile__code',
+            'educational_program__admission_year',
+            'discipline__name',
+        )
+
+        if educational_program_id:
+            program_disciplines = program_disciplines.filter(educational_program_id=educational_program_id)
+
+        context['educational_programs'] = EducationalProgram.objects.select_related(
+            'program_profile',
+            'department',
+        ).order_by('program_profile__code', 'admission_year')
+        context['selected_program'] = educational_program_id
+        context['search_query'] = search
+        context['disciplines'] = disciplines
+        context['program_disciplines'] = program_disciplines
+        return context
+
+
 class DisciplineListView(NamedListView):
     model = Discipline
-    title = 'Дисциплины'
+    title = 'Справочник дисциплин'
     search_fields = ('name',)
     list_columns = (('ID', 'id'), ('Наименование', 'name'))
     create_url_name = 'disciplines_discipline_create'
@@ -106,7 +154,14 @@ class ProgramDisciplineDeleteView(NamedDeleteView):
 
 def program_discipline_by_program(request):
     educational_program_id = request.GET.get('educational_program_id')
-    queryset = ProgramDiscipline.objects.select_related('discipline').order_by('discipline__name')
+    queryset = ProgramDiscipline.objects.select_related(
+        'educational_program__program_profile',
+        'discipline',
+    ).order_by(
+        'educational_program__program_profile__code',
+        'educational_program__admission_year',
+        'discipline__name',
+    )
     if educational_program_id:
         queryset = queryset.filter(educational_program_id=educational_program_id)
 

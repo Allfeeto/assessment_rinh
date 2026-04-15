@@ -26,8 +26,8 @@ class ProgramProfileForm(forms.ModelForm):
 class EducationalProgramForm(forms.ModelForm):
     training_direction = forms.ModelChoiceField(
         queryset=TrainingDirection.objects.all(),
-        required=False,
-        label='Направление (для фильтра профилей)',
+        required=True,
+        label='Направление',
     )
 
     class Meta:
@@ -56,12 +56,17 @@ class EducationalProgramForm(forms.ModelForm):
         profiles = ProgramProfile.objects.select_related('training_direction').order_by('code')
         if direction_id:
             profiles = profiles.filter(training_direction_id=direction_id)
+        else:
+            profiles = profiles.none()
         self.fields['program_profile'].queryset = profiles
 
     def clean(self):
         cleaned_data = super().clean()
         direction = cleaned_data.get('training_direction')
         profile = cleaned_data.get('program_profile')
+        if not direction:
+            self.add_error('training_direction', 'Выберите направление подготовки.')
+            return cleaned_data
         if direction and profile and profile.training_direction_id != direction.id:
             self.add_error('program_profile', 'Профиль должен принадлежать выбранному направлению.')
         return cleaned_data

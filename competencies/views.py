@@ -1,4 +1,8 @@
+from django.db.models import Count, F, Q
 from django.http import JsonResponse
+from django.views.generic import TemplateView
+
+from programs.models import EducationalProgram
 
 from core.view_helpers import (
     NamedCreateView,
@@ -11,6 +15,75 @@ from disciplines.models import ProgramDiscipline
 
 from .forms import CompetenceForm, DisciplineCompetenceForm
 from .models import Competence, DisciplineCompetence
+
+
+class CompetenciesDashboardView(TemplateView):
+    template_name = 'competencies/list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        educational_program_id = self.request.GET.get('educational_program', '').strip()
+        discipline_id = self.request.GET.get('discipline', '').strip()
+        search = self.request.GET.get('q', '').strip()
+
+        competences = Competence.objects.select_related(
+            'competence_type',
+            'educational_program__program_profile',
+        ).annotate(
+            disciplines_count=Count('discipline_competences', distinct=True),
+            items_count=Count('assessment_items', distinct=True),
+        ).order_by('educational_program__program_profile__code', 'code')
+
+        if educational_program_id:
+            competences = competences.filter(educational_program_id=educational_program_id)
+        if search:
+            competences = competences.filter(Q(code__icontains=search) | Q(name__icontains=search))
+
+        discipline_competences = DisciplineCompetence.objects.select_related(
+            'program_discipline__discipline',
+            'program_discipline__educational_program__program_profile',
+            'competence__competence_type',
+        ).annotate(
+            items_count=Count(
+                'competence__assessment_items',
+                filter=Q(competence__assessment_items__program_discipline=F('program_discipline')),
+                distinct=True,
+            )
+        ).order_by(
+            'program_discipline__educational_program__program_profile__code',
+            'program_discipline__discipline__name',
+            'competence__code',
+        )
+
+        if educational_program_id:
+            discipline_competences = discipline_competences.filter(
+                program_discipline__educational_program_id=educational_program_id
+            )
+        if discipline_id:
+            discipline_competences = discipline_competences.filter(
+                program_discipline__discipline_id=discipline_id
+            )
+
+        discipline_options = ProgramDiscipline.objects.select_related('discipline')
+        if educational_program_id:
+            discipline_options = discipline_options.filter(educational_program_id=educational_program_id)
+        discipline_options = discipline_options.order_by('discipline__name').values(
+            'discipline_id',
+            'discipline__name',
+        ).distinct()
+
+        context['educational_programs'] = EducationalProgram.objects.select_related(
+            'program_profile',
+            'department',
+        ).order_by('program_profile__code', 'admission_year')
+        context['discipline_options'] = discipline_options
+        context['selected_program'] = educational_program_id
+        context['selected_discipline'] = discipline_id
+        context['search_query'] = search
+        context['competences'] = competences
+        context['discipline_competences'] = discipline_competences
+        return context
 
 
 class CompetenceListView(NamedListView):
@@ -119,6 +192,8 @@ class DisciplineCompetenceDeleteView(NamedDeleteView):
 
 def competences_by_program_discipline(request):
     program_discipline_id = request.GET.get('program_discipline_id')
+    linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
+
     queryset = Competence.objects.order_by('code')
     if program_discipline_id:
         educational_program_id = (
@@ -131,5 +206,8 @@ def competences_by_program_discipline(request):
         else:
             queryset = queryset.none()
 
-    data = [{'id': obj.id, 'label': f'{obj.code} — {obj.name}'} for obj in queryset]
+        if linked_only:
+            queryset = queryset.filter(discipline_competences__program_discipline_id=program_discipline_id)
+
+    data = [{'id': obj.id, 'label': f'{obj.code} — {obj.name}'} for obj in queryset.distinct()]
     return JsonResponse({'results': data})

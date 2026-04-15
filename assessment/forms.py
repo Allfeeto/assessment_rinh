@@ -1,34 +1,52 @@
+from __future__ import annotations
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
-from competencies.models import Competence
+from competencies.models import Competence, DisciplineCompetence
+from core.models import AssessmentItemType
 
 from .models import AssessmentItem, AssessmentItemRow
-from .services import get_assessment_item_competence_ids, sync_assessment_item_competences
+from .services import (
+    TYPE_MATCHING,
+    TYPE_MULTIPLE,
+    TYPE_OPEN,
+    TYPE_SEQUENCE,
+    TYPE_SINGLE,
+    TYPE_UNKNOWN,
+    get_item_type_ui_name,
+    infer_item_type_code,
+)
 
 
-ITEM_TYPE_SINGLE = 'single_choice'
-ITEM_TYPE_MULTIPLE = 'multiple_choice'
-ITEM_TYPE_MATCHING = 'matching'
-ITEM_TYPE_SEQUENCE = 'sequence'
-ITEM_TYPE_OPEN = 'open_answer'
+def _clean_text(value):
+    if value is None:
+        return ''
+    return str(value).strip()
 
 
-def normalize_item_type_name(name):
-    return (name or '').strip().lower()
+class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return get_item_type_ui_name(obj.name)
+
+
+class CompetenceChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.code} — {obj.name}'
 
 
 class AssessmentItemForm(forms.ModelForm):
-    competences = forms.ModelMultipleChoiceField(
+    assessment_item_type = AssessmentItemTypeChoiceField(
+        queryset=AssessmentItemType.objects.none(),
+        label='Тип задания',
+    )
+    competence = CompetenceChoiceField(
         queryset=Competence.objects.none(),
         required=False,
-        label='Проверяемые компетенции',
-        widget=forms.SelectMultiple(
-            attrs={
-                'size': 8,
-                'data-fetch-url': '/competencies/by-program-discipline/?program_discipline_id={value}',
-            }
+        label='Проверяемая компетенция',
+        widget=forms.Select(
+            attrs={'data-fetch-url': '/competencies/by-program-discipline/?program_discipline_id={value}&linked_only=1'}
         ),
     )
 
@@ -37,20 +55,21 @@ class AssessmentItemForm(forms.ModelForm):
         fields = (
             'program_discipline',
             'assessment_item_type',
+            'competence',
             'prompt_text',
             'instruction_text',
             'left_column_title',
             'right_column_title',
-            'competences',
         )
         widgets = {
-            'program_discipline': forms.Select(attrs={'data-dependent-child': 'id_competences'}),
+            'program_discipline': forms.Select(attrs={'data-dependent-child': 'id_competence'}),
             'prompt_text': forms.Textarea(attrs={'rows': 4}),
             'instruction_text': forms.Textarea(attrs={'rows': 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['assessment_item_type'].queryset = self.fields['assessment_item_type'].queryset.order_by('name')
         self.fields['program_discipline'].queryset = self.fields['program_discipline'].queryset.select_related(
             'educational_program__program_profile',
             'discipline',
@@ -59,7 +78,6 @@ class AssessmentItemForm(forms.ModelForm):
             'educational_program__admission_year',
             'discipline__name',
         )
-        self.fields['assessment_item_type'].queryset = self.fields['assessment_item_type'].queryset.order_by('name')
 
         program_discipline_id = None
         if self.is_bound:
@@ -67,63 +85,68 @@ class AssessmentItemForm(forms.ModelForm):
         elif self.instance and self.instance.pk:
             program_discipline_id = self.instance.program_discipline_id
 
-        competence_qs = Competence.objects.select_related('competence_type').order_by('code')
+        competence_queryset = Competence.objects.none()
         if program_discipline_id:
-            educational_program_id = (
-                self.fields['program_discipline'].queryset
-                .filter(pk=program_discipline_id)
-                .values_list('educational_program_id', flat=True)
-                .first()
-            )
-            if educational_program_id:
-                competence_qs = competence_qs.filter(educational_program_id=educational_program_id)
+            linked_competence_ids = DisciplineCompetence.objects.filter(
+                program_discipline_id=program_discipline_id
+            ).values_list('competence_id', flat=True)
+            competence_queryset = Competence.objects.select_related('competence_type').filter(
+                id__in=linked_competence_ids
+            ).order_by('code')
 
-        self.fields['competences'].queryset = competence_qs
+        self.fields['competence'].queryset = competence_queryset
+        self.fields['competence'].help_text = (
+            'Доступны только компетенции, связанные с выбранной дисциплиной учебного плана.'
+        )
 
         if self.instance and self.instance.pk and not self.is_bound:
-            self.fields['competences'].initial = get_assessment_item_competence_ids(self.instance.pk)
+            self.fields['competence'].initial = self.instance.competence_id
 
     def clean(self):
         cleaned_data = super().clean()
         program_discipline = cleaned_data.get('program_discipline')
-        competences = cleaned_data.get('competences')
+        competence = cleaned_data.get('competence')
+        item_type = cleaned_data.get('assessment_item_type')
 
-        if program_discipline and competences:
-            invalid_competence_ids = [
-                competence.id
-                for competence in competences
-                if competence.educational_program_id != program_discipline.educational_program_id
-            ]
-            if invalid_competence_ids:
-                self.add_error('competences', 'Выбраны компетенции из другого учебного плана.')
+        if not competence:
+            self.add_error('competence', 'Выберите компетенцию, которую проверяет задание.')
+            return cleaned_data
+
+        if not program_discipline:
+            return cleaned_data
+
+        if competence.educational_program_id != program_discipline.educational_program_id:
+            self.add_error(
+                'competence',
+                'Компетенция должна относиться к той же образовательной программе, что и дисциплина.',
+            )
+
+        link_exists = DisciplineCompetence.objects.filter(
+            program_discipline=program_discipline,
+            competence=competence,
+        ).exists()
+        if not link_exists:
+            self.add_error(
+                'competence',
+                'Эта компетенция не связана с выбранной дисциплиной учебного плана. '
+                'Сначала добавьте связь в матрице дисциплина-компетенция.',
+            )
+
+        item_type_code = infer_item_type_code(item_type.name if item_type else '')
+        if item_type_code != TYPE_MATCHING:
+            cleaned_data['left_column_title'] = None
+            cleaned_data['right_column_title'] = None
 
         return cleaned_data
 
-    def save(self, commit=True):
-        instance = super().save(commit=commit)
-        self._competence_ids = list(
-            self.cleaned_data.get('competences', Competence.objects.none()).values_list('id', flat=True)
-        )
-
-        if commit and instance.pk:
-            sync_assessment_item_competences(instance.pk, self._competence_ids)
-
-        return instance
-
-    def save_m2m(self):
-        super().save_m2m()
-        if self.instance.pk:
-            sync_assessment_item_competences(self.instance.pk, getattr(self, '_competence_ids', []))
-
 
 class AssessmentItemRowForm(forms.ModelForm):
+    is_correct = forms.BooleanField(required=False, label='Верный ответ')
+
     class Meta:
         model = AssessmentItemRow
         fields = (
-            'row_kind',
-            'left_label',
             'left_text',
-            'right_label',
             'right_text',
             'sort_order',
             'correct_order',
@@ -131,13 +154,11 @@ class AssessmentItemRowForm(forms.ModelForm):
             'open_answer_text',
         )
         widgets = {
-            'left_label': forms.TextInput(attrs={'placeholder': 'например: А'}),
-            'right_label': forms.TextInput(attrs={'placeholder': 'например: 1'}),
             'left_text': forms.Textarea(attrs={'rows': 2}),
             'right_text': forms.Textarea(attrs={'rows': 2}),
-            'open_answer_text': forms.Textarea(attrs={'rows': 2}),
-            'sort_order': forms.NumberInput(attrs={'min': 1}),
+            'sort_order': forms.HiddenInput(),
             'correct_order': forms.NumberInput(attrs={'min': 1}),
+            'open_answer_text': forms.Textarea(attrs={'rows': 2}),
         }
 
 
@@ -145,105 +166,184 @@ class BaseAssessmentItemRowFormSet(BaseInlineFormSet):
     item_type_name = ''
 
     @staticmethod
-    def _row_has_content(cleaned_data):
-        content_fields = (
-            'left_label',
-            'left_text',
-            'right_label',
-            'right_text',
-            'sort_order',
-            'correct_order',
-            'is_correct',
-            'open_answer_text',
+    def _has_content(cleaned_data):
+        return any(
+            [
+                _clean_text(cleaned_data.get('left_text')),
+                _clean_text(cleaned_data.get('right_text')),
+                _clean_text(cleaned_data.get('open_answer_text')),
+                cleaned_data.get('correct_order') not in (None, ''),
+                bool(cleaned_data.get('is_correct')),
+            ]
         )
-        return any(cleaned_data.get(field) not in (None, '', False) for field in content_fields)
 
     def _active_rows(self):
-        rows = []
+        active = []
         for form in self.forms:
             cleaned_data = getattr(form, 'cleaned_data', None)
             if not cleaned_data or cleaned_data.get('DELETE'):
                 continue
-            if self._row_has_content(cleaned_data):
-                rows.append(cleaned_data)
-        return rows
+            if not self._has_content(cleaned_data):
+                continue
+            active.append((form, cleaned_data))
+        return active
 
     def clean(self):
         super().clean()
         if any(self.errors):
             return
 
-        item_type = normalize_item_type_name(self.item_type_name)
-        rows = self._active_rows()
+        item_type_code = infer_item_type_code(self.item_type_name)
+        active_rows = self._active_rows()
 
-        if item_type in {ITEM_TYPE_SINGLE, ITEM_TYPE_MULTIPLE}:
-            for row in rows:
-                row['row_kind'] = AssessmentItemRow.KIND_OPTION
-            option_rows = [row for row in rows if row.get('left_text')]
-            if len(option_rows) < 2:
-                raise ValidationError('Для заданий с выбором должно быть минимум 2 варианта ответа.')
-            correct_count = sum(1 for row in option_rows if row.get('is_correct'))
-            if item_type == ITEM_TYPE_SINGLE and correct_count != 1:
-                raise ValidationError('Для single_choice нужен ровно 1 правильный вариант.')
-            if item_type == ITEM_TYPE_MULTIPLE and correct_count < 1:
-                raise ValidationError('Для multiple_choice нужен минимум 1 правильный вариант.')
+        for index, (form, cleaned_data) in enumerate(active_rows, start=1):
+            form.instance.sort_order = index
+            cleaned_data['sort_order'] = index
 
-        elif item_type == ITEM_TYPE_MATCHING:
-            pair_rows = []
-            right_distractors = []
-            for row in rows:
-                row_kind = row.get('row_kind') or AssessmentItemRow.KIND_MATCH_PAIR
-                row['row_kind'] = row_kind
-                if row_kind == AssessmentItemRow.KIND_MATCH_PAIR:
-                    pair_rows.append(row)
-                elif row_kind == AssessmentItemRow.KIND_MATCH_RIGHT_DISTRACTOR:
-                    right_distractors.append(row)
-                else:
-                    raise ValidationError('Для matching допустимы только match_pair и match_right_distractor.')
+        if item_type_code == TYPE_UNKNOWN:
+            raise ValidationError('Не удалось определить тип задания. Проверьте выбранный тип.')
 
-            if len(pair_rows) < 1:
-                raise ValidationError('Для matching нужна минимум 1 корректная пара.')
+        if item_type_code in {TYPE_SINGLE, TYPE_MULTIPLE}:
+            self._validate_choice_rows(active_rows, item_type_code)
+        elif item_type_code == TYPE_MATCHING:
+            self._validate_matching_rows(active_rows)
+        elif item_type_code == TYPE_SEQUENCE:
+            self._validate_sequence_rows(active_rows)
+        elif item_type_code == TYPE_OPEN:
+            self._validate_open_rows(active_rows)
 
-            for row in pair_rows:
-                if not row.get('left_text') or not row.get('right_text'):
-                    raise ValidationError('Для пары соответствия заполните левый и правый текст.')
+    def _validate_choice_rows(self, active_rows, item_type_code):
+        option_rows = []
 
-            for row in right_distractors:
-                if not row.get('right_text'):
-                    raise ValidationError('Для правого дистрактора заполните right_text.')
+        for form, cleaned_data in active_rows:
+            left_text = _clean_text(cleaned_data.get('left_text'))
+            right_text = _clean_text(cleaned_data.get('right_text'))
+            answer_text = _clean_text(cleaned_data.get('open_answer_text'))
 
-            sort_orders = [row.get('sort_order') for row in rows if row.get('sort_order')]
-            if len(sort_orders) != len(set(sort_orders)):
-                raise ValidationError('sort_order в matching должен быть уникальным.')
+            if not left_text:
+                raise ValidationError('Для задания с выбором ответа укажите текст варианта.')
+            if right_text or answer_text or cleaned_data.get('correct_order') not in (None, ''):
+                raise ValidationError(
+                    'Для задания с выбором ответа используются только текст варианта и признак верного ответа.'
+                )
 
-        elif item_type == ITEM_TYPE_SEQUENCE:
-            for row in rows:
-                row['row_kind'] = AssessmentItemRow.KIND_SEQUENCE
-            sequence_rows = [row for row in rows if row.get('left_text')]
-            if len(sequence_rows) < 2:
-                raise ValidationError('Для sequence нужно минимум 2 элемента.')
-            orders = [row.get('correct_order') for row in sequence_rows]
-            if any(order in (None, '') for order in orders):
-                raise ValidationError('Для sequence укажите correct_order для всех элементов.')
-            if len(orders) != len(set(orders)):
-                raise ValidationError('correct_order должен быть уникальным внутри задания.')
-            sorted_orders = sorted(orders)
-            if sorted_orders != list(range(1, len(sorted_orders) + 1)):
-                raise ValidationError('correct_order должен задавать непрерывный порядок от 1 до N.')
+            form.instance.left_text = left_text
+            form.instance.right_text = None
+            form.instance.correct_order = None
+            form.instance.open_answer_text = None
+            form.instance.is_correct = bool(cleaned_data.get('is_correct'))
+            option_rows.append(form.instance)
 
-        elif item_type == ITEM_TYPE_OPEN:
-            for row in rows:
-                row['row_kind'] = AssessmentItemRow.KIND_OPEN_ANSWER
-            open_rows = [row for row in rows if row.get('open_answer_text')]
-            if len(open_rows) < 1:
-                raise ValidationError('Для open_answer нужен минимум 1 допустимый ответ.')
+        if len(option_rows) < 2:
+            raise ValidationError('Добавьте минимум два варианта ответа.')
+
+        correct_count = sum(1 for row in option_rows if row.is_correct)
+        if item_type_code == TYPE_SINGLE and correct_count != 1:
+            raise ValidationError('Для задания с выбором одного ответа должен быть ровно один верный вариант.')
+        if item_type_code == TYPE_MULTIPLE and correct_count < 1:
+            raise ValidationError('Для задания с выбором нескольких ответов должен быть минимум один верный вариант.')
+
+    def _validate_matching_rows(self, active_rows):
+        pairs_count = 0
+
+        for form, cleaned_data in active_rows:
+            left_text = _clean_text(cleaned_data.get('left_text'))
+            right_text = _clean_text(cleaned_data.get('right_text'))
+            answer_text = _clean_text(cleaned_data.get('open_answer_text'))
+
+            if not right_text:
+                raise ValidationError(
+                    'Для задания на соответствие в каждой строке заполните правую часть. '
+                    'Для дистрактора оставьте левую часть пустой.'
+                )
+            if answer_text or cleaned_data.get('is_correct') or cleaned_data.get('correct_order') not in (None, ''):
+                raise ValidationError(
+                    'Для задания на соответствие используются только поля левой и правой части.'
+                )
+
+            if left_text:
+                pairs_count += 1
+
+            form.instance.left_text = left_text or None
+            form.instance.right_text = right_text
+            form.instance.correct_order = None
+            form.instance.open_answer_text = None
+            form.instance.is_correct = None
+
+        if pairs_count < 1:
+            raise ValidationError('Для задания на соответствие нужна минимум одна корректная пара (заполнены обе части).')
+
+    def _validate_sequence_rows(self, active_rows):
+        if len(active_rows) < 2:
+            raise ValidationError('Для задания на последовательность нужно минимум два шага.')
+
+        orders = []
+        for form, cleaned_data in active_rows:
+            left_text = _clean_text(cleaned_data.get('left_text'))
+            right_text = _clean_text(cleaned_data.get('right_text'))
+            answer_text = _clean_text(cleaned_data.get('open_answer_text'))
+            correct_order = cleaned_data.get('correct_order')
+
+            if not left_text:
+                raise ValidationError('Для задания на последовательность заполните текст каждого шага.')
+            if correct_order in (None, ''):
+                raise ValidationError('Для задания на последовательность укажите правильный порядок для каждого шага.')
+            if right_text or answer_text or cleaned_data.get('is_correct'):
+                raise ValidationError(
+                    'Для задания на последовательность используются только текст шага и правильный порядок.'
+                )
+
+            orders.append(int(correct_order))
+
+            form.instance.left_text = left_text
+            form.instance.right_text = None
+            form.instance.correct_order = int(correct_order)
+            form.instance.open_answer_text = None
+            form.instance.is_correct = None
+
+        if len(orders) != len(set(orders)):
+            raise ValidationError('Значения правильного порядка должны быть уникальными.')
+
+        sorted_orders = sorted(orders)
+        expected = list(range(1, len(sorted_orders) + 1))
+        if sorted_orders != expected:
+            raise ValidationError('Правильный порядок должен образовывать непрерывную последовательность от 1 до N.')
+
+    def _validate_open_rows(self, active_rows):
+        if not active_rows:
+            raise ValidationError('Для открытого задания добавьте хотя бы один допустимый ответ.')
+
+        for form, cleaned_data in active_rows:
+            answer_text = _clean_text(cleaned_data.get('open_answer_text'))
+            left_text = _clean_text(cleaned_data.get('left_text'))
+            right_text = _clean_text(cleaned_data.get('right_text'))
+
+            if not answer_text:
+                raise ValidationError('Для открытого задания заполните допустимый вариант ответа в каждой строке.')
+            if left_text or right_text or cleaned_data.get('is_correct') or cleaned_data.get('correct_order') not in (None, ''):
+                raise ValidationError('Для открытого задания используется только поле допустимого ответа.')
+
+            form.instance.left_text = None
+            form.instance.right_text = None
+            form.instance.correct_order = None
+            form.instance.is_correct = None
+            form.instance.open_answer_text = answer_text
 
 
-AssessmentItemRowFormSet = inlineformset_factory(
+AssessmentItemRowCreateFormSet = inlineformset_factory(
     AssessmentItem,
     AssessmentItemRow,
     form=AssessmentItemRowForm,
     formset=BaseAssessmentItemRowFormSet,
-    extra=8,
+    extra=1,
+    can_delete=True,
+)
+
+AssessmentItemRowUpdateFormSet = inlineformset_factory(
+    AssessmentItem,
+    AssessmentItemRow,
+    form=AssessmentItemRowForm,
+    formset=BaseAssessmentItemRowFormSet,
+    extra=0,
     can_delete=True,
 )

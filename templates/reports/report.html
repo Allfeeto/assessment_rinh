@@ -100,7 +100,7 @@
         <tbody>
         {% for row in report_by_type %}
             <tr>
-                <td>{{ row.name }}</td>
+                <td>{{ row.ui_name|default:row.name }}</td>
                 <td>{{ row.total }}</td>
             </tr>
         {% empty %}

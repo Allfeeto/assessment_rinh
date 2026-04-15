@@ -44,7 +44,7 @@ class DisciplineCompetenceForm(forms.ModelForm):
         elif self.instance and self.instance.pk:
             program_discipline_id = self.instance.program_discipline_id
 
-        competence_qs = Competence.objects.select_related('competence_type').order_by('code')
+        competence_qs = Competence.objects.none()
         if program_discipline_id:
             educational_program_id = (
                 self.fields['program_discipline'].queryset
@@ -53,7 +53,11 @@ class DisciplineCompetenceForm(forms.ModelForm):
                 .first()
             )
             if educational_program_id:
-                competence_qs = competence_qs.filter(educational_program_id=educational_program_id)
+                competence_qs = (
+                    Competence.objects.select_related('competence_type')
+                    .filter(educational_program_id=educational_program_id)
+                    .order_by('code')
+                )
 
         self.fields['competence'].queryset = competence_qs
 

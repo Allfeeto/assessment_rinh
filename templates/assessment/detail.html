@@ -16,7 +16,7 @@
         <tbody>
         <tr>
             <th style="width: 260px;">Тип задания</th>
-            <td>{{ item.assessment_item_type.name }}</td>
+            <td>{{ item_type_ui_name }}</td>
         </tr>
         <tr>
             <th>Образовательная программа</th>
@@ -27,6 +27,10 @@
             <td>{{ item.program_discipline.discipline.name }}</td>
         </tr>
         <tr>
+            <th>Компетенция</th>
+            <td>{{ item.competence.code }} — {{ item.competence.name }}</td>
+        </tr>
+        <tr>
             <th>Текст задания</th>
             <td>{{ item.prompt_text|linebreaksbr }}</td>
         </tr>
@@ -34,147 +38,82 @@
             <th>Инструкция</th>
             <td>{{ item.instruction_text|default:"—"|linebreaksbr }}</td>
         </tr>
-        <tr>
-            <th>Заголовок левой колонки</th>
-            <td>{{ item.left_column_title|default:"—" }}</td>
-        </tr>
-        <tr>
-            <th>Заголовок правой колонки</th>
-            <td>{{ item.right_column_title|default:"—" }}</td>
-        </tr>
+        {% if item_type_code == 'matching' %}
+            <tr>
+                <th>Заголовок левой колонки</th>
+                <td>{{ item.left_column_title|default:"—" }}</td>
+            </tr>
+            <tr>
+                <th>Заголовок правой колонки</th>
+                <td>{{ item.right_column_title|default:"—" }}</td>
+            </tr>
+        {% endif %}
         </tbody>
     </table>
 </div>
 
-<div class="panel">
-    <h2>Проверяемые компетенции</h2>
-    {% if competences %}
-        <table>
-            <thead>
-            <tr>
-                <th>Код</th>
-                <th>Наименование</th>
-                <th>Тип</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for competence in competences %}
-                <tr>
-                    <td>{{ competence.code }}</td>
-                    <td>{{ competence.name }}</td>
-                    <td>{{ competence.competence_type.name }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p class="muted">Компетенции для задания не выбраны.</p>
-    {% endif %}
-</div>
-
-<div class="panel table-wrap">
-    <h2>Строки задания</h2>
-    {% if rows %}
-        <table>
-            <thead>
-            <tr>
-                <th>ID</th>
-                <th>Тип строки</th>
-                <th>left_label</th>
-                <th>left_text</th>
-                <th>right_label</th>
-                <th>right_text</th>
-                <th>sort_order</th>
-                <th>correct_order</th>
-                <th>is_correct</th>
-                <th>open_answer_text</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for row in rows %}
-                <tr>
-                    <td>{{ row.id }}</td>
-                    <td>{{ row.row_kind }}</td>
-                    <td>{{ row.left_label|default:"" }}</td>
-                    <td>{{ row.left_text|default:"" }}</td>
-                    <td>{{ row.right_label|default:"" }}</td>
-                    <td>{{ row.right_text|default:"" }}</td>
-                    <td>{{ row.sort_order|default:"" }}</td>
-                    <td>{{ row.correct_order|default:"" }}</td>
-                    <td>{% if row.is_correct == True %}Да{% elif row.is_correct == False %}Нет{% else %}{% endif %}</td>
-                    <td>{{ row.open_answer_text|default:"" }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p class="muted">Строки для задания не заполнены.</p>
-    {% endif %}
-</div>
-
-{% if row_groups.option %}
+{% if item_type_code == 'single' or item_type_code == 'multiple' %}
 <div class="panel table-wrap">
     <h2>Варианты ответа</h2>
     <table>
         <thead>
         <tr>
-            <th>Порядок</th>
-            <th>Вариант</th>
-            <th>Верный</th>
+            <th>Метка</th>
+            <th>Текст варианта</th>
+            <th>Верный ответ</th>
         </tr>
         </thead>
         <tbody>
-        {% for row in row_groups.option %}
+        {% for row in options %}
             <tr>
-                <td>{{ row.sort_order|default:"" }}</td>
+                <td>{{ forloop.counter }}</td>
                 <td>{{ row.left_text }}</td>
                 <td>{% if row.is_correct %}Да{% else %}Нет{% endif %}</td>
             </tr>
+        {% empty %}
+            <tr><td colspan="3" class="muted">Варианты ответа не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
 {% endif %}
 
-{% if row_groups.match_pair or row_groups.match_right_distractor %}
+{% if item_type_code == 'matching' %}
 <div class="panel table-wrap">
-    <h2>Соответствие</h2>
-    {% if row_groups.match_pair %}
-        <h3>Корректные пары</h3>
-        <table>
-            <thead>
+    <h2>Установление соответствия</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Левая колонка</th>
+            <th>Правая колонка</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in matching_pairs %}
             <tr>
-                <th>Левая часть</th>
-                <th>Правая часть</th>
-                <th>Порядок</th>
+                <td>{{ forloop.counter }}. {{ row.left_text }}</td>
+                <td>{{ row.right_text }}</td>
             </tr>
-            </thead>
-            <tbody>
-            {% for row in row_groups.match_pair %}
-                <tr>
-                    <td>{{ row.left_label|default:"" }} {{ row.left_text|default:"" }}</td>
-                    <td>{{ row.right_label|default:"" }} {{ row.right_text|default:"" }}</td>
-                    <td>{{ row.sort_order|default:"" }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    {% endif %}
+        {% empty %}
+            <tr><td colspan="2" class="muted">Корректные пары не заполнены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
 
-    {% if row_groups.match_right_distractor %}
-        <h3 style="margin-top: 14px;">Дистракторы правой колонки</h3>
+    {% if matching_distractors %}
+        <h3 style="margin-top: 12px;">Правые дистракторы</h3>
         <table>
             <thead>
             <tr>
-                <th>Элемент</th>
-                <th>Порядок</th>
+                <th>Метка</th>
+                <th>Текст</th>
             </tr>
             </thead>
             <tbody>
-            {% for row in row_groups.match_right_distractor %}
+            {% for row in matching_distractors %}
                 <tr>
-                    <td>{{ row.right_label|default:"" }} {{ row.right_text|default:"" }}</td>
-                    <td>{{ row.sort_order|default:"" }}</td>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ row.right_text }}</td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -183,31 +122,31 @@
 </div>
 {% endif %}
 
-{% if row_groups.sequence %}
+{% if item_type_code == 'sequence' %}
 <div class="panel table-wrap">
     <h2>Последовательность</h2>
     <table>
         <thead>
         <tr>
-            <th>Текст шага</th>
-            <th>Порядок отображения</th>
-            <th>Верный порядок</th>
+            <th>Шаг</th>
+            <th>Текст</th>
         </tr>
         </thead>
         <tbody>
-        {% for row in row_groups.sequence %}
+        {% for row in sequence_items %}
             <tr>
+                <td>{{ row.correct_order }}</td>
                 <td>{{ row.left_text }}</td>
-                <td>{{ row.sort_order|default:"" }}</td>
-                <td>{{ row.correct_order|default:"" }}</td>
             </tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">Шаги последовательности не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
 {% endif %}
 
-{% if row_groups.open_answer %}
+{% if item_type_code == 'open' %}
 <div class="panel table-wrap">
     <h2>Допустимые ответы</h2>
     <table>
@@ -217,10 +156,12 @@
         </tr>
         </thead>
         <tbody>
-        {% for row in row_groups.open_answer %}
+        {% for row in open_answers %}
             <tr>
                 <td>{{ row.open_answer_text }}</td>
             </tr>
+        {% empty %}
+            <tr><td class="muted">Допустимые ответы не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>

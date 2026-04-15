@@ -3,28 +3,49 @@
 {% block title %}Дисциплины{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Дисциплины</h1>
+<h1 class="page-title">Дисциплины и дисциплины учебных планов</h1>
 
 <div class="panel">
     <form method="get" class="form-row">
         <div class="field">
-            <label for="id_q">Поиск по названию</label>
-            <input id="id_q" type="text" name="q" value="{{ search_query }}" placeholder="Например, Математика">
+            <label for="id_q">Поиск дисциплины</label>
+            <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Название дисциплины">
         </div>
-        <button class="btn" type="submit">Найти</button>
-        <a class="btn secondary" href="/disciplines/">Сбросить</a>
+        <div class="field">
+            <label for="id_program">Образовательная программа</label>
+            <select id="id_program" name="educational_program">
+                <option value="">Все программы</option>
+                {% for program in educational_programs %}
+                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>{{ program }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="actions">
+            <button class="btn" type="submit">Применить</button>
+            <a class="btn secondary" href="/disciplines/">Сбросить</a>
+        </div>
     </form>
 </div>
 
+<div class="panel">
+    <div class="actions">
+        <a class="btn" href="{% url 'disciplines_discipline_create' %}">Создать дисциплину</a>
+        <a class="btn" href="{% url 'disciplines_program_discipline_create' %}">Добавить дисциплину в учебный план</a>
+        <a class="btn secondary" href="{% url 'disciplines_discipline_list' %}">Справочник дисциплин</a>
+        <a class="btn secondary" href="{% url 'disciplines_program_discipline_list' %}">Все связи дисциплин и программ</a>
+    </div>
+</div>
+
 <div class="panel table-wrap">
+    <h2>Справочник дисциплин</h2>
     <table>
         <thead>
         <tr>
             <th>ID</th>
             <th>Дисциплина</th>
-            <th>Программ</th>
+            <th>В учебных планах</th>
             <th>Заданий</th>
-            <th></th>
+            <th>Действия</th>
         </tr>
         </thead>
         <tbody>
@@ -34,26 +55,52 @@
                 <td>{{ discipline.name }}</td>
                 <td>{{ discipline.programs_count }}</td>
                 <td>{{ discipline.items_count }}</td>
-                <td><a class="btn secondary" href="/disciplines/{{ discipline.id }}/">Открыть</a></td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'disciplines_discipline_update' discipline.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'disciplines_discipline_delete' discipline.id %}">Удалить</a>
+                    </div>
+                </td>
             </tr>
         {% empty %}
             <tr><td colspan="5" class="muted">Дисциплины не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
+</div>
 
-    {% if is_paginated %}
-        <div class="pagination">
-            {% if page_obj.has_previous %}
-                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}">Первая</a>
-                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Стр. {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-            {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Вперёд</a>
-                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+<div class="panel table-wrap">
+    <h2>Дисциплины учебных планов</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Образовательная программа</th>
+            <th>Дисциплина</th>
+            <th>Компетенций в матрице</th>
+            <th>Заданий</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for pd in program_disciplines %}
+            <tr>
+                <td>{{ pd.id }}</td>
+                <td>{{ pd.educational_program }}</td>
+                <td>{{ pd.discipline.name }}</td>
+                <td>{{ pd.competences_count }}</td>
+                <td>{{ pd.items_count }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6" class="muted">Связи дисциплин с учебными планами не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

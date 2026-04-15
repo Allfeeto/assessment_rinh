@@ -1,26 +1,22 @@
-from django.db import transaction
-from django.shortcuts import redirect, render
+from django.db import DatabaseError, transaction
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
-from django.views.generic import DeleteView, DetailView, ListView
 from django.views import View
+from django.views.generic import DeleteView, DetailView, ListView
 
 from competencies.models import Competence
 from core.models import AssessmentItemType, EducationLevel
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 
-from .forms import (
-    AssessmentItemForm,
-    AssessmentItemRowFormSet,
-    ITEM_TYPE_MATCHING,
-    ITEM_TYPE_MULTIPLE,
-    ITEM_TYPE_OPEN,
-    ITEM_TYPE_SEQUENCE,
-    ITEM_TYPE_SINGLE,
-    normalize_item_type_name,
+from .forms import AssessmentItemForm, AssessmentItemRowCreateFormSet, AssessmentItemRowUpdateFormSet
+from .models import AssessmentItem
+from .services import (
+    get_item_type_ui_name,
+    infer_item_type_code,
+    prettify_db_error,
+    split_rows_for_detail,
 )
-from .models import AssessmentItem, AssessmentItemRow
-from .services import get_competences_for_item
 
 
 class AssessmentItemListView(ListView):
@@ -38,6 +34,7 @@ class AssessmentItemListView(ListView):
                 'program_discipline__educational_program__program_profile',
                 'program_discipline__educational_program',
                 'assessment_item_type',
+                'competence__competence_type',
             )
             .order_by('-id')
         )
@@ -74,14 +71,7 @@ class AssessmentItemListView(ListView):
 
         competence_id = self.request.GET.get('competence')
         if competence_id:
-            queryset = queryset.extra(
-                where=[
-                    'EXISTS (SELECT 1 FROM assessment_item_competence aic '
-                    'WHERE aic.assessment_item_id = assessment_item.id '
-                    'AND aic.competence_id = %s)'
-                ],
-                params=[competence_id],
-            )
+            queryset = queryset.filter(competence_id=competence_id)
 
         search_query = self.request.GET.get('q', '').strip()
         if search_query:
@@ -91,10 +81,12 @@ class AssessmentItemListView(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+
         selected_education_level = self.request.GET.get('education_level', '')
         selected_training_direction = self.request.GET.get('training_direction', '')
         selected_program_profile = self.request.GET.get('program_profile', '')
         selected_educational_program = self.request.GET.get('educational_program', '')
+        selected_discipline = self.request.GET.get('discipline', '')
 
         directions = TrainingDirection.objects.order_by('code')
         profiles = ProgramProfile.objects.order_by('code')
@@ -102,7 +94,7 @@ class AssessmentItemListView(ListView):
             'program_profile__code',
             'admission_year',
         )
-        competences = Competence.objects.order_by('code')
+        competences = Competence.objects.select_related('competence_type').order_by('code')
 
         if selected_education_level:
             directions = directions.filter(education_level_id=selected_education_level)
@@ -128,12 +120,24 @@ class AssessmentItemListView(ListView):
         if selected_educational_program:
             competences = competences.filter(educational_program_id=selected_educational_program)
 
+        if selected_discipline and selected_educational_program:
+            program_discipline_ids = ProgramDiscipline.objects.filter(
+                educational_program_id=selected_educational_program,
+                discipline_id=selected_discipline,
+            ).values_list('id', flat=True)
+            competences = competences.filter(
+                discipline_competences__program_discipline_id__in=program_discipline_ids
+            ).distinct()
+
         context['education_levels'] = EducationLevel.objects.order_by('id')
         context['training_directions'] = directions
         context['program_profiles'] = profiles
         context['educational_programs'] = programs
         context['disciplines'] = Discipline.objects.order_by('name')
-        context['assessment_item_types'] = AssessmentItemType.objects.order_by('name')
+        assessment_item_types = list(AssessmentItemType.objects.order_by('name'))
+        for item_type in assessment_item_types:
+            item_type.ui_name = get_item_type_ui_name(item_type.name)
+        context['assessment_item_types'] = assessment_item_types
         context['competences'] = competences
 
         context['selected'] = {
@@ -141,11 +145,14 @@ class AssessmentItemListView(ListView):
             'training_direction': selected_training_direction,
             'program_profile': selected_program_profile,
             'educational_program': selected_educational_program,
-            'discipline': self.request.GET.get('discipline', ''),
+            'discipline': selected_discipline,
             'assessment_item_type': self.request.GET.get('assessment_item_type', ''),
             'competence': self.request.GET.get('competence', ''),
             'q': self.request.GET.get('q', ''),
         }
+
+        for item in context['items']:
+            item.item_type_ui_name = get_item_type_ui_name(item.assessment_item_type.name)
 
         params = self.request.GET.copy()
         params.pop('page', None)
@@ -164,6 +171,7 @@ class AssessmentItemDetailView(DetailView):
                 'program_discipline__discipline',
                 'program_discipline__educational_program__program_profile__training_direction',
                 'assessment_item_type',
+                'competence__competence_type',
             )
             .prefetch_related('rows')
             .order_by('-id')
@@ -171,19 +179,18 @@ class AssessmentItemDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        rows = list(self.object.rows.order_by('row_kind', 'sort_order', 'id'))
-        context['rows'] = rows
-        context['competences'] = get_competences_for_item(self.object.id)
 
-        context['row_groups'] = {
-            'option': [row for row in rows if row.row_kind == AssessmentItemRow.KIND_OPTION],
-            'match_pair': [row for row in rows if row.row_kind == AssessmentItemRow.KIND_MATCH_PAIR],
-            'match_right_distractor': [
-                row for row in rows if row.row_kind == AssessmentItemRow.KIND_MATCH_RIGHT_DISTRACTOR
-            ],
-            'sequence': [row for row in rows if row.row_kind == AssessmentItemRow.KIND_SEQUENCE],
-            'open_answer': [row for row in rows if row.row_kind == AssessmentItemRow.KIND_OPEN_ANSWER],
-        }
+        rows = list(self.object.rows.order_by('sort_order', 'id'))
+        split = split_rows_for_detail(self.object.assessment_item_type.name, rows)
+
+        context['rows'] = rows
+        context['item_type_code'] = split['code']
+        context['item_type_ui_name'] = get_item_type_ui_name(self.object.assessment_item_type.name)
+        context['options'] = split['options']
+        context['matching_pairs'] = split['matching_pairs']
+        context['matching_distractors'] = split['matching_distractors']
+        context['sequence_items'] = split['sequence_items']
+        context['open_answers'] = split['open_answers']
         return context
 
 
@@ -191,6 +198,7 @@ class AssessmentItemFormMixin:
     template_name = 'assessment/form.html'
     model = AssessmentItem
     form_class = AssessmentItemForm
+    row_formset_class = AssessmentItemRowCreateFormSet
 
     def get_success_url(self):
         return reverse_lazy('assessment_list')
@@ -201,38 +209,20 @@ class AssessmentItemFormMixin:
             if item_type_id:
                 item_type = AssessmentItemType.objects.filter(pk=item_type_id).first()
                 if item_type:
-                    return normalize_item_type_name(item_type.name)
+                    return item_type.name
             return ''
 
         if self.object and self.object.assessment_item_type_id:
-            return normalize_item_type_name(self.object.assessment_item_type.name)
+            return self.object.assessment_item_type.name
 
         return ''
 
-    @staticmethod
-    def _apply_row_kind_defaults(formset, item_type_name):
-        item_type_name = normalize_item_type_name(item_type_name)
-        for form in formset.forms:
-            cleaned_data = getattr(form, 'cleaned_data', None)
-            if not cleaned_data or cleaned_data.get('DELETE'):
-                continue
-
-            instance = form.instance
-            if item_type_name in {ITEM_TYPE_SINGLE, ITEM_TYPE_MULTIPLE}:
-                instance.row_kind = AssessmentItemRow.KIND_OPTION
-            elif item_type_name == ITEM_TYPE_SEQUENCE:
-                instance.row_kind = AssessmentItemRow.KIND_SEQUENCE
-            elif item_type_name == ITEM_TYPE_OPEN:
-                instance.row_kind = AssessmentItemRow.KIND_OPEN_ANSWER
-            elif item_type_name == ITEM_TYPE_MATCHING:
-                instance.row_kind = cleaned_data.get('row_kind') or AssessmentItemRow.KIND_MATCH_PAIR
-
     def _get_formset(self, data=None):
         instance = self.object if getattr(self, 'object', None) else AssessmentItem()
-        formset = AssessmentItemRowFormSet(data=data, instance=instance, prefix='rows')
-        return formset
+        return self.row_formset_class(data=data, instance=instance, prefix='rows')
 
     def _render(self, request, form, formset, title):
+        item_type_name = self._resolve_item_type_name(form)
         return render(
             request,
             self.template_name,
@@ -240,21 +230,21 @@ class AssessmentItemFormMixin:
                 'form': form,
                 'formset': formset,
                 'title': title,
-                'item_type_name': self._resolve_item_type_name(form),
-                'matching_row_kinds': (
-                    (AssessmentItemRow.KIND_MATCH_PAIR, 'Корректная пара'),
-                    (AssessmentItemRow.KIND_MATCH_RIGHT_DISTRACTOR, 'Правый дистрактор'),
-                ),
+                'item_type_name': item_type_name,
+                'item_type_code': infer_item_type_code(item_type_name),
+                'item_type_ui_name': get_item_type_ui_name(item_type_name),
             },
         )
 
 
 class AssessmentItemCreateView(AssessmentItemFormMixin, View):
+    row_formset_class = AssessmentItemRowCreateFormSet
 
     def get(self, request, *args, **kwargs):
         self.object = None
         form = self.form_class()
         formset = self._get_formset()
+        formset.item_type_name = self._resolve_item_type_name(form)
         return self._render(request, form, formset, 'Создать задание')
 
     def post(self, request, *args, **kwargs):
@@ -264,20 +254,23 @@ class AssessmentItemCreateView(AssessmentItemFormMixin, View):
         formset.item_type_name = self._resolve_item_type_name(form)
 
         if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                self.object = form.save()
-                formset.instance = self.object
-                self._apply_row_kind_defaults(formset, self._resolve_item_type_name(form))
-                formset.save()
-            return redirect(self.get_success_url())
+            try:
+                with transaction.atomic():
+                    self.object = form.save()
+                    formset.instance = self.object
+                    formset.save()
+                return redirect(self.get_success_url())
+            except DatabaseError as exc:
+                form.add_error(None, prettify_db_error(exc))
 
         return self._render(request, form, formset, 'Создать задание')
 
 
 class AssessmentItemUpdateView(AssessmentItemFormMixin, View):
+    row_formset_class = AssessmentItemRowUpdateFormSet
 
     def get_object(self):
-        return AssessmentItem.objects.get(pk=self.kwargs['pk'])
+        return get_object_or_404(AssessmentItem, pk=self.kwargs['pk'])
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -293,12 +286,14 @@ class AssessmentItemUpdateView(AssessmentItemFormMixin, View):
         formset.item_type_name = self._resolve_item_type_name(form)
 
         if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                self.object = form.save()
-                formset.instance = self.object
-                self._apply_row_kind_defaults(formset, self._resolve_item_type_name(form))
-                formset.save()
-            return redirect(self.get_success_url())
+            try:
+                with transaction.atomic():
+                    self.object = form.save()
+                    formset.instance = self.object
+                    formset.save()
+                return redirect(self.get_success_url())
+            except DatabaseError as exc:
+                form.add_error(None, prettify_db_error(exc))
 
         return self._render(request, form, formset, 'Редактировать задание')
 

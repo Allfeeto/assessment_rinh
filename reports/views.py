@@ -2,6 +2,7 @@ from django.db.models import Count, F, Q
 from django.views.generic import TemplateView
 
 from assessment.models import AssessmentItem
+from assessment.services import get_item_type_ui_name
 from competencies.models import Competence, DisciplineCompetence
 from core.models import AssessmentItemType
 from disciplines.models import Discipline
@@ -32,19 +33,10 @@ class ReportsDashboardView(TemplateView):
             item_filters &= Q(program_discipline__discipline=discipline)
         if assessment_item_type:
             item_filters &= Q(assessment_item_type=assessment_item_type)
+        if competence:
+            item_filters &= Q(competence=competence)
 
         assessment_items = AssessmentItem.objects.filter(item_filters)
-
-        if competence:
-            assessment_items = assessment_items.extra(
-                where=[
-                    'EXISTS (SELECT 1 FROM assessment_item_competence aic '
-                    'WHERE aic.assessment_item_id = assessment_item.id '
-                    'AND aic.competence_id = %s)'
-                ],
-                params=[competence.id],
-            )
-
         filtered_item_ids = assessment_items.values('id')
 
         report_by_type = list(
@@ -58,6 +50,8 @@ class ReportsDashboardView(TemplateView):
             .values('name', 'total')
             .order_by('name')
         )
+        for row in report_by_type:
+            row['ui_name'] = get_item_type_ui_name(row['name'])
 
         report_by_program = list(
             EducationalProgram.objects.select_related('program_profile', 'department')
@@ -103,8 +97,8 @@ class ReportsDashboardView(TemplateView):
         competence_coverage = list(
             competence_coverage_qs.annotate(
                 items_count=Count(
-                    'assessment_item_links__assessment_item',
-                    filter=Q(assessment_item_links__assessment_item__id__in=filtered_item_ids),
+                    'assessment_items',
+                    filter=Q(assessment_items__id__in=filtered_item_ids),
                     distinct=True,
                 )
             )
@@ -142,15 +136,9 @@ class ReportsDashboardView(TemplateView):
             )
             .annotate(
                 items_count=Count(
-                    'competence__assessment_item_links__assessment_item',
-                    filter=Q(
-                        competence__assessment_item_links__assessment_item__id__in=filtered_item_ids
-                    )
-                    & Q(
-                        competence__assessment_item_links__assessment_item__program_discipline=F(
-                            'program_discipline'
-                        )
-                    ),
+                    'competence__assessment_items',
+                    filter=Q(competence__assessment_items__id__in=filtered_item_ids)
+                    & Q(competence__assessment_items__program_discipline=F('program_discipline')),
                     distinct=True,
                 )
             )

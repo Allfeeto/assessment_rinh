@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    DisciplinesDashboardView,
     DisciplineCreateView,
     DisciplineDeleteView,
     DisciplineDetailView,
@@ -15,7 +16,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path('', ProgramDisciplineListView.as_view(), name='disciplines_root'),
+    path('', DisciplinesDashboardView.as_view(), name='disciplines_root'),
 
     path('list/', DisciplineListView.as_view(), name='disciplines_discipline_list'),
     path('list/create/', DisciplineCreateView.as_view(), name='disciplines_discipline_create'),

@@ -51,6 +51,19 @@
         </div>
 
         <div class="field" style="margin-bottom: 12px;">
+            <label for="{{ form.competence.id_for_label }}">{{ form.competence.label }} *</label>
+            {{ form.competence }}
+            <small class="helptext">Выбираются только компетенции, связанные с выбранной дисциплиной учебного плана.</small>
+            {% if form.competence.errors %}
+                <ul class="errors">
+                    {% for error in form.competence.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        <div class="field" style="margin-bottom: 12px;">
             <label for="{{ form.prompt_text.id_for_label }}">{{ form.prompt_text.label }} *</label>
             {{ form.prompt_text }}
             {% if form.prompt_text.errors %}
@@ -74,7 +87,7 @@
             {% endif %}
         </div>
 
-        <div class="form-row">
+        <div class="form-row" id="matching-columns-block">
             <div class="field">
                 <label for="{{ form.left_column_title.id_for_label }}">{{ form.left_column_title.label }}</label>
                 {{ form.left_column_title }}
@@ -99,21 +112,8 @@
             </div>
         </div>
 
-        <div class="field" style="margin-top: 12px;">
-            <label for="{{ form.competences.id_for_label }}">{{ form.competences.label }}</label>
-            {{ form.competences }}
-            <small class="helptext">Показываются компетенции выбранного учебного плана.</small>
-            {% if form.competences.errors %}
-                <ul class="errors">
-                    {% for error in form.competences.errors %}
-                        <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-
-        <h2 style="margin-top: 18px;">Строки задания</h2>
-        <p class="muted" id="row-kind-help"></p>
+        <h2 style="margin-top: 20px;">Строки задания</h2>
+        <p class="muted" id="row-help"></p>
 
         {{ formset.management_form }}
 
@@ -121,45 +121,22 @@
             <table id="rows-table">
                 <thead>
                 <tr>
-                    <th id="row-kind-col">Тип строки</th>
-                    <th>left_label</th>
-                    <th>left_text</th>
-                    <th>right_label</th>
-                    <th>right_text</th>
-                    <th>sort_order</th>
-                    <th>correct_order</th>
-                    <th>is_correct</th>
-                    <th>open_answer_text</th>
-                    <th>Удалить</th>
+                    <th class="col-left">Текст слева</th>
+                    <th class="col-right">Текст справа</th>
+                    <th class="col-correct-order">Правильный порядок</th>
+                    <th class="col-is-correct">Верный ответ</th>
+                    <th class="col-open-answer">Допустимый ответ</th>
+                    <th>Действия</th>
                 </tr>
                 </thead>
                 <tbody id="rows-body">
                 {% for row_form in formset.forms %}
                     <tr class="row-form">
-                        <td class="row-kind-cell">
-                            {% for hidden in row_form.hidden_fields %}
-                                {{ hidden }}
-                            {% endfor %}
-                            {{ row_form.row_kind }}
-                            {% if row_form.row_kind.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.row_kind.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ row_form.left_label }}
-                            {% if row_form.left_label.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.left_label.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
-                        <td>
+                        {% for hidden in row_form.hidden_fields %}
+                            {{ hidden }}
+                        {% endfor %}
+
+                        <td class="col-left">
                             {{ row_form.left_text }}
                             {% if row_form.left_text.errors %}
                                 <ul class="errors">
@@ -169,17 +146,7 @@
                                 </ul>
                             {% endif %}
                         </td>
-                        <td>
-                            {{ row_form.right_label }}
-                            {% if row_form.right_label.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.right_label.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
-                        <td>
+                        <td class="col-right">
                             {{ row_form.right_text }}
                             {% if row_form.right_text.errors %}
                                 <ul class="errors">
@@ -189,17 +156,7 @@
                                 </ul>
                             {% endif %}
                         </td>
-                        <td>
-                            {{ row_form.sort_order }}
-                            {% if row_form.sort_order.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.sort_order.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
-                        <td>
+                        <td class="col-correct-order">
                             {{ row_form.correct_order }}
                             {% if row_form.correct_order.errors %}
                                 <ul class="errors">
@@ -209,7 +166,7 @@
                                 </ul>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="col-is-correct">
                             {{ row_form.is_correct }}
                             {% if row_form.is_correct.errors %}
                                 <ul class="errors">
@@ -219,7 +176,7 @@
                                 </ul>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="col-open-answer">
                             {{ row_form.open_answer_text }}
                             {% if row_form.open_answer_text.errors %}
                                 <ul class="errors">
@@ -230,19 +187,13 @@
                             {% endif %}
                         </td>
                         <td>
-                            {{ row_form.DELETE }}
-                            {% if row_form.DELETE.errors %}
-                                <ul class="errors">
-                                    {% for error in row_form.DELETE.errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
+                            <div style="display: none;">{{ row_form.DELETE }}</div>
+                            <button type="button" class="btn danger row-delete-btn">Удалить строку</button>
                         </td>
                     </tr>
                     {% if row_form.non_field_errors %}
                         <tr>
-                            <td colspan="10">
+                            <td colspan="6">
                                 <ul class="errors">
                                     {% for error in row_form.non_field_errors %}
                                         <li>{{ error }}</li>
@@ -262,21 +213,18 @@
 
         <template id="empty-form-template">
             <tr class="row-form">
-                <td class="row-kind-cell">
-                    {% for hidden in formset.empty_form.hidden_fields %}
-                        {{ hidden }}
-                    {% endfor %}
-                    {{ formset.empty_form.row_kind }}
+                {% for hidden in formset.empty_form.hidden_fields %}
+                    {{ hidden }}
+                {% endfor %}
+                <td class="col-left">{{ formset.empty_form.left_text }}</td>
+                <td class="col-right">{{ formset.empty_form.right_text }}</td>
+                <td class="col-correct-order">{{ formset.empty_form.correct_order }}</td>
+                <td class="col-is-correct">{{ formset.empty_form.is_correct }}</td>
+                <td class="col-open-answer">{{ formset.empty_form.open_answer_text }}</td>
+                <td>
+                    <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                    <button type="button" class="btn danger row-delete-btn">Удалить строку</button>
                 </td>
-                <td>{{ formset.empty_form.left_label }}</td>
-                <td>{{ formset.empty_form.left_text }}</td>
-                <td>{{ formset.empty_form.right_label }}</td>
-                <td>{{ formset.empty_form.right_text }}</td>
-                <td>{{ formset.empty_form.sort_order }}</td>
-                <td>{{ formset.empty_form.correct_order }}</td>
-                <td>{{ formset.empty_form.is_correct }}</td>
-                <td>{{ formset.empty_form.open_answer_text }}</td>
-                <td>{{ formset.empty_form.DELETE }}</td>
             </tr>
         </template>
 
@@ -293,13 +241,21 @@
 (function () {
     const typeSelect = document.getElementById('id_assessment_item_type');
     const programDisciplineSelect = document.getElementById('id_program_discipline');
-    const competencesSelect = document.getElementById('id_competences');
-    const rowKindHelp = document.getElementById('row-kind-help');
-    const rowKindCol = document.getElementById('row-kind-col');
+    const competenceSelect = document.getElementById('id_competence');
     const addRowButton = document.getElementById('add-row');
     const totalFormsInput = document.getElementById('id_rows-TOTAL_FORMS');
     const rowsBody = document.getElementById('rows-body');
     const emptyTemplate = document.getElementById('empty-form-template');
+    const rowHelp = document.getElementById('row-help');
+    const matchingColumnsBlock = document.getElementById('matching-columns-block');
+
+    const columns = {
+        left: document.querySelectorAll('.col-left'),
+        right: document.querySelectorAll('.col-right'),
+        correctOrder: document.querySelectorAll('.col-correct-order'),
+        isCorrect: document.querySelectorAll('.col-is-correct'),
+        openAnswer: document.querySelectorAll('.col-open-answer')
+    };
 
     function fetchDependentOptions(parentSelect, childSelect) {
         const template = childSelect.dataset.fetchUrl;
@@ -307,30 +263,26 @@
             return;
         }
 
-        const parentValue = parentSelect.value;
-        const selectedBefore = Array.from(childSelect.options)
-            .filter(option => option.selected)
-            .map(option => option.value);
+        const value = parentSelect.value;
+        const selectedBefore = childSelect.value;
 
-        if (!parentValue) {
-            childSelect.innerHTML = '';
+        if (!value) {
+            childSelect.innerHTML = '<option value="">---------</option>';
             return;
         }
 
-        fetch(template.replace('{value}', encodeURIComponent(parentValue)), {
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        })
+        const url = template.replace('{value}', encodeURIComponent(value));
+        fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
             .then(response => response.json())
             .then(data => {
                 const results = data.results || [];
-                const selectedSet = new Set(selectedBefore);
-                childSelect.innerHTML = '';
+                childSelect.innerHTML = '<option value="">---------</option>';
 
                 results.forEach(item => {
                     const option = document.createElement('option');
                     option.value = String(item.id);
                     option.textContent = item.label;
-                    if (selectedSet.has(String(item.id))) {
+                    if (selectedBefore && selectedBefore === String(item.id)) {
                         option.selected = true;
                     }
                     childSelect.appendChild(option);
@@ -340,70 +292,102 @@
             });
     }
 
-    function normalizeTypeName() {
-        const selected = typeSelect.options[typeSelect.selectedIndex];
-        if (!selected) {
-            return '';
+    function inferTypeCode() {
+        const option = typeSelect && typeSelect.options[typeSelect.selectedIndex];
+        if (!option) {
+            return 'unknown';
         }
-        return (selected.textContent || '').trim().toLowerCase();
+        const text = (option.textContent || '').toLowerCase();
+        if (text.includes('соответств')) {
+            return 'matching';
+        }
+        if (text.includes('последоват')) {
+            return 'sequence';
+        }
+        if (text.includes('нескольк')) {
+            return 'multiple';
+        }
+        if (text.includes('одного') || text.includes('один')) {
+            return 'single';
+        }
+        if (text.includes('открыт') || text.includes('развернут')) {
+            return 'open';
+        }
+        return 'unknown';
     }
 
-    function applyRowKindVisibility() {
-        const typeName = normalizeTypeName();
-        const matching = typeName === 'matching';
-        rowKindCol.style.display = matching ? '' : 'none';
-
-        document.querySelectorAll('.row-kind-cell').forEach(cell => {
-            cell.style.display = matching ? '' : 'none';
-            const select = cell.querySelector('select');
-            if (!select) {
-                return;
-            }
-            if (!matching) {
-                if (typeName === 'single_choice' || typeName === 'multiple_choice') {
-                    select.value = 'option';
-                } else if (typeName === 'sequence') {
-                    select.value = 'sequence';
-                } else if (typeName === 'open_answer') {
-                    select.value = 'open_answer';
-                }
-            }
+    function setColumnVisibility(selector, visible) {
+        document.querySelectorAll(selector).forEach(cell => {
+            cell.style.display = visible ? '' : 'none';
         });
+    }
 
-        if (typeName === 'single_choice') {
-            rowKindHelp.textContent = 'single_choice: минимум 2 варианта, ровно 1 правильный.';
-        } else if (typeName === 'multiple_choice') {
-            rowKindHelp.textContent = 'multiple_choice: минимум 2 варианта, минимум 1 правильный.';
-        } else if (typeName === 'matching') {
-            rowKindHelp.textContent = 'matching: используйте match_pair для корректных пар и match_right_distractor для лишних правых элементов.';
-        } else if (typeName === 'sequence') {
-            rowKindHelp.textContent = 'sequence: минимум 2 элемента, correct_order должен быть уникальным и непрерывным.';
-        } else if (typeName === 'open_answer') {
-            rowKindHelp.textContent = 'open_answer: добавьте хотя бы один допустимый ответ.';
+    function applyTypeVisibility() {
+        const typeCode = inferTypeCode();
+
+        setColumnVisibility('.col-left', ['single', 'multiple', 'matching', 'sequence'].includes(typeCode));
+        setColumnVisibility('.col-right', typeCode === 'matching');
+        setColumnVisibility('.col-correct-order', typeCode === 'sequence');
+        setColumnVisibility('.col-is-correct', ['single', 'multiple'].includes(typeCode));
+        setColumnVisibility('.col-open-answer', typeCode === 'open');
+
+        matchingColumnsBlock.style.display = typeCode === 'matching' ? 'flex' : 'none';
+
+        if (typeCode === 'single') {
+            rowHelp.textContent = 'Добавьте варианты ответа и отметьте ровно один верный.';
+        } else if (typeCode === 'multiple') {
+            rowHelp.textContent = 'Добавьте варианты ответа и отметьте один или несколько верных.';
+        } else if (typeCode === 'matching') {
+            rowHelp.textContent = 'Заполнены левая и правая часть — корректная пара. Заполнена только правая часть — правый дистрактор.';
+        } else if (typeCode === 'sequence') {
+            rowHelp.textContent = 'Для каждого шага укажите текст и правильный порядок (1..N).';
+        } else if (typeCode === 'open') {
+            rowHelp.textContent = 'Добавьте один или несколько допустимых вариантов ответа.';
         } else {
-            rowKindHelp.textContent = '';
+            rowHelp.textContent = '';
         }
+    }
+
+    function bindRowButtons(scope) {
+        scope.querySelectorAll('.row-delete-btn').forEach(button => {
+            button.onclick = function () {
+                const row = button.closest('.row-form');
+                if (!row) {
+                    return;
+                }
+                const deleteInput = row.querySelector('input[type="checkbox"][name$="-DELETE"]');
+                if (deleteInput) {
+                    deleteInput.checked = true;
+                }
+                row.style.display = 'none';
+            };
+        });
     }
 
     function addRow() {
-        const index = Number(totalFormsInput.value);
-        const html = emptyTemplate.innerHTML.replaceAll('__prefix__', String(index));
+        const current = Number(totalFormsInput.value);
+        const html = emptyTemplate.innerHTML.replaceAll('__prefix__', String(current));
         rowsBody.insertAdjacentHTML('beforeend', html);
-        totalFormsInput.value = String(index + 1);
-        applyRowKindVisibility();
+        totalFormsInput.value = String(current + 1);
+        bindRowButtons(rowsBody.lastElementChild.closest('tbody'));
+        applyTypeVisibility();
     }
 
-    if (programDisciplineSelect && competencesSelect) {
-        programDisciplineSelect.addEventListener('change', () => fetchDependentOptions(programDisciplineSelect, competencesSelect));
+    if (programDisciplineSelect && competenceSelect) {
+        programDisciplineSelect.addEventListener('change', () => {
+            fetchDependentOptions(programDisciplineSelect, competenceSelect);
+        });
         if (programDisciplineSelect.value) {
-            fetchDependentOptions(programDisciplineSelect, competencesSelect);
+            fetchDependentOptions(programDisciplineSelect, competenceSelect);
         }
     }
 
     if (typeSelect) {
-        typeSelect.addEventListener('change', applyRowKindVisibility);
-        applyRowKindVisibility();
+        typeSelect.addEventListener('change', applyTypeVisibility);
+        applyTypeVisibility();
     }
+
+    bindRowButtons(document);
 
     if (addRowButton) {
         addRowButton.addEventListener('click', addRow);

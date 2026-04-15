@@ -10,6 +10,10 @@ class DepartmentForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['head_teacher'].required = False
+        self.fields['head_teacher'].help_text = (
+            'Можно оставить пустым при создании кафедры и назначить позже.'
+        )
         if self.instance and self.instance.pk:
             self.fields['head_teacher'].queryset = Teacher.objects.filter(department=self.instance).order_by('full_name')
         else:

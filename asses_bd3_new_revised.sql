@@ -2,11 +2,8 @@
 -- БАЗОВАЯ СХЕМА ДЛЯ ДИПЛОМА
 -- PostgreSQL
 -- Полный create-скрипт
+-- РЕДАКЦИЯ: упрощена модель assessment_item / assessment_item_row
 -- =========================================================
-
--- Если база пустая, можно запускать как есть.
--- Если таблицы уже существуют, сначала удаляй их отдельно
--- или выполняй в новой БД.
 
 BEGIN;
 
@@ -28,23 +25,21 @@ CREATE TABLE assessment_item_type (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE
     -- например:
-    -- 'single_choice'
-    -- 'multiple_choice'
-    -- 'matching'
-    -- 'sequence'
-    -- 'open_answer'
+    -- 'выбор одного ответа'
+    -- 'выбор нескольких ответов'
+    -- 'установление соответствия'
+    -- 'установление последовательности'
+    -- 'открытый ответ'
 );
 
 CREATE TABLE academic_degree (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE
-    -- например: "кандидат технических наук"
 );
 
 CREATE TABLE academic_title (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE
-    -- например: "доцент", "профессор"
 );
 
 -- =========================================================
@@ -81,7 +76,6 @@ ADD COLUMN head_teacher_id INTEGER
 -- 3. Направления / специальности и профили
 -- =========================================================
 
--- Направление / специальность
 CREATE TABLE training_direction (
     id SERIAL PRIMARY KEY,
     education_level_id INTEGER NOT NULL
@@ -89,11 +83,8 @@ CREATE TABLE training_direction (
         ON DELETE RESTRICT,
     code VARCHAR(20) NOT NULL UNIQUE,
     name TEXT NOT NULL
-    -- пример:
-    -- 38.03.06 | Торговое дело
 );
 
--- Профиль внутри направления
 CREATE TABLE program_profile (
     id SERIAL PRIMARY KEY,
     training_direction_id INTEGER NOT NULL
@@ -102,13 +93,8 @@ CREATE TABLE program_profile (
     code VARCHAR(30) NOT NULL UNIQUE,
     name TEXT NOT NULL,
     UNIQUE (training_direction_id, name)
-    -- пример:
-    -- 38.03.06.09 | Маркетинговое управление бизнес-процессами
-    -- 38.03.06.10 | Цифровой маркетинг
 );
 
--- Конкретный учебный план / образовательная программа
--- Профиль + кафедра + год набора
 CREATE TABLE educational_program (
     id SERIAL PRIMARY KEY,
     program_profile_id INTEGER NOT NULL
@@ -131,7 +117,6 @@ CREATE TABLE discipline (
     name TEXT NOT NULL UNIQUE
 );
 
--- Дисциплина в рамках конкретного учебного плана
 CREATE TABLE program_discipline (
     id SERIAL PRIMARY KEY,
     educational_program_id INTEGER NOT NULL
@@ -143,7 +128,6 @@ CREATE TABLE program_discipline (
     UNIQUE (educational_program_id, discipline_id)
 );
 
--- Компетенции конкретного учебного плана
 CREATE TABLE competence (
     id SERIAL PRIMARY KEY,
     educational_program_id INTEGER NOT NULL
@@ -157,7 +141,6 @@ CREATE TABLE competence (
     UNIQUE (educational_program_id, code)
 );
 
--- Матрица "дисциплина -> компетенция"
 CREATE TABLE discipline_competence (
     id SERIAL PRIMARY KEY,
     program_discipline_id INTEGER NOT NULL
@@ -173,12 +156,14 @@ CREATE TABLE discipline_competence (
 -- 5. Оценочные средства
 -- =========================================================
 
--- Само задание
 CREATE TABLE assessment_item (
     id SERIAL PRIMARY KEY,
     program_discipline_id INTEGER NOT NULL
         REFERENCES program_discipline(id)
         ON DELETE CASCADE,
+    competence_id INTEGER NOT NULL
+        REFERENCES competence(id)
+        ON DELETE RESTRICT,
     assessment_item_type_id INTEGER NOT NULL
         REFERENCES assessment_item_type(id)
         ON DELETE RESTRICT,
@@ -194,53 +179,26 @@ CREATE TABLE assessment_item (
     right_column_title TEXT
 );
 
--- Связь задания с компетенциями
-CREATE TABLE assessment_item_competence (
-    assessment_item_id INTEGER NOT NULL
-        REFERENCES assessment_item(id)
-        ON DELETE CASCADE,
-    competence_id INTEGER NOT NULL
-        REFERENCES competence(id)
-        ON DELETE CASCADE,
-    PRIMARY KEY (assessment_item_id, competence_id)
-);
-
--- Универсальная таблица элементов задания
+-- Таблица строк задания без row_kind и без label-полей.
+-- Тип строки определяется типом задания.
+-- Для соответствия:
+--   заполнены left_text + right_text -> корректная пара
+--   заполнен только right_text       -> правый дистрактор
 CREATE TABLE assessment_item_row (
     id SERIAL PRIMARY KEY,
     assessment_item_id INTEGER NOT NULL
         REFERENCES assessment_item(id)
         ON DELETE CASCADE,
 
-    -- Тип строки внутри задания:
-    -- option                -> вариант ответа для single/multiple choice
-    -- match_pair            -> корректная пара для задания на соответствие
-    -- match_right_distractor-> лишний элемент правой колонки для соответствия
-    -- sequence              -> элемент последовательности
-    -- open_answer           -> допустимый вариант открытого ответа
-    row_kind VARCHAR(30) NOT NULL
-        CHECK (
-            row_kind IN (
-                'option',
-                'match_pair',
-                'match_right_distractor',
-                'sequence',
-                'open_answer'
-            )
-        ),
-
-    -- Маркеры для вывода в шаблон (А, Б, В / 1, 2, 3 и т.п.)
-    left_label TEXT,
-    right_label TEXT,
-
-    -- Универсальные поля
     left_text TEXT,
     right_text TEXT,
 
-    -- Порядок отображения строки в интерфейсе / печати
+    -- Порядок отображения строки в интерфейсе.
+    -- Для печати и ключей может не использоваться напрямую,
+    -- если приложение применяет отдельную рандомизацию.
     sort_order INTEGER CHECK (sort_order IS NULL OR sort_order > 0),
 
-    -- Правильный порядок для sequence
+    -- Правильный порядок для задания на последовательность
     correct_order INTEGER CHECK (correct_order IS NULL OR correct_order > 0),
 
     -- Признак правильности для single/multiple choice
@@ -249,7 +207,6 @@ CREATE TABLE assessment_item_row (
     -- Допустимый ответ для open_answer
     open_answer_text TEXT,
 
-    -- Хотя бы одно смысловое поле должно быть заполнено
     CHECK (
         NULLIF(BTRIM(COALESCE(left_text, '')), '') IS NOT NULL
         OR NULLIF(BTRIM(COALESCE(right_text, '')), '') IS NOT NULL
@@ -257,10 +214,13 @@ CREATE TABLE assessment_item_row (
     )
 );
 
--- Чтобы не было дублей по порядку внутри одного задания и одного типа строки
-CREATE UNIQUE INDEX uq_assessment_item_row_kind_sort
-    ON assessment_item_row (assessment_item_id, row_kind, sort_order)
+CREATE UNIQUE INDEX uq_assessment_item_row_sort
+    ON assessment_item_row (assessment_item_id, sort_order)
     WHERE sort_order IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_assessment_item_row_correct_order
+    ON assessment_item_row (assessment_item_id, correct_order)
+    WHERE correct_order IS NOT NULL;
 
 -- =========================================================
 -- 6. Индексы по внешним ключам
@@ -305,23 +265,19 @@ CREATE INDEX idx_discipline_competence_competence_id
 CREATE INDEX idx_assessment_item_program_discipline_id
     ON assessment_item(program_discipline_id);
 
+CREATE INDEX idx_assessment_item_competence_id
+    ON assessment_item(competence_id);
+
 CREATE INDEX idx_assessment_item_assessment_item_type_id
     ON assessment_item(assessment_item_type_id);
 
-CREATE INDEX idx_assessment_item_competence_competence_id
-    ON assessment_item_competence(competence_id);
-
 CREATE INDEX idx_assessment_item_row_assessment_item_id
     ON assessment_item_row(assessment_item_id);
-
-CREATE INDEX idx_assessment_item_row_row_kind
-    ON assessment_item_row(row_kind);
 
 -- =========================================================
 -- 7. Триггеры целостности
 -- =========================================================
 
--- 7.1. Проверка: код профиля должен начинаться с кода направления
 CREATE OR REPLACE FUNCTION check_program_profile_code_prefix()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -353,7 +309,6 @@ FOR EACH ROW
 EXECUTE FUNCTION check_program_profile_code_prefix();
 
 
--- 7.2. Проверка: заведующий кафедрой должен принадлежать этой же кафедре
 CREATE OR REPLACE FUNCTION check_department_head_teacher()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -388,8 +343,6 @@ FOR EACH ROW
 EXECUTE FUNCTION check_department_head_teacher();
 
 
--- 7.3. Проверка: дисциплина и компетенция в discipline_competence
--- должны относиться к одному и тому же учебному плану
 CREATE OR REPLACE FUNCTION check_discipline_competence_same_program()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -425,41 +378,134 @@ FOR EACH ROW
 EXECUTE FUNCTION check_discipline_competence_same_program();
 
 
--- 7.4. Проверка: задание и компетенция в assessment_item_competence
--- должны относиться к одному и тому же учебному плану
-CREATE OR REPLACE FUNCTION check_assessment_item_competence_same_program()
+-- Проверка: задание должно ссылаться на компетенцию той же программы,
+-- и эта пара discipline -> competence должна существовать в discipline_competence.
+CREATE OR REPLACE FUNCTION check_assessment_item_relation_integrity()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_item_program_id INTEGER;
+    v_pd_program_id INTEGER;
     v_comp_program_id INTEGER;
+    v_exists_pair INTEGER;
 BEGIN
-    SELECT pd.educational_program_id
-    INTO v_item_program_id
-    FROM assessment_item ai
-    JOIN program_discipline pd ON pd.id = ai.program_discipline_id
-    WHERE ai.id = NEW.assessment_item_id;
+    SELECT educational_program_id
+    INTO v_pd_program_id
+    FROM program_discipline
+    WHERE id = NEW.program_discipline_id;
 
     SELECT educational_program_id
     INTO v_comp_program_id
     FROM competence
     WHERE id = NEW.competence_id;
 
-    IF v_item_program_id IS NULL OR v_comp_program_id IS NULL THEN
-        RAISE EXCEPTION 'Не найдено задание или компетенция';
+    IF v_pd_program_id IS NULL OR v_comp_program_id IS NULL THEN
+        RAISE EXCEPTION 'Не найдена дисциплина плана или компетенция для задания';
     END IF;
 
-    IF v_item_program_id <> v_comp_program_id THEN
+    IF v_pd_program_id <> v_comp_program_id THEN
         RAISE EXCEPTION
-            'assessment_item и competence должны принадлежать одному educational_program';
+            'assessment_item.program_discipline_id и assessment_item.competence_id должны принадлежать одному educational_program';
+    END IF;
+
+    SELECT 1
+    INTO v_exists_pair
+    FROM discipline_competence dc
+    WHERE dc.program_discipline_id = NEW.program_discipline_id
+      AND dc.competence_id = NEW.competence_id;
+
+    IF v_exists_pair IS NULL THEN
+        RAISE EXCEPTION
+            'Для задания отсутствует связь program_discipline -> competence в таблице discipline_competence';
     END IF;
 
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_check_assessment_item_competence_same_program
-BEFORE INSERT OR UPDATE ON assessment_item_competence
+CREATE TRIGGER trg_check_assessment_item_relation_integrity
+BEFORE INSERT OR UPDATE ON assessment_item
 FOR EACH ROW
-EXECUTE FUNCTION check_assessment_item_competence_same_program();
+EXECUTE FUNCTION check_assessment_item_relation_integrity();
+
+
+-- Проверка строк задания с учетом типа задания.
+-- Логика опирается на стандартные значения справочника assessment_item_type.name.
+CREATE OR REPLACE FUNCTION check_assessment_item_row_by_type()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_item_type_name TEXT;
+    v_left_text  TEXT := NULLIF(BTRIM(COALESCE(NEW.left_text, '')), '');
+    v_right_text TEXT := NULLIF(BTRIM(COALESCE(NEW.right_text, '')), '');
+    v_answer_text TEXT := NULLIF(BTRIM(COALESCE(NEW.open_answer_text, '')), '');
+BEGIN
+    SELECT ait.name
+    INTO v_item_type_name
+    FROM assessment_item ai
+    JOIN assessment_item_type ait ON ait.id = ai.assessment_item_type_id
+    WHERE ai.id = NEW.assessment_item_id;
+
+    IF v_item_type_name IS NULL THEN
+        RAISE EXCEPTION 'Не найден тип задания для assessment_item_id=%', NEW.assessment_item_id;
+    END IF;
+
+    IF v_item_type_name IN ('выбор одного ответа', 'выбор нескольких ответов') THEN
+        IF v_left_text IS NULL THEN
+            RAISE EXCEPTION 'Для заданий с выбором ответа left_text обязателен';
+        END IF;
+        IF v_right_text IS NOT NULL OR v_answer_text IS NOT NULL THEN
+            RAISE EXCEPTION 'Для заданий с выбором ответа допускаются только left_text, is_correct, sort_order';
+        END IF;
+        IF NEW.is_correct IS NULL THEN
+            RAISE EXCEPTION 'Для заданий с выбором ответа is_correct обязателен';
+        END IF;
+        IF NEW.correct_order IS NOT NULL THEN
+            RAISE EXCEPTION 'Для заданий с выбором ответа correct_order должен быть NULL';
+        END IF;
+
+    ELSIF v_item_type_name = 'установление соответствия' THEN
+        IF v_right_text IS NULL THEN
+            RAISE EXCEPTION 'Для задания на соответствие right_text обязателен';
+        END IF;
+        IF v_answer_text IS NOT NULL THEN
+            RAISE EXCEPTION 'Для задания на соответствие open_answer_text должен быть NULL';
+        END IF;
+        IF NEW.is_correct IS NOT NULL THEN
+            RAISE EXCEPTION 'Для задания на соответствие is_correct не используется';
+        END IF;
+        IF NEW.correct_order IS NOT NULL THEN
+            RAISE EXCEPTION 'Для задания на соответствие correct_order не используется';
+        END IF;
+        -- left_text может быть NULL: это правый дистрактор.
+
+    ELSIF v_item_type_name = 'установление последовательности' THEN
+        IF v_left_text IS NULL THEN
+            RAISE EXCEPTION 'Для задания на последовательность left_text обязателен';
+        END IF;
+        IF NEW.correct_order IS NULL THEN
+            RAISE EXCEPTION 'Для задания на последовательность correct_order обязателен';
+        END IF;
+        IF v_right_text IS NOT NULL OR v_answer_text IS NOT NULL OR NEW.is_correct IS NOT NULL THEN
+            RAISE EXCEPTION 'Для задания на последовательность допускаются только left_text, sort_order, correct_order';
+        END IF;
+
+    ELSIF v_item_type_name = 'открытый ответ' THEN
+        IF v_answer_text IS NULL THEN
+            RAISE EXCEPTION 'Для задания типа открытый ответ open_answer_text обязателен';
+        END IF;
+        IF v_left_text IS NOT NULL OR v_right_text IS NOT NULL OR NEW.is_correct IS NOT NULL OR NEW.correct_order IS NOT NULL THEN
+            RAISE EXCEPTION 'Для открытого ответа допускается только open_answer_text';
+        END IF;
+
+    ELSE
+        RAISE EXCEPTION 'Неизвестный тип задания: %', v_item_type_name;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_assessment_item_row_by_type
+BEFORE INSERT OR UPDATE ON assessment_item_row
+FOR EACH ROW
+EXECUTE FUNCTION check_assessment_item_row_by_type();
 
 COMMIT;

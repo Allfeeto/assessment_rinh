@@ -42,11 +42,25 @@
         <div class="field">
             <label for="{{ form.assessment_item_type.id_for_label }}">{{ form.assessment_item_type.label }}</label>
             {{ form.assessment_item_type }}
+            {% if form.assessment_item_type.errors %}
+                <ul class="errors">
+                    {% for error in form.assessment_item_type.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
         </div>
 
         <div class="field">
             <label for="{{ form.competence.id_for_label }}">{{ form.competence.label }}</label>
             {{ form.competence }}
+            {% if form.competence.errors %}
+                <ul class="errors">
+                    {% for error in form.competence.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
         </div>
 
         <div class="actions">

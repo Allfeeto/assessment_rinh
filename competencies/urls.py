@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CompetenciesDashboardView,
     CompetenceCreateView,
     CompetenceDeleteView,
     CompetenceDetailView,
@@ -15,7 +16,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path('', CompetenceListView.as_view(), name='competencies_root'),
+    path('', CompetenciesDashboardView.as_view(), name='competencies_root'),
 
     path('list/', CompetenceListView.as_view(), name='competencies_competence_list'),
     path('list/create/', CompetenceCreateView.as_view(), name='competencies_competence_create'),

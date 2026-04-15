@@ -1,31 +1,132 @@
-from django.db import connection
+from __future__ import annotations
 
-from competencies.models import Competence
+from typing import Iterable
+
+TYPE_SINGLE = 'single'
+TYPE_MULTIPLE = 'multiple'
+TYPE_MATCHING = 'matching'
+TYPE_SEQUENCE = 'sequence'
+TYPE_OPEN = 'open'
+TYPE_UNKNOWN = 'unknown'
+
+TYPE_UI_LABELS = {
+    TYPE_MATCHING: 'Задание закрытой формы на установление соответствия',
+    TYPE_SEQUENCE: 'Задание закрытого типа на установление последовательности',
+    TYPE_MULTIPLE: 'Задание закрытого типа с выбором нескольких верных ответов из четырех предложенных',
+    TYPE_SINGLE: 'Задание закрытого типа с выбором одного верного ответа из четырех предложенных',
+    TYPE_OPEN: 'Задание открытого типа с развернутым ответом',
+}
 
 
-def get_assessment_item_competence_ids(assessment_item_id):
-    with connection.cursor() as cursor:
-        cursor.execute(
-            'SELECT competence_id FROM assessment_item_competence WHERE assessment_item_id = %s ORDER BY competence_id',
-            [assessment_item_id],
-        )
-        return [row[0] for row in cursor.fetchall()]
+def infer_item_type_code(type_name: str | None) -> str:
+    value = (type_name or '').strip().lower()
+
+    if 'соответств' in value:
+        return TYPE_MATCHING
+    if 'последоват' in value:
+        return TYPE_SEQUENCE
+    if 'нескольк' in value:
+        return TYPE_MULTIPLE
+    if 'одного' in value or 'один' in value:
+        return TYPE_SINGLE
+    if 'открыт' in value or 'развернут' in value:
+        return TYPE_OPEN
+
+    return TYPE_UNKNOWN
 
 
-def get_competences_for_item(assessment_item_id):
-    competence_ids = get_assessment_item_competence_ids(assessment_item_id)
-    return list(Competence.objects.filter(id__in=competence_ids).order_by('code'))
+def get_item_type_ui_name(type_name: str | None) -> str:
+    code = infer_item_type_code(type_name)
+    return TYPE_UI_LABELS.get(code, type_name or '')
 
 
-def sync_assessment_item_competences(assessment_item_id, competence_ids):
-    unique_ids = sorted(set(competence_ids))
-    with connection.cursor() as cursor:
-        cursor.execute(
-            'DELETE FROM assessment_item_competence WHERE assessment_item_id = %s',
-            [assessment_item_id],
-        )
-        if unique_ids:
-            cursor.executemany(
-                'INSERT INTO assessment_item_competence (assessment_item_id, competence_id) VALUES (%s, %s)',
-                [(assessment_item_id, competence_id) for competence_id in unique_ids],
-            )
+def split_rows_for_detail(type_name: str | None, rows: Iterable):
+    code = infer_item_type_code(type_name)
+    rows_list = list(rows)
+
+    if code in {TYPE_SINGLE, TYPE_MULTIPLE}:
+        options = [row for row in rows_list if (row.left_text or '').strip()]
+        options.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        return {
+            'code': code,
+            'options': options,
+            'matching_pairs': [],
+            'matching_distractors': [],
+            'sequence_items': [],
+            'open_answers': [],
+        }
+
+    if code == TYPE_MATCHING:
+        pairs = [
+            row
+            for row in rows_list
+            if (row.right_text or '').strip() and (row.left_text or '').strip()
+        ]
+        distractors = [
+            row
+            for row in rows_list
+            if (row.right_text or '').strip() and not (row.left_text or '').strip()
+        ]
+        pairs.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        distractors.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        return {
+            'code': code,
+            'options': [],
+            'matching_pairs': pairs,
+            'matching_distractors': distractors,
+            'sequence_items': [],
+            'open_answers': [],
+        }
+
+    if code == TYPE_SEQUENCE:
+        sequence_items = [row for row in rows_list if (row.left_text or '').strip()]
+        sequence_items.sort(key=lambda row: (row.correct_order or 9999, row.id))
+        return {
+            'code': code,
+            'options': [],
+            'matching_pairs': [],
+            'matching_distractors': [],
+            'sequence_items': sequence_items,
+            'open_answers': [],
+        }
+
+    if code == TYPE_OPEN:
+        open_answers = [row for row in rows_list if (row.open_answer_text or '').strip()]
+        open_answers.sort(key=lambda row: (row.sort_order or 9999, row.id))
+        return {
+            'code': code,
+            'options': [],
+            'matching_pairs': [],
+            'matching_distractors': [],
+            'sequence_items': [],
+            'open_answers': open_answers,
+        }
+
+    return {
+        'code': TYPE_UNKNOWN,
+        'options': [],
+        'matching_pairs': [],
+        'matching_distractors': [],
+        'sequence_items': [],
+        'open_answers': [],
+    }
+
+
+def prettify_db_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    if not message:
+        return 'Не удалось сохранить данные. Проверьте заполнение формы.'
+
+    first_line = message.splitlines()[0].strip()
+    first_lower = first_line.lower()
+
+    if 'assessment_item.program_discipline_id и assessment_item.competence_id' in first_lower:
+        return 'Дисциплина учебного плана и компетенция задания должны относиться к одной образовательной программе.'
+    if 'отсутствует связь program_discipline -> competence' in first_lower:
+        return 'Для выбранной дисциплины учебного плана нет связи с этой компетенцией в матрице дисциплина-компетенция.'
+    if 'заведующий кафедрой должен относиться к той же кафедре' in first_lower:
+        return 'Заведующий кафедрой должен быть преподавателем этой же кафедры.'
+    if 'должны принадлежать одному educational_program' in first_lower:
+        return 'Выбраны данные из разных образовательных программ. Проверьте выбранные значения.'
+
+    return first_line

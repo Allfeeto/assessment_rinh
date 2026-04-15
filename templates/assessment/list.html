@@ -57,7 +57,7 @@
             <select id="id_assessment_item_type" name="assessment_item_type">
                 <option value="">Все</option>
                 {% for item_type in assessment_item_types %}
-                    <option value="{{ item_type.id }}" {% if selected.assessment_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>{{ item_type.name }}</option>
+                    <option value="{{ item_type.id }}" {% if selected.assessment_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>{{ item_type.ui_name|default:item_type.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -89,6 +89,7 @@
             <th>ID</th>
             <th>Задание</th>
             <th>Тип</th>
+            <th>Компетенция</th>
             <th>Программа</th>
             <th>Дисциплина</th>
             <th>Действия</th>
@@ -98,8 +99,9 @@
         {% for item in items %}
             <tr>
                 <td>{{ item.id }}</td>
-                <td>{{ item.prompt_text|truncatechars:160 }}</td>
-                <td>{{ item.assessment_item_type.name }}</td>
+                <td>{{ item.prompt_text|truncatechars:140 }}</td>
+                <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
+                <td>{{ item.competence.code }}</td>
                 <td>{{ item.program_discipline.educational_program }}</td>
                 <td>{{ item.program_discipline.discipline.name }}</td>
                 <td>
@@ -112,7 +114,7 @@
             </tr>
         {% empty %}
             <tr>
-                <td colspan="6" class="muted">По текущим фильтрам задания не найдены.</td>
+                <td colspan="7" class="muted">По текущим фильтрам задания не найдены.</td>
             </tr>
         {% endfor %}
         </tbody>
