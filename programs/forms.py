@@ -76,3 +76,7 @@ class EducationalProgramForm(forms.ModelForm):
 
     def clean(self):
         return super().clean()
+
+
+class PlxImportUploadForm(forms.Form):
+    plx_file = forms.FileField(label='Файл учебного плана (.plx)')
