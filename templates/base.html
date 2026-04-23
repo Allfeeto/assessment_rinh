@@ -41,6 +41,21 @@
             align-items: center;
             flex-wrap: wrap;
         }
+        .topbar-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .user-chip {
+            font-size: 13px;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 5px 10px;
+            background: #fff;
+        }
         .brand {
             font-weight: 700;
             color: var(--accent);
@@ -111,6 +126,10 @@
             display: inline-block;
             cursor: pointer;
             font: inherit;
+        }
+        .btn.small {
+            padding: 5px 10px;
+            font-size: 13px;
         }
         .btn.secondary {
             background: #fff;
@@ -225,6 +244,33 @@
             padding: 10px;
             margin-bottom: 12px;
         }
+        .flash {
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            background: #fff;
+        }
+        .flash.success {
+            border-color: #9dd2a5;
+            background: #edf9ef;
+            color: #195825;
+        }
+        .flash.warning {
+            border-color: #e7d18a;
+            background: #fff9e8;
+            color: #704f06;
+        }
+        .flash.error {
+            border-color: #efb3b3;
+            background: #ffefef;
+            color: #992f2f;
+        }
+        .flash.info {
+            border-color: #a8cdd5;
+            background: #eff8fa;
+            color: #1a4f59;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -307,6 +353,9 @@
 <header class="topbar">
     <div class="topbar-inner">
         <a class="brand" href="/">Assessment RINH</a>
+        {% if request.user.is_authenticated %}
+            <a class="nav-link {% if request.path|slice:':21' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
+        {% endif %}
         <a class="nav-link {% if request.path|slice:':12' == '/assessment/' %}active{% endif %}" href="/assessment/">Задания</a>
         <a class="nav-link {% if request.path|slice:':10' == '/teachers/' %}active{% endif %}" href="/teachers/">Кафедры и преподаватели</a>
         <a class="nav-link {% if request.path|slice:':10' == '/programs/' %}active{% endif %}" href="/programs/">Программы</a>
@@ -316,9 +365,28 @@
         <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
         <a class="nav-link {% if request.path|slice:':6' == '/core/' %}active{% endif %}" href="/core/education-levels/">Справочники</a>
         <a class="nav-link" href="/admin/">Админка</a>
+
+        <div class="topbar-right">
+            {% if request.user.is_authenticated %}
+                <span class="user-chip">{{ request.user.username }}</span>
+                <form method="post" action="{% url 'logout' %}" style="margin:0;">
+                    {% csrf_token %}
+                    <button class="btn secondary small" type="submit">Выйти</button>
+                </form>
+            {% else %}
+                <a class="btn secondary small" href="{% url 'login' %}">Войти</a>
+            {% endif %}
+        </div>
     </div>
 </header>
 <main class="container">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="flash {% if message.tags %}{{ message.tags }}{% else %}info{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
     {% block content %}{% endblock %}
 </main>
 <script>

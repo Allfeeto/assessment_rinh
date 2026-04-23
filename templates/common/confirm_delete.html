@@ -11,6 +11,9 @@
 
     <form method="post">
         {% csrf_token %}
+        {% if request.GET.next %}
+            <input type="hidden" name="next" value="{{ request.GET.next }}">
+        {% endif %}
         <div class="actions">
             <button class="btn danger" type="submit">Удалить</button>
             {% if list_url_name %}

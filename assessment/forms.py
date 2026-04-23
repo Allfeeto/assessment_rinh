@@ -39,16 +39,21 @@ class CompetenceChoiceField(forms.ModelChoiceField):
         return f'{obj.code} — {obj.name}'
 
 
+class CompetenceMultipleChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.code} — {obj.name}'
+
+
 class AssessmentItemForm(forms.ModelForm):
     assessment_item_type = AssessmentItemTypeChoiceField(
         queryset=AssessmentItemType.objects.none(),
         label='Тип задания',
     )
-    competence = CompetenceChoiceField(
+    competencies = CompetenceMultipleChoiceField(
         queryset=Competence.objects.none(),
-        required=False,
-        label='Проверяемая компетенция',
-        widget=forms.Select(),
+        required=True,
+        label='Проверяемые компетенции',
+        widget=forms.CheckboxSelectMultiple,
     )
 
     class Meta:
@@ -56,7 +61,6 @@ class AssessmentItemForm(forms.ModelForm):
         fields = (
             'program_discipline',
             'assessment_item_type',
-            'competence',
             'prompt_text',
             'left_column_title',
             'right_column_title',
@@ -70,13 +74,30 @@ class AssessmentItemForm(forms.ModelForm):
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
 
         program_discipline_id = None
-        selected_competence_id = None
+        selected_competence_ids = []
         if self.is_bound:
             program_discipline_id = self.data.get('program_discipline')
-            selected_competence_id = self.data.get('competence')
+            selected_competence_ids = self.data.getlist('competencies')
         elif self.instance and self.instance.pk:
             program_discipline_id = self.instance.program_discipline_id
-            selected_competence_id = self.instance.competence_id
+            selected_competence_ids = list(
+                self.instance.competence_links.values_list('competence_id', flat=True)
+            )
+            if not selected_competence_ids and self.instance.competence_id:
+                selected_competence_ids = [self.instance.competence_id]
+        else:
+            initial_program_discipline = self.initial.get('program_discipline')
+            if hasattr(initial_program_discipline, 'id'):
+                program_discipline_id = initial_program_discipline.id
+            else:
+                program_discipline_id = initial_program_discipline
+
+            initial_competencies = self.initial.get('competencies') or []
+            if isinstance(initial_competencies, (list, tuple, set)):
+                selected_competence_ids = [
+                    competence.id if hasattr(competence, 'id') else competence
+                    for competence in initial_competencies
+                ]
 
         base_program_discipline_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
@@ -105,55 +126,63 @@ class AssessmentItemForm(forms.ModelForm):
                 id__in=linked_competence_ids
             ).order_by('code')
 
-        if selected_competence_id and not competence_queryset.filter(pk=selected_competence_id).exists():
-            competence_queryset = Competence.objects.filter(pk=selected_competence_id)
+        missing_ids = [
+            comp_id
+            for comp_id in selected_competence_ids
+            if comp_id and not competence_queryset.filter(pk=comp_id).exists()
+        ]
+        if missing_ids:
+            competence_queryset = Competence.objects.filter(pk__in=missing_ids) | competence_queryset
 
-        self.fields['competence'].queryset = competence_queryset
-        self.fields['competence'].help_text = (
-            'Доступны только компетенции, связанные с выбранной дисциплиной учебного плана.'
+        self.fields['competencies'].queryset = competence_queryset.distinct().order_by('code')
+        self.fields['competencies'].help_text = (
+            'Выберите одну или несколько компетенций, связанных с выбранной дисциплиной учебного плана.'
         )
-        apply_autocomplete_attrs(
-            self.fields['competence'],
-            kind='competence',
-            placeholder='Введите код или наименование компетенции',
-            parent_field_id='id_program_discipline',
-            parent_param='program_discipline_id',
-            parent_required=True,
-            extra_params={'linked_only': 1},
-        )
-
-        if self.instance and self.instance.pk and not self.is_bound:
-            self.fields['competence'].initial = self.instance.competence_id
+        if selected_competence_ids:
+            self.fields['competencies'].initial = [
+                int(comp_id)
+                for comp_id in selected_competence_ids
+                if str(comp_id).isdigit()
+            ]
 
     def clean(self):
         cleaned_data = super().clean()
         program_discipline = cleaned_data.get('program_discipline')
-        competence = cleaned_data.get('competence')
+        competencies = cleaned_data.get('competencies')
         item_type = cleaned_data.get('assessment_item_type')
 
-        if not competence:
-            self.add_error('competence', 'Выберите компетенцию, которую проверяет задание.')
+        if not competencies:
+            self.add_error('competencies', 'Выберите хотя бы одну компетенцию, которую проверяет задание.')
             return cleaned_data
 
         if not program_discipline:
             return cleaned_data
 
-        if competence.educational_program_id != program_discipline.educational_program_id:
-            self.add_error(
-                'competence',
-                'Компетенция должна относиться к той же образовательной программе, что и дисциплина.',
-            )
+        linked_ids = set(
+            DisciplineCompetence.objects.filter(
+                program_discipline=program_discipline
+            ).values_list('competence_id', flat=True)
+        )
 
-        link_exists = DisciplineCompetence.objects.filter(
-            program_discipline=program_discipline,
-            competence=competence,
-        ).exists()
-        if not link_exists:
-            self.add_error(
-                'competence',
-                'Эта компетенция не связана с выбранной дисциплиной учебного плана. '
-                'Сначала добавьте связь в матрице дисциплина-компетенция.',
-            )
+        for competence in competencies:
+            if competence.educational_program_id != program_discipline.educational_program_id:
+                self.add_error(
+                    'competencies',
+                    (
+                        f'Компетенция "{competence.code}" относится к другой образовательной программе. '
+                        'Выберите компетенции из текущего контекста.'
+                    ),
+                )
+                break
+            if competence.id not in linked_ids:
+                self.add_error(
+                    'competencies',
+                    (
+                        f'Компетенция "{competence.code}" не связана с выбранной дисциплиной учебного плана. '
+                        'Сначала добавьте связь в матрице дисциплина-компетенция.'
+                    ),
+                )
+                break
 
         item_type_code = infer_item_type_code(item_type.name if item_type else '')
         if item_type_code != TYPE_MATCHING:

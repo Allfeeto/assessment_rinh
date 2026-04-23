@@ -77,7 +77,8 @@
         <div class="actions">
             <button class="btn" type="submit">Применить фильтры</button>
             <a class="btn secondary" href="/assessment/">Сбросить</a>
-            <a class="btn" href="{% url 'assessment_create' %}">Создать задание</a>
+            <a class="btn secondary" href="{% url 'assessment_workspace' %}">Рабочее место преподавателя</a>
+            <a class="btn" href="{% url 'assessment_create' %}?next={{ request.get_full_path|urlencode }}">Создать задание</a>
         </div>
     </form>
 </div>
@@ -89,7 +90,7 @@
             <th>ID</th>
             <th>Задание</th>
             <th>Тип</th>
-            <th>Компетенция</th>
+            <th>Компетенции</th>
             <th>Программа</th>
             <th>Дисциплина</th>
             <th>Действия</th>
@@ -101,14 +102,14 @@
                 <td>{{ item.id }}</td>
                 <td>{{ item.prompt_text|truncatechars:140 }}</td>
                 <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
-                <td>{{ item.competence.code }}</td>
+                <td>{{ item.ui_competence_codes }}</td>
                 <td>{{ item.program_discipline.educational_program }}</td>
                 <td>{{ item.program_discipline.discipline.name }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'assessment_detail' item.pk %}">Открыть</a>
-                        <a class="btn secondary" href="{% url 'assessment_update' item.pk %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'assessment_delete' item.pk %}">Удалить</a>
+                        <a class="btn secondary" href="{% url 'assessment_detail' item.pk %}?next={{ request.get_full_path|urlencode }}">Открыть</a>
+                        <a class="btn secondary" href="{% url 'assessment_update' item.pk %}?next={{ request.get_full_path|urlencode }}">Изменить</a>
+                        <a class="btn danger" href="{% url 'assessment_delete' item.pk %}?next={{ request.get_full_path|urlencode }}">Удалить</a>
                     </div>
                 </td>
             </tr>

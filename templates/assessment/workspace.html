@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Рабочее место преподавателя{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Рабочее место преподавателя</h1>
+
+<div class="panel">
+    {% if teacher %}
+        <div class="muted">Пользователь: {{ request.user.username }} | Преподаватель: {{ teacher.full_name }}</div>
+    {% else %}
+        <div class="muted">Пользователь: {{ request.user.username }}</div>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <form method="get" class="form-row">
+        <div class="field">
+            <label for="id_program">Образовательная программа</label>
+            <select id="id_program" name="program">
+                <option value="">Выберите программу</option>
+                {% for program in programs %}
+                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
+                        {{ program }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_program_discipline">Дисциплина учебного плана</label>
+            <select id="id_program_discipline" name="program_discipline">
+                <option value="">Выберите дисциплину</option>
+                {% for pd in available_program_disciplines %}
+                    <option value="{{ pd.id }}" {% if selected_program_discipline == pd.id|stringformat:"s" %}selected{% endif %}>
+                        {{ pd.discipline.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_competence">Компетенция</label>
+            <select id="id_competence" name="competence">
+                <option value="">Все компетенции</option>
+                {% for competence in competences %}
+                    <option value="{{ competence.id }}" {% if selected_competence == competence.id|stringformat:"s" %}selected{% endif %}>
+                        {{ competence.code }} — {{ competence.name|truncatechars:80 }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_assessment_item_type">Тип задания</label>
+            <select id="id_assessment_item_type" name="assessment_item_type">
+                <option value="">Все типы</option>
+                {% for item_type in assessment_item_types %}
+                    <option value="{{ item_type.id }}" {% if selected_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>
+                        {{ item_type.ui_name|default:item_type.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="actions">
+            <button class="btn" type="submit">Применить</button>
+            <a class="btn secondary" href="{% url 'assessment_workspace' %}">Сбросить</a>
+        </div>
+    </form>
+</div>
+
+{% if current_program_discipline %}
+    <div class="panel">
+        <h2 style="margin-bottom: 8px;">
+            Контекст: {{ current_program_discipline.educational_program }} / {{ current_program_discipline.discipline.name }}
+        </h2>
+        <div class="actions">
+            <a
+                class="btn"
+                href="{% url 'assessment_create' %}?program_discipline={{ selected_program_discipline }}{% if selected_competence %}&competence={{ selected_competence }}{% endif %}&next={{ next_url|urlencode }}"
+            >
+                Добавить задание
+            </a>
+            <form method="post" action="{% url 'assessment_workspace_paste' %}">
+                {% csrf_token %}
+                <input type="hidden" name="program_discipline" value="{{ selected_program_discipline }}">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <button class="btn secondary" type="submit">Вставить из буфера ({{ clipboard_count }})</button>
+            </form>
+            <form method="post" action="{% url 'assessment_workspace_clipboard_clear' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <button class="btn secondary" type="submit">Очистить буфер</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="panel table-wrap">
+        <form method="post" action="{% url 'assessment_workspace_copy' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <table>
+                <thead>
+                <tr>
+                    <th style="width: 40px;"></th>
+                    <th>ID</th>
+                    <th>Текст задания</th>
+                    <th>Тип</th>
+                    <th>Компетенции</th>
+                    <th>Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td><input type="checkbox" name="item_ids" value="{{ item.id }}"></td>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.prompt_text|truncatechars:140 }}</td>
+                        <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
+                        <td>{{ item.ui_competence_codes }}</td>
+                        <td>
+                            <div class="actions">
+                                <a class="btn secondary" href="{% url 'assessment_detail' item.id %}?next={{ next_url|urlencode }}">Открыть</a>
+                                <a class="btn secondary" href="{% url 'assessment_update' item.id %}?next={{ next_url|urlencode }}">Изменить</a>
+                                <a class="btn danger" href="{% url 'assessment_delete' item.id %}?next={{ next_url|urlencode }}">Удалить</a>
+                                <button class="btn secondary" type="submit" name="item_id" value="{{ item.id }}">Копировать</button>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="muted">В текущем контексте заданий пока нет.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="actions" style="margin-top: 12px;">
+                <button class="btn secondary" type="submit">Копировать выбранные</button>
+            </div>
+        </form>
+    </div>
+{% else %}
+    <div class="panel">
+        <div class="muted">Выберите образовательную программу и дисциплину учебного плана для начала работы.</div>
+    </div>
+{% endif %}
+{% endblock %}

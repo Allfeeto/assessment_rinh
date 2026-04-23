@@ -7,9 +7,9 @@
 
 <div class="panel">
     <div class="actions" style="margin-bottom: 12px;">
-        <a class="btn secondary" href="{% url 'assessment_list' %}">К списку</a>
-        <a class="btn" href="{% url 'assessment_update' item.pk %}">Редактировать</a>
-        <a class="btn danger" href="{% url 'assessment_delete' item.pk %}">Удалить</a>
+        <a class="btn secondary" href="{{ back_url }}">Назад</a>
+        <a class="btn" href="{% url 'assessment_update' item.pk %}?next={{ back_url|urlencode }}">Редактировать</a>
+        <a class="btn danger" href="{% url 'assessment_delete' item.pk %}?next={{ back_url|urlencode }}">Удалить</a>
     </div>
 
     <table>
@@ -27,8 +27,14 @@
             <td>{{ item.program_discipline.discipline.name }}</td>
         </tr>
         <tr>
-            <th>Компетенция</th>
-            <td>{{ item.competence.code }} — {{ item.competence.name }}</td>
+            <th>Компетенции</th>
+            <td>
+                {% for competence in item_competences %}
+                    {{ competence.code }} — {{ competence.name }}{% if not forloop.last %}<br>{% endif %}
+                {% empty %}
+                    <span class="muted">Не выбраны</span>
+                {% endfor %}
+            </td>
         </tr>
         <tr>
             <th>Текст задания</th>

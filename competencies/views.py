@@ -1,7 +1,8 @@
-from django.db.models import Count, F, Q
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
 
+from assessment.models import AssessmentItem
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -27,29 +28,32 @@ class CompetenciesDashboardView(TemplateView):
         discipline_id = self.request.GET.get('discipline', '').strip()
         search = self.request.GET.get('q', '').strip()
 
-        competences = Competence.objects.select_related(
+        competences_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
         ).annotate(
             disciplines_count=Count('discipline_competences', distinct=True),
-            items_count=Count('assessment_items', distinct=True),
         ).order_by('educational_program__program_profile__code', 'code')
 
         if educational_program_id:
-            competences = competences.filter(educational_program_id=educational_program_id)
+            competences_qs = competences_qs.filter(educational_program_id=educational_program_id)
         if search:
-            competences = competences.filter(Q(code__icontains=search) | Q(name__icontains=search))
+            competences_qs = competences_qs.filter(Q(code__icontains=search) | Q(name__icontains=search))
 
-        discipline_competences = DisciplineCompetence.objects.select_related(
+        competences = list(competences_qs)
+        for competence_obj in competences:
+            competence_obj.items_count = (
+                AssessmentItem.objects.filter(
+                    Q(competence=competence_obj) | Q(competence_links__competence=competence_obj)
+                )
+                .distinct()
+                .count()
+            )
+
+        discipline_competences_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
-        ).annotate(
-            items_count=Count(
-                'competence__assessment_items',
-                filter=Q(competence__assessment_items__program_discipline=F('program_discipline')),
-                distinct=True,
-            )
         ).order_by(
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
@@ -57,12 +61,23 @@ class CompetenciesDashboardView(TemplateView):
         )
 
         if educational_program_id:
-            discipline_competences = discipline_competences.filter(
+            discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__educational_program_id=educational_program_id
             )
         if discipline_id:
-            discipline_competences = discipline_competences.filter(
+            discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__discipline_id=discipline_id
+            )
+
+        discipline_competences = list(discipline_competences_qs)
+        for link in discipline_competences:
+            link.items_count = (
+                AssessmentItem.objects.filter(program_discipline=link.program_discipline)
+                .filter(
+                    Q(competence=link.competence) | Q(competence_links__competence=link.competence)
+                )
+                .distinct()
+                .count()
             )
 
         discipline_options = ProgramDiscipline.objects.select_related('discipline')

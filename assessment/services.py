@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 TYPE_SINGLE = 'single'
 TYPE_MULTIPLE = 'multiple'
@@ -16,6 +16,7 @@ TYPE_UI_LABELS = {
     TYPE_SINGLE: 'Задание закрытого типа с выбором одного верного ответа из предложенных',
     TYPE_OPEN: 'Задание открытого типа с развернутым ответом',
 }
+CLIPBOARD_SESSION_KEY = 'assessment_clipboard_item_ids'
 
 
 def infer_item_type_code(type_name: str | None) -> str:
@@ -142,3 +143,145 @@ def prettify_db_error(exc: Exception) -> str:
         )
 
     return first_line
+
+
+def get_item_competences(item) -> list:
+    links = [link.competence for link in item.competence_links.select_related('competence').all()]
+    if not links and item.competence_id:
+        links = [item.competence]
+
+    unique = {}
+    for competence in links:
+        if competence and competence.id not in unique:
+            unique[competence.id] = competence
+    return list(unique.values())
+
+
+def get_item_competence_codes(item) -> str:
+    competences = get_item_competences(item)
+    if not competences:
+        return '—'
+    return ', '.join(comp.code for comp in competences)
+
+
+def sync_assessment_item_competences(
+    item,
+    competences: Sequence,
+    *,
+    allow_empty: bool = False,
+):
+    from .models import AssessmentItemCompetence
+
+    unique_by_id = {}
+    for competence in competences:
+        if competence and competence.id not in unique_by_id:
+            unique_by_id[competence.id] = competence
+    selected = list(unique_by_id.values())
+
+    if not selected and not allow_empty:
+        raise ValueError('Для задания требуется минимум одна компетенция.')
+
+    item.competence = selected[0] if selected else None
+    item.save(update_fields=['competence'])
+
+    AssessmentItemCompetence.objects.filter(assessment_item=item).delete()
+    if selected:
+        AssessmentItemCompetence.objects.bulk_create(
+            [
+                AssessmentItemCompetence(
+                    assessment_item=item,
+                    competence=competence,
+                )
+                for competence in selected
+            ]
+        )
+
+
+def get_clipboard_item_ids(session) -> list[int]:
+    raw = session.get(CLIPBOARD_SESSION_KEY, [])
+    result = []
+    for value in raw:
+        try:
+            result.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def set_clipboard_item_ids(session, item_ids: Sequence[int]) -> None:
+    unique_ids = []
+    seen = set()
+    for value in item_ids:
+        try:
+            item_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if item_id not in seen:
+            seen.add(item_id)
+            unique_ids.append(item_id)
+    session[CLIPBOARD_SESSION_KEY] = unique_ids
+    session.modified = True
+
+
+def clear_clipboard(session) -> None:
+    if CLIPBOARD_SESSION_KEY in session:
+        del session[CLIPBOARD_SESSION_KEY]
+        session.modified = True
+
+
+def clone_assessment_item_to_program_discipline(source_item, target_program_discipline):
+    from competencies.models import Competence, DisciplineCompetence
+    from .models import AssessmentItem, AssessmentItemRow
+
+    source_competences = get_item_competences(source_item)
+    source_competence_ids = [competence.id for competence in source_competences]
+
+    allowed_competence_ids = list(
+        DisciplineCompetence.objects.filter(
+            program_discipline=target_program_discipline,
+            competence_id__in=source_competence_ids,
+        ).values_list('competence_id', flat=True)
+    )
+    allowed_set = set(allowed_competence_ids)
+    ordered_allowed_ids = [comp_id for comp_id in source_competence_ids if comp_id in allowed_set]
+    competence_map = {
+        competence.id: competence
+        for competence in Competence.objects.filter(id__in=ordered_allowed_ids)
+    }
+    transferable_competences = [
+        competence_map[comp_id]
+        for comp_id in ordered_allowed_ids
+        if comp_id in competence_map
+    ]
+
+    new_item = AssessmentItem.objects.create(
+        program_discipline=target_program_discipline,
+        competence=transferable_competences[0] if transferable_competences else None,
+        assessment_item_type=source_item.assessment_item_type,
+        prompt_text=source_item.prompt_text,
+        left_column_title=source_item.left_column_title,
+        right_column_title=source_item.right_column_title,
+    )
+
+    source_rows = list(source_item.rows.order_by('sort_order', 'id'))
+    AssessmentItemRow.objects.bulk_create(
+        [
+            AssessmentItemRow(
+                assessment_item=new_item,
+                left_text=row.left_text,
+                right_text=row.right_text,
+                sort_order=row.sort_order,
+                correct_order=row.correct_order,
+                is_correct=row.is_correct,
+                open_answer_text=row.open_answer_text,
+            )
+            for row in source_rows
+        ]
+    )
+
+    sync_assessment_item_competences(
+        new_item,
+        transferable_competences,
+        allow_empty=True,
+    )
+    return new_item, transferable_competences

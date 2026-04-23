@@ -1,6 +1,7 @@
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
+from django.contrib.auth import get_user_model
 
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
@@ -284,6 +285,31 @@ def lookup_options(request):
             {'id': obj.id, 'label': f'{obj.full_name} ({obj.department.short_name})'}
             for obj in queryset[:limit]
         ]
+        return JsonResponse({'results': results})
+
+    if kind == 'auth_user':
+        user_model = get_user_model()
+        queryset = user_model.objects.order_by('username')
+        selected_user_id = request.GET.get('selected_user_id')
+        if selected_user_id and selected_user_id.isdigit():
+            queryset = queryset.filter(Q(teacher_profile__isnull=True) | Q(id=int(selected_user_id)))
+        else:
+            queryset = queryset.filter(teacher_profile__isnull=True)
+        if query:
+            queryset = queryset.filter(
+                Q(username__icontains=query)
+                | Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(email__icontains=query)
+            )
+        results = []
+        for obj in queryset[:limit]:
+            display_name = ' '.join(part for part in [obj.last_name, obj.first_name] if part).strip()
+            if display_name:
+                label = f'{obj.username} ({display_name})'
+            else:
+                label = obj.username
+            results.append({'id': obj.id, 'label': label})
         return JsonResponse({'results': results})
 
     if kind == 'training_direction':

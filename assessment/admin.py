@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AssessmentItem, AssessmentItemRow
+from .models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
 from .services import get_item_type_ui_name
 
 
@@ -8,6 +8,11 @@ class AssessmentItemRowInline(admin.TabularInline):
     model = AssessmentItemRow
     extra = 0
     fields = ('left_text', 'right_text', 'correct_order', 'is_correct', 'open_answer_text', 'sort_order')
+
+
+class AssessmentItemCompetenceInline(admin.TabularInline):
+    model = AssessmentItemCompetence
+    extra = 0
 
 
 @admin.register(AssessmentItem)
@@ -34,7 +39,7 @@ class AssessmentItemAdmin(admin.ModelAdmin):
         'program_discipline__discipline',
         'competence__competence_type',
     )
-    inlines = (AssessmentItemRowInline,)
+    inlines = (AssessmentItemCompetenceInline, AssessmentItemRowInline)
 
     @staticmethod
     def short_prompt(obj):
@@ -60,3 +65,13 @@ class AssessmentItemRowAdmin(admin.ModelAdmin):
         'sort_order',
     )
     search_fields = ('left_text', 'right_text', 'open_answer_text', 'assessment_item__prompt_text')
+
+
+@admin.register(AssessmentItemCompetence)
+class AssessmentItemCompetenceAdmin(admin.ModelAdmin):
+    list_display = ('id', 'assessment_item', 'competence')
+    search_fields = (
+        'assessment_item__prompt_text',
+        'competence__code',
+        'competence__name',
+    )

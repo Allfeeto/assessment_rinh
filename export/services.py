@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
+from django.db.models import Q
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt
@@ -16,6 +17,7 @@ from assessment.services import (
     TYPE_OPEN,
     TYPE_SEQUENCE,
     TYPE_SINGLE,
+    get_item_competences,
     get_item_type_ui_name,
     infer_item_type_code,
 )
@@ -94,9 +96,12 @@ def _filtered_items(program_id, discipline_id, filters):
         queryset = queryset.filter(assessment_item_type_id=filters['assessment_item_type_id'])
 
     if filters.get('competence_id'):
-        queryset = queryset.filter(competence_id=filters['competence_id'])
+        queryset = queryset.filter(
+            Q(competence_id=filters['competence_id'])
+            | Q(competence_links__competence_id=filters['competence_id'])
+        )
 
-    return queryset
+    return queryset.prefetch_related('competence_links__competence').distinct()
 
 
 def _cleanup_text(value):
@@ -230,6 +235,10 @@ def _prepare_export_item(item, number: int, rng: random.Random):
         'indicator_text': _resolve_indicators_text(item),
         'answer_key': '',
         'payload': {},
+        'competence_text': '; '.join(
+            f'{competence.code} — {competence.name}'
+            for competence in get_item_competences(item)
+        ) or '—',
     }
 
     if type_code == TYPE_MATCHING:
@@ -499,8 +508,7 @@ def _add_specification_table(doc: Document, prepared_items: list[dict]):
         _set_cell_text(table.rows[0].cells[idx], header, align=WD_ALIGN_PARAGRAPH.CENTER)
 
     for row_idx, prepared in enumerate(prepared_items, start=1):
-        item = prepared['item']
-        _set_cell_text(table.rows[row_idx].cells[0], f'{item.competence.code} — {item.competence.name}')
+        _set_cell_text(table.rows[row_idx].cells[0], prepared['competence_text'])
         _set_cell_text(table.rows[row_idx].cells[1], prepared['indicator_text'])
         _set_cell_text(table.rows[row_idx].cells[2], str(prepared['number']))
         _set_cell_text(table.rows[row_idx].cells[3], prepared['type_name'])

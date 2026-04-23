@@ -17,6 +17,8 @@ class AssessmentItem(models.Model):
         on_delete=models.PROTECT,
         db_column='competence_id',
         related_name='assessment_items',
+        null=True,
+        blank=True,
         verbose_name='Компетенция',
     )
     assessment_item_type = models.ForeignKey(
@@ -75,3 +77,36 @@ class AssessmentItemRow(models.Model):
 
     def __str__(self):
         return f'Строка #{self.id} задания #{self.assessment_item_id}'
+
+
+class AssessmentItemCompetence(models.Model):
+    id = models.AutoField(primary_key=True)
+    assessment_item = models.ForeignKey(
+        AssessmentItem,
+        on_delete=models.CASCADE,
+        db_column='assessment_item_id',
+        related_name='competence_links',
+        verbose_name='Задание',
+    )
+    competence = models.ForeignKey(
+        'competencies.Competence',
+        on_delete=models.PROTECT,
+        db_column='competence_id',
+        related_name='assessment_item_links',
+        verbose_name='Компетенция',
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'assessment_item_competence'
+        verbose_name = 'Связь задания и компетенции'
+        verbose_name_plural = 'Связи заданий и компетенций'
+        constraints = [
+            models.UniqueConstraint(
+                fields=('assessment_item', 'competence'),
+                name='assessment_item_competence_assessment_item_id_competence_id_key',
+            )
+        ]
+
+    def __str__(self):
+        return f'Задание #{self.assessment_item_id} -> {self.competence.code}'
