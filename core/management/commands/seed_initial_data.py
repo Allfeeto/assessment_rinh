@@ -30,7 +30,7 @@ class Command(BaseCommand):
             'sequence': 'установление последовательности',
             'open_answer': 'открытый ответ',
         }
-        academic_degrees = ['кандидат наук', 'доктор наук']
+        academic_degrees = ['к.н.', 'д.э.н.']
         academic_titles = ['доцент', 'профессор']
 
         with transaction.atomic():

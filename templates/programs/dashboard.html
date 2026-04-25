@@ -15,72 +15,74 @@
     </div>
 {% endif %}
 
-<div class="panel">
-    <h2>Импорт образовательной программы из PLX</h2>
-    <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="upload">
-        <div class="form-row">
-            <div class="field">
-                <label for="{{ import_form.plx_file.id_for_label }}">Файл PLX</label>
-                {{ import_form.plx_file }}
-                {% if import_form.plx_file.errors %}
-                    <ul class="errors">
-                        {% for error in import_form.plx_file.errors %}
-                            <li>{{ error }}</li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
+{% if can_import_plx %}
+    <div class="panel">
+        <h2>Импорт образовательной программы из PLX</h2>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="upload">
+            <div class="form-row">
+                <div class="field">
+                    <label for="{{ import_form.plx_file.id_for_label }}">Файл PLX</label>
+                    {{ import_form.plx_file }}
+                    {% if import_form.plx_file.errors %}
+                        <ul class="errors">
+                            {% for error in import_form.plx_file.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+                <div class="field" style="max-width:240px;">
+                    <button type="submit" class="btn">Загрузить и проверить</button>
+                </div>
             </div>
-            <div class="field" style="max-width:240px;">
-                <button type="submit" class="btn">Загрузить и проверить</button>
-            </div>
-        </div>
-    </form>
+        </form>
 
-    {% if import_summary %}
-        <div class="stats" style="margin-top:12px;">
-            <div class="stat">
-                <div class="muted">Файл</div>
-                <div>{{ import_summary.source_filename }}</div>
+        {% if import_summary %}
+            <div class="stats" style="margin-top:12px;">
+                <div class="stat">
+                    <div class="muted">Файл</div>
+                    <div>{{ import_summary.source_filename }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Уровень</div>
+                    <div>{{ import_summary.education_level }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Направление</div>
+                    <div>{{ import_summary.training_direction }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Профиль</div>
+                    <div>{{ import_summary.profile }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Кафедра</div>
+                    <div>{{ import_summary.department }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Год набора</div>
+                    <div>{{ import_summary.admission_year }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Дисциплин</div>
+                    <div class="stat-value">{{ import_summary.disciplines_count }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Компетенций</div>
+                    <div class="stat-value">{{ import_summary.competences_count }}</div>
+                </div>
+                <div class="stat">
+                    <div class="muted">Связей дисциплина-компетенция</div>
+                    <div class="stat-value">{{ import_summary.links_count }}</div>
+                </div>
             </div>
-            <div class="stat">
-                <div class="muted">Уровень</div>
-                <div>{{ import_summary.education_level }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Направление</div>
-                <div>{{ import_summary.training_direction }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Профиль</div>
-                <div>{{ import_summary.profile }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Кафедра</div>
-                <div>{{ import_summary.department }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Год набора</div>
-                <div>{{ import_summary.admission_year }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Дисциплин</div>
-                <div class="stat-value">{{ import_summary.disciplines_count }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Компетенций</div>
-                <div class="stat-value">{{ import_summary.competences_count }}</div>
-            </div>
-            <div class="stat">
-                <div class="muted">Связей дисциплина-компетенция</div>
-                <div class="stat-value">{{ import_summary.links_count }}</div>
-            </div>
-        </div>
-    {% endif %}
-</div>
+        {% endif %}
+    </div>
+{% endif %}
 
-{% if pending_conflict %}
+{% if can_import_plx and pending_conflict %}
     <div class="panel" style="border-color:#efb3b3;background:#fff7f7;">
         <h2>Найдена существующая программа</h2>
         <p class="muted">Обнаружена программа с теми же ключевыми признаками. Можно отменить операцию или подтвердить замену.</p>

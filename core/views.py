@@ -1,3 +1,5 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
@@ -45,7 +47,7 @@ def _tokenize_lookup_query(query: str) -> list[str]:
     return cleaned
 
 
-class HomeView(TemplateView):
+class HomeView(LoginRequiredMixin, TemplateView):
     template_name = 'home.html'
 
     def get_context_data(self, **kwargs):
@@ -265,6 +267,7 @@ class AcademicTitleDeleteView(NamedDeleteView):
     list_url_name = 'core_academic_title_list'
 
 
+@login_required
 def lookup_options(request):
     kind = (request.GET.get('kind') or '').strip()
     query = (request.GET.get('q') or '').strip()

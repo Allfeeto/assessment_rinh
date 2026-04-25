@@ -1,3 +1,5 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Q
 from django.http import JsonResponse
@@ -6,11 +8,13 @@ from django.views.generic import TemplateView
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
+    PER_PAGE_CHOICES,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    get_per_page,
 )
 from disciplines.models import ProgramDiscipline
 
@@ -18,19 +22,7 @@ from .forms import CompetenceForm, DisciplineCompetenceForm
 from .models import Competence, DisciplineCompetence
 
 
-PER_PAGE_CHOICES = (50, 100, 200)
-
-
-def _get_per_page(request):
-    raw_value = (request.GET.get('per_page') or '').strip()
-    if raw_value.isdigit():
-        per_page = int(raw_value)
-        if per_page in PER_PAGE_CHOICES:
-            return per_page
-    return PER_PAGE_CHOICES[0]
-
-
-class CompetenciesDashboardView(TemplateView):
+class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'competencies/list.html'
 
     def get_context_data(self, **kwargs):
@@ -39,7 +31,7 @@ class CompetenciesDashboardView(TemplateView):
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         discipline_id = self.request.GET.get('discipline', '').strip()
         search = self.request.GET.get('q', '').strip()
-        per_page = _get_per_page(self.request)
+        per_page = get_per_page(self.request)
 
         competences_qs = Competence.objects.select_related(
             'competence_type',
@@ -264,6 +256,7 @@ class DisciplineCompetenceDeleteView(NamedDeleteView):
     list_url_name = 'competencies_discipline_competence_list'
 
 
+@login_required
 def competences_by_program_discipline(request):
     program_discipline_id = request.GET.get('program_discipline_id')
     linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}

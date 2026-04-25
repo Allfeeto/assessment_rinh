@@ -1,3 +1,4 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.urls import reverse_lazy
@@ -39,7 +40,8 @@ def resolve_attr(obj, path):
     return value
 
 
-class NamedListView(ListView):
+class NamedListView(LoginRequiredMixin, ListView):
+    login_url = reverse_lazy('login')
     template_name = 'common/list.html'
     context_object_name = 'objects'
     paginate_by = DEFAULT_PER_PAGE
@@ -96,7 +98,8 @@ class NamedListView(ListView):
         return context
 
 
-class NamedDetailView(DetailView):
+class NamedDetailView(LoginRequiredMixin, DetailView):
+    login_url = reverse_lazy('login')
     template_name = 'common/detail.html'
     title = ''
     list_url_name = ''
@@ -116,7 +119,8 @@ class NamedDetailView(DetailView):
         return context
 
 
-class NamedCreateView(CreateView):
+class NamedCreateView(LoginRequiredMixin, CreateView):
+    login_url = reverse_lazy('login')
     template_name = 'common/form.html'
     title = ''
     list_url_name = ''
@@ -132,7 +136,8 @@ class NamedCreateView(CreateView):
         return context
 
 
-class NamedUpdateView(UpdateView):
+class NamedUpdateView(LoginRequiredMixin, UpdateView):
+    login_url = reverse_lazy('login')
     template_name = 'common/form.html'
     title = ''
     list_url_name = ''
@@ -148,7 +153,8 @@ class NamedUpdateView(UpdateView):
         return context
 
 
-class NamedDeleteView(DeleteView):
+class NamedDeleteView(LoginRequiredMixin, DeleteView):
+    login_url = reverse_lazy('login')
     template_name = 'common/confirm_delete.html'
     title = ''
     list_url_name = ''

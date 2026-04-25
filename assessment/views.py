@@ -13,8 +13,8 @@ from core.models import AssessmentItemType, EducationLevel
 from core.view_helpers import PER_PAGE_CHOICES, get_per_page, paginate_queryset
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
-from teachers.models import TeacherProgramDiscipline
 
+from .access import allowed_program_discipline_ids_for_user as _allowed_program_discipline_ids_for_user
 from .forms import AssessmentItemForm, AssessmentItemRowCreateFormSet, AssessmentItemRowUpdateFormSet
 from .models import AssessmentItem
 from .services import (
@@ -43,41 +43,29 @@ def _safe_next_url(request, fallback):
     return fallback
 
 
-def _allowed_program_discipline_ids_for_user(user):
-    if user.is_superuser:
-        return list(ProgramDiscipline.objects.values_list('id', flat=True))
-
-    teacher = getattr(user, 'teacher_profile', None)
-    if not teacher:
-        return []
-
-    return list(
-        TeacherProgramDiscipline.objects.filter(teacher=teacher).values_list(
-            'program_discipline_id',
-            flat=True,
-        )
-    )
-
-
 def _restrict_queryset_for_teacher_user(request, queryset):
     user = request.user
-    if not user.is_authenticated or user.is_superuser:
+    if not user.is_authenticated:
+        return queryset.none()
+
+    if user.is_superuser:
         return queryset
 
     teacher = getattr(user, 'teacher_profile', None)
     if not teacher:
-        return queryset
+        return queryset.none()
 
     allowed_ids = _allowed_program_discipline_ids_for_user(user)
     return queryset.filter(program_discipline_id__in=allowed_ids)
 
 
-class AssessmentItemListView(ListView):
+class AssessmentItemListView(LoginRequiredMixin, ListView):
     model = AssessmentItem
     template_name = 'assessment/list.html'
     context_object_name = 'items'
     paginate_by = 50
     per_page_choices = (50, 100, 200)
+    login_url = reverse_lazy('login')
 
     def get_paginate_by(self, queryset):
         raw_value = (self.request.GET.get('per_page') or '').strip()
@@ -227,10 +215,11 @@ class AssessmentItemListView(ListView):
         return context
 
 
-class AssessmentItemDetailView(DetailView):
+class AssessmentItemDetailView(LoginRequiredMixin, DetailView):
     model = AssessmentItem
     template_name = 'assessment/detail.html'
     context_object_name = 'item'
+    login_url = reverse_lazy('login')
 
     def get_queryset(self):
         queryset = (
@@ -684,7 +673,10 @@ class TeacherWorkspacePasteItemsView(TeacherRequiredMixin, View):
         )
 
         source_items = list(
-            AssessmentItem.objects.filter(id__in=clipboard_item_ids)
+            AssessmentItem.objects.filter(
+                id__in=clipboard_item_ids,
+                program_discipline_id__in=allowed_program_discipline_ids,
+            )
             .select_related('assessment_item_type', 'program_discipline', 'competence')
             .prefetch_related('rows', 'competence_links__competence')
             .order_by('id')
@@ -692,6 +684,11 @@ class TeacherWorkspacePasteItemsView(TeacherRequiredMixin, View):
         if not source_items:
             messages.error(request, 'В буфере нет доступных заданий для вставки.')
             return redirect(next_url)
+        if len(source_items) < len(set(clipboard_item_ids)):
+            messages.warning(
+                request,
+                'Часть заданий из буфера больше недоступна и не будет вставлена.',
+            )
 
         copied_count = 0
         no_competence_count = 0

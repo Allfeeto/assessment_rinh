@@ -1,4 +1,6 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Count
@@ -11,11 +13,13 @@ from django.views.generic import TemplateView
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
+    PER_PAGE_CHOICES,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    get_per_page,
 )
 
 from .forms import DisciplineForm, ProgramDisciplineForm, ProgramDisciplineManageForm
@@ -23,19 +27,7 @@ from .models import Discipline, ProgramDiscipline
 from competencies.models import DisciplineCompetence
 
 
-PER_PAGE_CHOICES = (50, 100, 200)
-
-
-def _get_per_page(request):
-    raw_value = (request.GET.get('per_page') or '').strip()
-    if raw_value.isdigit():
-        per_page = int(raw_value)
-        if per_page in PER_PAGE_CHOICES:
-            return per_page
-    return PER_PAGE_CHOICES[0]
-
-
-class ProgramDisciplineManagerView(View):
+class ProgramDisciplineManagerView(LoginRequiredMixin, View):
     template_name = 'disciplines/manage_program_disciplines.html'
 
     @staticmethod
@@ -51,7 +43,7 @@ class ProgramDisciplineManagerView(View):
     def _build_context(self, request, form):
         selected_program_id = self._get_selected_program_id(request, form=form)
         selected_discipline_id = self._get_selected_discipline_id(request)
-        per_page = _get_per_page(request)
+        per_page = get_per_page(request)
 
         selected_program = None
         educational_program_options = EducationalProgram.objects.none()
@@ -142,7 +134,7 @@ class ProgramDisciplineManagerView(View):
         return render(request, self.template_name, self._build_context(request, form))
 
 
-class DisciplinesDashboardView(TemplateView):
+class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'disciplines/list.html'
 
     def get_context_data(self, **kwargs):
@@ -150,7 +142,7 @@ class DisciplinesDashboardView(TemplateView):
 
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         search = self.request.GET.get('q', '').strip()
-        per_page = _get_per_page(self.request)
+        per_page = get_per_page(self.request)
 
         disciplines_qs = Discipline.objects.annotate(
             programs_count=Count('program_disciplines', distinct=True),
@@ -307,6 +299,7 @@ class ProgramDisciplineDeleteView(NamedDeleteView):
     list_url_name = 'disciplines_program_discipline_list'
 
 
+@login_required
 def program_discipline_by_program(request):
     educational_program_id = request.GET.get('educational_program_id')
     queryset = ProgramDiscipline.objects.select_related(

@@ -1,3 +1,4 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, F, Q
 from django.views.generic import TemplateView
 
@@ -86,7 +87,7 @@ def _count_items_by_program_discipline_competence(filtered_item_ids, pairs):
     return {key: len(item_ids) for key, item_ids in grouped.items()}
 
 
-class ReportsDashboardView(TemplateView):
+class ReportsDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'reports/report.html'
 
     def get_context_data(self, **kwargs):

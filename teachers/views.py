@@ -1,3 +1,4 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 
 from core.view_helpers import (
@@ -16,7 +17,7 @@ from .forms import DepartmentForm, TeacherForm, TeacherProgramDisciplineForm
 from .models import Department, Teacher, TeacherProgramDiscipline
 
 
-class TeachersDashboardView(TemplateView):
+class TeachersDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'teachers/dashboard.html'
 
     def get_context_data(self, **kwargs):

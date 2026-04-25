@@ -1,3 +1,6 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.generic import TemplateView
@@ -20,7 +23,7 @@ from .services import PlxConflictError, PlxImportError, PlxImportService
 from .services.plx_dto import PlxProgramImportDTO
 
 
-class ProgramsDashboardView(TemplateView):
+class ProgramsDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'programs/dashboard.html'
     pending_session_key = 'plx_import_pending_dto'
     import_service = PlxImportService()
@@ -65,6 +68,7 @@ class ProgramsDashboardView(TemplateView):
         context['programs_query_params'] = query_params_without(self.request, 'program_page')
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
+        context['can_import_plx'] = self.request.user.is_staff or self.request.user.is_superuser
         context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
         context['import_error'] = kwargs.get('import_error')
         context['import_result'] = kwargs.get('import_result')
@@ -89,6 +93,9 @@ class ProgramsDashboardView(TemplateView):
         return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied('Импорт учебных планов доступен только сотрудникам с правами staff.')
+
         action = request.POST.get('action', 'upload')
         if action == 'confirm_replace':
             return self._handle_confirm_replace(request)
@@ -362,6 +369,7 @@ class EducationalProgramDeleteView(NamedDeleteView):
     list_url_name = 'programs_educational_program_list'
 
 
+@login_required
 def profiles_by_direction(request):
     direction_id = request.GET.get('direction_id')
     queryset = ProgramProfile.objects.order_by('code')
