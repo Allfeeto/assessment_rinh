@@ -6,6 +6,16 @@
 <h1 class="page-title">Кафедры и преподаватели</h1>
 
 <div class="panel">
+    <form method="get" class="form-row" style="margin-bottom: 12px;">
+        <div class="field" style="max-width: 170px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
     <div class="actions">
         <a class="btn" href="{% url 'teachers_department_create' %}">Создать кафедру</a>
         <a class="btn" href="{% url 'teachers_teacher_create' %}">Создать преподавателя</a>
@@ -47,6 +57,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if departments_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if departments_page_obj.has_previous %}
+                <a href="?department_page=1{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Первая</a>
+                <a href="?department_page={{ departments_page_obj.previous_page_number }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ departments_page_obj.number }} / {{ departments_page_obj.paginator.num_pages }}</span>
+            {% if departments_page_obj.has_next %}
+                <a href="?department_page={{ departments_page_obj.next_page_number }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Вперёд</a>
+                <a href="?department_page={{ departments_page_obj.paginator.num_pages }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -78,6 +102,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if teachers_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if teachers_page_obj.has_previous %}
+                <a href="?teacher_page=1{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Первая</a>
+                <a href="?teacher_page={{ teachers_page_obj.previous_page_number }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ teachers_page_obj.number }} / {{ teachers_page_obj.paginator.num_pages }}</span>
+            {% if teachers_page_obj.has_next %}
+                <a href="?teacher_page={{ teachers_page_obj.next_page_number }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Вперёд</a>
+                <a href="?teacher_page={{ teachers_page_obj.paginator.num_pages }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -111,5 +149,19 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if teacher_program_disciplines_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if teacher_program_disciplines_page_obj.has_previous %}
+                <a href="?link_page=1{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Первая</a>
+                <a href="?link_page={{ teacher_program_disciplines_page_obj.previous_page_number }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ teacher_program_disciplines_page_obj.number }} / {{ teacher_program_disciplines_page_obj.paginator.num_pages }}</span>
+            {% if teacher_program_disciplines_page_obj.has_next %}
+                <a href="?link_page={{ teacher_program_disciplines_page_obj.next_page_number }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Вперёд</a>
+                <a href="?link_page={{ teacher_program_disciplines_page_obj.paginator.num_pages }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -1,6 +1,33 @@
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+
+
+PER_PAGE_CHOICES = (50, 100, 200)
+DEFAULT_PER_PAGE = 50
+
+
+def get_per_page(request, *, default=DEFAULT_PER_PAGE, choices=PER_PAGE_CHOICES):
+    raw_per_page = (request.GET.get('per_page') or '').strip()
+    if raw_per_page.isdigit():
+        per_page = int(raw_per_page)
+        if per_page in choices:
+            return per_page
+    return default
+
+
+def paginate_queryset(request, queryset, *, page_param='page', per_page=None):
+    page_size = per_page or get_per_page(request)
+    paginator = Paginator(queryset, page_size)
+    return paginator.get_page(request.GET.get(page_param) or 1)
+
+
+def query_params_without(request, *keys):
+    params = request.GET.copy()
+    for key in keys:
+        params.pop(key, None)
+    return params.urlencode()
 
 
 def resolve_attr(obj, path):
@@ -15,8 +42,8 @@ def resolve_attr(obj, path):
 class NamedListView(ListView):
     template_name = 'common/list.html'
     context_object_name = 'objects'
-    paginate_by = 50
-    per_page_choices = (50, 100, 200)
+    paginate_by = DEFAULT_PER_PAGE
+    per_page_choices = PER_PAGE_CHOICES
     title = ''
     search_fields = ()
     list_columns = ()
@@ -37,12 +64,11 @@ class NamedListView(ListView):
         return queryset
 
     def get_paginate_by(self, queryset):
-        raw_per_page = (self.request.GET.get('per_page') or '').strip()
-        if raw_per_page.isdigit():
-            per_page = int(raw_per_page)
-            if per_page in self.per_page_choices:
-                return per_page
-        return self.paginate_by
+        return get_per_page(
+            self.request,
+            default=self.paginate_by,
+            choices=self.per_page_choices,
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -66,9 +92,7 @@ class NamedListView(ListView):
             )
         context['rows'] = rows
 
-        params = self.request.GET.copy()
-        params.pop('page', None)
-        context['query_params'] = params.urlencode()
+        context['query_params'] = query_params_without(self.request, 'page')
         return context
 
 

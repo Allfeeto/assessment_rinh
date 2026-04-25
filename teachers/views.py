@@ -1,11 +1,15 @@
 from django.views.generic import TemplateView
 
 from core.view_helpers import (
+    PER_PAGE_CHOICES,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    get_per_page,
+    paginate_queryset,
+    query_params_without,
 )
 
 from .forms import DepartmentForm, TeacherForm, TeacherProgramDisciplineForm
@@ -17,9 +21,10 @@ class TeachersDashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['departments'] = Department.objects.select_related('head_teacher').order_by('number')
-        context['teachers'] = Teacher.objects.select_related('department').order_by('full_name')
-        context['teacher_program_disciplines'] = TeacherProgramDiscipline.objects.select_related(
+        per_page = get_per_page(self.request)
+        departments_qs = Department.objects.select_related('head_teacher').order_by('number')
+        teachers_qs = Teacher.objects.select_related('department').order_by('full_name')
+        teacher_program_disciplines_qs = TeacherProgramDiscipline.objects.select_related(
             'teacher',
             'program_discipline__educational_program__program_profile',
             'program_discipline__educational_program__department',
@@ -28,7 +33,38 @@ class TeachersDashboardView(TemplateView):
             'teacher__full_name',
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
-        )[:50]
+        )
+
+        departments_page_obj = paginate_queryset(
+            self.request,
+            departments_qs,
+            page_param='department_page',
+            per_page=per_page,
+        )
+        teachers_page_obj = paginate_queryset(
+            self.request,
+            teachers_qs,
+            page_param='teacher_page',
+            per_page=per_page,
+        )
+        teacher_program_disciplines_page_obj = paginate_queryset(
+            self.request,
+            teacher_program_disciplines_qs,
+            page_param='link_page',
+            per_page=per_page,
+        )
+
+        context['departments'] = departments_page_obj.object_list
+        context['teachers'] = teachers_page_obj.object_list
+        context['teacher_program_disciplines'] = teacher_program_disciplines_page_obj.object_list
+        context['departments_page_obj'] = departments_page_obj
+        context['teachers_page_obj'] = teachers_page_obj
+        context['teacher_program_disciplines_page_obj'] = teacher_program_disciplines_page_obj
+        context['departments_query_params'] = query_params_without(self.request, 'department_page')
+        context['teachers_query_params'] = query_params_without(self.request, 'teacher_page')
+        context['teacher_program_disciplines_query_params'] = query_params_without(self.request, 'link_page')
+        context['per_page_choices'] = PER_PAGE_CHOICES
+        context['selected_per_page'] = per_page
         return context
 
 

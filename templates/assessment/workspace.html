@@ -17,7 +17,7 @@
     <form method="get" class="form-row">
         <div class="field">
             <label for="id_program">Образовательная программа</label>
-            <select id="id_program" name="program">
+            <select id="id_program" name="program" data-auto-submit-change="1">
                 <option value="">Выберите программу</option>
                 {% for program in programs %}
                     <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
@@ -28,7 +28,7 @@
         </div>
         <div class="field">
             <label for="id_program_discipline">Дисциплина учебного плана</label>
-            <select id="id_program_discipline" name="program_discipline">
+            <select id="id_program_discipline" name="program_discipline" data-auto-submit-change="1">
                 <option value="">Выберите дисциплину</option>
                 {% for pd in available_program_disciplines %}
                     <option value="{{ pd.id }}" {% if selected_program_discipline == pd.id|stringformat:"s" %}selected{% endif %}>
@@ -39,7 +39,7 @@
         </div>
         <div class="field">
             <label for="id_competence">Компетенция</label>
-            <select id="id_competence" name="competence">
+            <select id="id_competence" name="competence" data-auto-submit-change="1">
                 <option value="">Все компетенции</option>
                 {% for competence in competences %}
                     <option value="{{ competence.id }}" {% if selected_competence == competence.id|stringformat:"s" %}selected{% endif %}>
@@ -50,12 +50,20 @@
         </div>
         <div class="field">
             <label for="id_assessment_item_type">Тип задания</label>
-            <select id="id_assessment_item_type" name="assessment_item_type">
+            <select id="id_assessment_item_type" name="assessment_item_type" data-auto-submit-change="1">
                 <option value="">Все типы</option>
                 {% for item_type in assessment_item_types %}
                     <option value="{{ item_type.id }}" {% if selected_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>
                         {{ item_type.ui_name|default:item_type.name }}
                     </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field" style="max-width: 170px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -131,6 +139,19 @@
                 {% endfor %}
                 </tbody>
             </table>
+            {% if items_page_obj.paginator.num_pages > 1 %}
+                <div class="pagination">
+                    {% if items_page_obj.has_previous %}
+                        <a href="?page=1{% if items_query_params %}&{{ items_query_params }}{% endif %}">Первая</a>
+                        <a href="?page={{ items_page_obj.previous_page_number }}{% if items_query_params %}&{{ items_query_params }}{% endif %}">Назад</a>
+                    {% endif %}
+                    <span class="current">Страница {{ items_page_obj.number }} / {{ items_page_obj.paginator.num_pages }}</span>
+                    {% if items_page_obj.has_next %}
+                        <a href="?page={{ items_page_obj.next_page_number }}{% if items_query_params %}&{{ items_query_params }}{% endif %}">Вперёд</a>
+                        <a href="?page={{ items_page_obj.paginator.num_pages }}{% if items_query_params %}&{{ items_query_params }}{% endif %}">Последняя</a>
+                    {% endif %}
+                </div>
+            {% endif %}
             <div class="actions" style="margin-top: 12px;">
                 <button class="btn secondary" type="submit">Копировать выбранные</button>
             </div>

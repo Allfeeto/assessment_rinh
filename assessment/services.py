@@ -146,7 +146,11 @@ def prettify_db_error(exc: Exception) -> str:
 
 
 def get_item_competences(item) -> list:
-    links = [link.competence for link in item.competence_links.select_related('competence').all()]
+    prefetched_links = getattr(item, '_prefetched_objects_cache', {}).get('competence_links')
+    if prefetched_links is not None:
+        links = [link.competence for link in prefetched_links]
+    else:
+        links = [link.competence for link in item.competence_links.select_related('competence').all()]
     if not links and item.competence_id:
         links = [item.competence]
 

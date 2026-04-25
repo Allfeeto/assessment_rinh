@@ -10,6 +10,7 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView
 
 from competencies.models import Competence
 from core.models import AssessmentItemType, EducationLevel
+from core.view_helpers import PER_PAGE_CHOICES, get_per_page, paginate_queryset
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 from teachers.models import TeacherProgramDiscipline
@@ -535,6 +536,11 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
 
         selected_competence = self.request.GET.get('competence', '')
         selected_item_type = self.request.GET.get('assessment_item_type', '')
+        if selected_competence and not selected_competence.isdigit():
+            selected_competence = ''
+        if selected_item_type and not selected_item_type.isdigit():
+            selected_item_type = ''
+        per_page = get_per_page(self.request)
 
         competences = Competence.objects.none()
         items = AssessmentItem.objects.none()
@@ -547,6 +553,8 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 .distinct()
                 .order_by('code')
             )
+            if selected_competence and not competences.filter(pk=selected_competence).exists():
+                selected_competence = ''
 
             items = (
                 AssessmentItem.objects.filter(program_discipline=current_program_discipline)
@@ -566,14 +574,42 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
             if selected_item_type:
                 items = items.filter(assessment_item_type_id=selected_item_type)
 
+        items_page_obj = paginate_queryset(
+            self.request,
+            items,
+            page_param='page',
+            per_page=per_page,
+        )
+        items_page = list(items_page_obj.object_list)
+
         assessment_item_types = list(get_ui_assessment_item_types_queryset())
         for item_type in assessment_item_types:
             item_type.ui_name = get_item_type_ui_name(item_type.name)
 
-        for item in items:
+        for item in items_page:
             item.ui_competence_codes = get_item_competence_codes(item)
 
-        next_url = self.request.get_full_path()
+        item_query_params = self.request.GET.copy()
+        item_query_params.pop('page', None)
+        normalized_params = {
+            'program': selected_program_id,
+            'program_discipline': selected_program_discipline_id,
+            'competence': selected_competence,
+            'assessment_item_type': selected_item_type,
+            'per_page': str(per_page),
+        }
+        for key, value in normalized_params.items():
+            if value:
+                item_query_params[key] = value
+            else:
+                item_query_params.pop(key, None)
+
+        next_params = item_query_params.copy()
+        if items_page_obj.number > 1:
+            next_params['page'] = str(items_page_obj.number)
+        next_url = self.request.path
+        if next_params:
+            next_url = f'{next_url}?{next_params.urlencode()}'
 
         context.update(
             {
@@ -587,7 +623,11 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 'selected_item_type': selected_item_type,
                 'competences': competences,
                 'assessment_item_types': assessment_item_types,
-                'items': items,
+                'items': items_page,
+                'items_page_obj': items_page_obj,
+                'items_query_params': item_query_params.urlencode(),
+                'per_page_choices': PER_PAGE_CHOICES,
+                'selected_per_page': per_page,
                 'clipboard_count': len(get_clipboard_item_ids(self.request.session)),
                 'next_url': next_url,
             }

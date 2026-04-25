@@ -23,6 +23,14 @@
             <label for="{{ form.assessment_item_type.id_for_label }}">{{ form.assessment_item_type.label }}</label>
             {{ form.assessment_item_type }}
         </div>
+        <div class="field" style="max-width: 170px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="/reports/">Сбросить</a>
@@ -60,6 +68,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if competence_coverage_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if competence_coverage_page_obj.has_previous %}
+                <a href="?competence_page=1{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Первая</a>
+                <a href="?competence_page={{ competence_coverage_page_obj.previous_page_number }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ competence_coverage_page_obj.number }} / {{ competence_coverage_page_obj.paginator.num_pages }}</span>
+            {% if competence_coverage_page_obj.has_next %}
+                <a href="?competence_page={{ competence_coverage_page_obj.next_page_number }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Вперёд</a>
+                <a href="?competence_page={{ competence_coverage_page_obj.paginator.num_pages }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -86,6 +108,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if discipline_competence_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if discipline_competence_page_obj.has_previous %}
+                <a href="?matrix_page=1{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Первая</a>
+                <a href="?matrix_page={{ discipline_competence_page_obj.previous_page_number }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ discipline_competence_page_obj.number }} / {{ discipline_competence_page_obj.paginator.num_pages }}</span>
+            {% if discipline_competence_page_obj.has_next %}
+                <a href="?matrix_page={{ discipline_competence_page_obj.next_page_number }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Вперёд</a>
+                <a href="?matrix_page={{ discipline_competence_page_obj.paginator.num_pages }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -108,6 +144,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if report_by_type_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if report_by_type_page_obj.has_previous %}
+                <a href="?type_page=1{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Первая</a>
+                <a href="?type_page={{ report_by_type_page_obj.previous_page_number }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ report_by_type_page_obj.number }} / {{ report_by_type_page_obj.paginator.num_pages }}</span>
+            {% if report_by_type_page_obj.has_next %}
+                <a href="?type_page={{ report_by_type_page_obj.next_page_number }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Вперёд</a>
+                <a href="?type_page={{ report_by_type_page_obj.paginator.num_pages }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -134,6 +184,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if report_by_program_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if report_by_program_page_obj.has_previous %}
+                <a href="?program_page=1{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Первая</a>
+                <a href="?program_page={{ report_by_program_page_obj.previous_page_number }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ report_by_program_page_obj.number }} / {{ report_by_program_page_obj.paginator.num_pages }}</span>
+            {% if report_by_program_page_obj.has_next %}
+                <a href="?program_page={{ report_by_program_page_obj.next_page_number }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Вперёд</a>
+                <a href="?program_page={{ report_by_program_page_obj.paginator.num_pages }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -156,5 +220,19 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if report_by_discipline_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if report_by_discipline_page_obj.has_previous %}
+                <a href="?discipline_page=1{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Первая</a>
+                <a href="?discipline_page={{ report_by_discipline_page_obj.previous_page_number }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ report_by_discipline_page_obj.number }} / {{ report_by_discipline_page_obj.paginator.num_pages }}</span>
+            {% if report_by_discipline_page_obj.has_next %}
+                <a href="?discipline_page={{ report_by_discipline_page_obj.next_page_number }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Вперёд</a>
+                <a href="?discipline_page={{ report_by_discipline_page_obj.paginator.num_pages }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -78,6 +78,7 @@ class ReportFilterForm(forms.Form):
         )
 
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
+        self.fields['assessment_item_type'].widget.attrs['data-auto-submit-change'] = '1'
 
         competence_qs = Competence.objects.select_related(
             'competence_type',
@@ -112,3 +113,6 @@ class ReportFilterForm(forms.Form):
             parent_param='educational_program_id',
             parent_required=True,
         )
+
+        for field_name in ('educational_program', 'discipline', 'competence'):
+            self.fields[field_name].widget.attrs['data-auto-submit-change'] = '1'

@@ -3,11 +3,15 @@ from django.shortcuts import redirect, render
 from django.views.generic import TemplateView
 
 from core.view_helpers import (
+    PER_PAGE_CHOICES,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    get_per_page,
+    paginate_queryset,
+    query_params_without,
 )
 
 from .forms import EducationalProgramForm, PlxImportUploadForm, ProgramProfileForm, TrainingDirectionForm
@@ -23,12 +27,44 @@ class ProgramsDashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['directions'] = TrainingDirection.objects.select_related('education_level').order_by('code')
-        context['profiles'] = ProgramProfile.objects.select_related('training_direction').order_by('code')
-        context['programs'] = EducationalProgram.objects.select_related(
+        per_page = get_per_page(self.request)
+        directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
+        profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
+        programs_qs = EducationalProgram.objects.select_related(
             'program_profile__training_direction',
             'department',
         ).order_by('program_profile__code', 'admission_year')
+
+        directions_page_obj = paginate_queryset(
+            self.request,
+            directions_qs,
+            page_param='direction_page',
+            per_page=per_page,
+        )
+        profiles_page_obj = paginate_queryset(
+            self.request,
+            profiles_qs,
+            page_param='profile_page',
+            per_page=per_page,
+        )
+        programs_page_obj = paginate_queryset(
+            self.request,
+            programs_qs,
+            page_param='program_page',
+            per_page=per_page,
+        )
+
+        context['directions'] = directions_page_obj.object_list
+        context['profiles'] = profiles_page_obj.object_list
+        context['programs'] = programs_page_obj.object_list
+        context['directions_page_obj'] = directions_page_obj
+        context['profiles_page_obj'] = profiles_page_obj
+        context['programs_page_obj'] = programs_page_obj
+        context['directions_query_params'] = query_params_without(self.request, 'direction_page')
+        context['profiles_query_params'] = query_params_without(self.request, 'profile_page')
+        context['programs_query_params'] = query_params_without(self.request, 'program_page')
+        context['per_page_choices'] = PER_PAGE_CHOICES
+        context['selected_per_page'] = per_page
         context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
         context['import_error'] = kwargs.get('import_error')
         context['import_result'] = kwargs.get('import_result')

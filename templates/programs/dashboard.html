@@ -108,6 +108,16 @@
 {% endif %}
 
 <div class="panel">
+    <form method="get" class="form-row" style="margin-bottom: 12px;">
+        <div class="field" style="max-width: 170px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
     <div class="actions">
         <a class="btn" href="{% url 'programs_direction_create' %}">Создать направление</a>
         <a class="btn" href="{% url 'programs_profile_create' %}">Создать профиль</a>
@@ -144,6 +154,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if directions_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if directions_page_obj.has_previous %}
+                <a href="?direction_page=1{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Первая</a>
+                <a href="?direction_page={{ directions_page_obj.previous_page_number }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ directions_page_obj.number }} / {{ directions_page_obj.paginator.num_pages }}</span>
+            {% if directions_page_obj.has_next %}
+                <a href="?direction_page={{ directions_page_obj.next_page_number }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Вперёд</a>
+                <a href="?direction_page={{ directions_page_obj.paginator.num_pages }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -175,6 +199,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if profiles_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if profiles_page_obj.has_previous %}
+                <a href="?profile_page=1{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Первая</a>
+                <a href="?profile_page={{ profiles_page_obj.previous_page_number }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ profiles_page_obj.number }} / {{ profiles_page_obj.paginator.num_pages }}</span>
+            {% if profiles_page_obj.has_next %}
+                <a href="?profile_page={{ profiles_page_obj.next_page_number }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Вперёд</a>
+                <a href="?profile_page={{ profiles_page_obj.paginator.num_pages }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -208,5 +246,19 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if programs_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if programs_page_obj.has_previous %}
+                <a href="?program_page=1{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Первая</a>
+                <a href="?program_page={{ programs_page_obj.previous_page_number }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ programs_page_obj.number }} / {{ programs_page_obj.paginator.num_pages }}</span>
+            {% if programs_page_obj.has_next %}
+                <a href="?program_page={{ programs_page_obj.next_page_number }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Вперёд</a>
+                <a href="?program_page={{ programs_page_obj.paginator.num_pages }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 {% endblock %}
