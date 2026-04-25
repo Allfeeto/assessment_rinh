@@ -75,7 +75,16 @@ class AssessmentItemListView(ListView):
     model = AssessmentItem
     template_name = 'assessment/list.html'
     context_object_name = 'items'
-    paginate_by = 20
+    paginate_by = 50
+    per_page_choices = (50, 100, 200)
+
+    def get_paginate_by(self, queryset):
+        raw_value = (self.request.GET.get('per_page') or '').strip()
+        if raw_value.isdigit():
+            per_page = int(raw_value)
+            if per_page in self.per_page_choices:
+                return per_page
+        return self.paginate_by
 
     def get_queryset(self):
         queryset = (
@@ -204,7 +213,9 @@ class AssessmentItemListView(ListView):
             'assessment_item_type': self.request.GET.get('assessment_item_type', ''),
             'competence': self.request.GET.get('competence', ''),
             'q': self.request.GET.get('q', ''),
+            'per_page': self.request.GET.get('per_page', str(self.paginate_by)),
         }
+        context['per_page_choices'] = self.per_page_choices
 
         params = self.request.GET.copy()
         params.pop('page', None)

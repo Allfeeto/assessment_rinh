@@ -9,7 +9,14 @@
     <form method="get" class="form-row">
         <div class="field">
             <label for="id_program">Образовательная программа</label>
-            <select id="id_program" name="educational_program" data-autocomplete-kind="educational_program" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите профиль, кафедру или год набора">
+            <select
+                id="id_program"
+                name="educational_program"
+                data-autocomplete-kind="educational_program"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите профиль, кафедру или год набора"
+                data-auto-submit-change="1"
+            >
                 <option value="">Все программы</option>
                 {% for program in educational_programs %}
                     <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>{{ program }}</option>
@@ -18,7 +25,17 @@
         </div>
         <div class="field">
             <label for="id_discipline">Дисциплина учебного плана</label>
-            <select id="id_discipline" name="discipline" data-autocomplete-kind="discipline" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите название дисциплины">
+            <select
+                id="id_discipline"
+                name="discipline"
+                data-autocomplete-kind="discipline"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите название дисциплины"
+                data-autocomplete-parent="id_program"
+                data-autocomplete-parent-param="educational_program_id"
+                data-autocomplete-parent-required="1"
+                data-auto-submit-change="1"
+            >
                 <option value="">Все дисциплины</option>
                 {% for option in discipline_options %}
                     <option value="{{ option.discipline_id }}" {% if selected_discipline == option.discipline_id|stringformat:"s" %}selected{% endif %}>{{ option.discipline__name }}</option>
@@ -29,11 +46,46 @@
             <label for="id_q">Поиск компетенции</label>
             <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Код или наименование">
         </div>
+        <div class="field" style="max-width: 160px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="/competencies/">Сбросить</a>
         </div>
     </form>
+</div>
+
+<div class="panel table-wrap">
+    <h2>
+        Компетенции выбранной дисциплины
+        {% if selected_discipline_name %}«{{ selected_discipline_name }}»{% endif %}
+    </h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th>Компетенция</th>
+            <th>Тип</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in discipline_competence_competences %}
+            <tr>
+                <td>{{ item.competence__code }}</td>
+                <td>{{ item.competence__name }}</td>
+                <td>{{ item.competence__competence_type__name }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="3" class="muted">Выберите программу и дисциплину, чтобы увидеть связанные компетенции.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <div class="panel">
@@ -82,6 +134,20 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if competences_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if competences_page_obj.has_previous %}
+                <a href="?comp_page=1{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Первая</a>
+                <a href="?comp_page={{ competences_page_obj.previous_page_number }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ competences_page_obj.number }} / {{ competences_page_obj.paginator.num_pages }}</span>
+            {% if competences_page_obj.has_next %}
+                <a href="?comp_page={{ competences_page_obj.next_page_number }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Вперёд</a>
+                <a href="?comp_page={{ competences_page_obj.paginator.num_pages }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel table-wrap">
@@ -117,5 +183,19 @@
         {% endfor %}
         </tbody>
     </table>
+
+    {% if discipline_competences_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if discipline_competences_page_obj.has_previous %}
+                <a href="?link_page=1{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Первая</a>
+                <a href="?link_page={{ discipline_competences_page_obj.previous_page_number }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ discipline_competences_page_obj.number }} / {{ discipline_competences_page_obj.paginator.num_pages }}</span>
+            {% if discipline_competences_page_obj.has_next %}
+                <a href="?link_page={{ discipline_competences_page_obj.next_page_number }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Вперёд</a>
+                <a href="?link_page={{ discipline_competences_page_obj.paginator.num_pages }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

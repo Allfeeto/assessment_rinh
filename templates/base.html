@@ -564,18 +564,12 @@
         input.addEventListener('input', () => {
             select.value = '';
             const query = input.value.trim();
-            if (!query) {
-                closeMenu();
-                return;
-            }
             fetchResults(query);
         });
 
         input.addEventListener('focus', () => {
             const query = input.value.trim();
-            if (query) {
-                fetchResults(query);
-            }
+            fetchResults(query);
         });
 
         document.addEventListener('click', event => {
@@ -598,6 +592,25 @@
         }
 
         setInputStateByParent();
+    }
+
+    function initAutoSubmitOnChange() {
+        document.querySelectorAll('[data-auto-submit-change="1"]').forEach(field => {
+            field.addEventListener('change', () => {
+                const form = field.closest('form');
+                if (!form) {
+                    return;
+                }
+                if ((form.method || 'get').toLowerCase() !== 'get') {
+                    return;
+                }
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            });
+        });
     }
 
     function initDependentSelects() {
@@ -665,6 +678,7 @@
 
     document.querySelectorAll('select[data-autocomplete-kind]').forEach(initAutocomplete);
     initDependentSelects();
+    initAutoSubmitOnChange();
 })();
 </script>
 {% block extra_js %}{% endblock %}

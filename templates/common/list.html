@@ -12,6 +12,14 @@
                 <label for="id_q">Поиск</label>
                 <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Введите строку для поиска">
             </div>
+            <div class="field" style="max-width: 160px;">
+                <label for="id_per_page">Строк на странице</label>
+                <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                    {% for option in per_page_choices %}
+                        <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="actions">
                 <button class="btn" type="submit">Найти</button>
                 <a class="btn secondary" href="{{ request.path }}">Сбросить</a>

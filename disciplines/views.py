@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Count
 from django.http import JsonResponse
@@ -19,6 +20,19 @@ from core.view_helpers import (
 
 from .forms import DisciplineForm, ProgramDisciplineForm, ProgramDisciplineManageForm
 from .models import Discipline, ProgramDiscipline
+from competencies.models import DisciplineCompetence
+
+
+PER_PAGE_CHOICES = (50, 100, 200)
+
+
+def _get_per_page(request):
+    raw_value = (request.GET.get('per_page') or '').strip()
+    if raw_value.isdigit():
+        per_page = int(raw_value)
+        if per_page in PER_PAGE_CHOICES:
+            return per_page
+    return PER_PAGE_CHOICES[0]
 
 
 class ProgramDisciplineManagerView(View):
@@ -30,25 +44,73 @@ class ProgramDisciplineManagerView(View):
             return (form.data.get('educational_program') or '').strip()
         return (request.GET.get('educational_program') or '').strip()
 
+    @staticmethod
+    def _get_selected_discipline_id(request):
+        return (request.GET.get('discipline') or '').strip()
+
     def _build_context(self, request, form):
         selected_program_id = self._get_selected_program_id(request, form=form)
+        selected_discipline_id = self._get_selected_discipline_id(request)
+        per_page = _get_per_page(request)
 
         selected_program = None
-        existing_program_disciplines = ProgramDiscipline.objects.none()
+        educational_program_options = EducationalProgram.objects.none()
+        existing_program_disciplines_qs = ProgramDiscipline.objects.none()
+        discipline_filter_options = []
+        selected_program_discipline = None
+        discipline_competence_links = DisciplineCompetence.objects.none()
         if selected_program_id:
             selected_program = (
                 EducationalProgram.objects.select_related('program_profile', 'department')
                 .filter(pk=selected_program_id)
                 .first()
             )
-            existing_program_disciplines = ProgramDiscipline.objects.select_related('discipline').filter(
+            if selected_program:
+                educational_program_options = EducationalProgram.objects.filter(pk=selected_program.pk)
+
+            existing_program_disciplines_qs = ProgramDiscipline.objects.select_related('discipline').filter(
                 educational_program_id=selected_program_id
             ).order_by('discipline__name')
+
+            discipline_filter_options = list(
+                existing_program_disciplines_qs.values('discipline_id', 'discipline__name').distinct()
+            )
+            valid_discipline_ids = {str(option['discipline_id']) for option in discipline_filter_options}
+            if selected_discipline_id and selected_discipline_id not in valid_discipline_ids:
+                selected_discipline_id = ''
+
+            if selected_discipline_id:
+                existing_program_disciplines_qs = existing_program_disciplines_qs.filter(
+                    discipline_id=selected_discipline_id
+                )
+                selected_program_discipline = existing_program_disciplines_qs.first()
+                if selected_program_discipline:
+                    discipline_competence_links = DisciplineCompetence.objects.select_related(
+                        'competence__competence_type'
+                    ).filter(
+                        program_discipline=selected_program_discipline
+                    ).order_by('competence__code')
+
+        program_disciplines_paginator = Paginator(existing_program_disciplines_qs, per_page)
+        pd_page_obj = program_disciplines_paginator.get_page(request.GET.get('pd_page') or 1)
+
+        params = request.GET.copy()
+        params.pop('pd_page', None)
 
         return {
             'form': form,
             'selected_program': selected_program,
-            'existing_program_disciplines': existing_program_disciplines,
+            'educational_program_options': educational_program_options,
+            'selected_program_id': selected_program_id,
+            'selected_discipline_id': selected_discipline_id,
+            'discipline_filter_options': discipline_filter_options,
+            'selected_program_discipline': selected_program_discipline,
+            'discipline_competence_links': discipline_competence_links,
+            'existing_program_disciplines': pd_page_obj.object_list,
+            'pd_page_obj': pd_page_obj,
+            'pd_query_params': params.urlencode(),
+            'per_page_choices': PER_PAGE_CHOICES,
+            'selected_per_page': per_page,
         }
 
     def get(self, request, *args, **kwargs):
@@ -88,16 +150,17 @@ class DisciplinesDashboardView(TemplateView):
 
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         search = self.request.GET.get('q', '').strip()
+        per_page = _get_per_page(self.request)
 
-        disciplines = Discipline.objects.annotate(
+        disciplines_qs = Discipline.objects.annotate(
             programs_count=Count('program_disciplines', distinct=True),
             items_count=Count('program_disciplines__assessment_items', distinct=True),
         ).order_by('name')
 
         if search:
-            disciplines = disciplines.filter(name__icontains=search)
+            disciplines_qs = disciplines_qs.filter(name__icontains=search)
 
-        program_disciplines = ProgramDiscipline.objects.select_related(
+        program_disciplines_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
@@ -111,16 +174,44 @@ class DisciplinesDashboardView(TemplateView):
         )
 
         if educational_program_id:
-            program_disciplines = program_disciplines.filter(educational_program_id=educational_program_id)
+            program_disciplines_qs = program_disciplines_qs.filter(educational_program_id=educational_program_id)
 
-        context['educational_programs'] = EducationalProgram.objects.select_related(
-            'program_profile',
-            'department',
-        ).order_by('program_profile__code', 'admission_year')
+        disciplines_paginator = Paginator(disciplines_qs, per_page)
+        d_page_obj = disciplines_paginator.get_page(self.request.GET.get('d_page') or 1)
+
+        program_disciplines_paginator = Paginator(program_disciplines_qs, per_page)
+        pd_page_obj = program_disciplines_paginator.get_page(self.request.GET.get('pd_page') or 1)
+
+        selected_program = (
+            EducationalProgram.objects.select_related('program_profile', 'department')
+            .filter(pk=educational_program_id)
+            .first()
+            if educational_program_id
+            else None
+        )
+        educational_program_options = (
+            EducationalProgram.objects.filter(pk=selected_program.pk)
+            if selected_program
+            else EducationalProgram.objects.none()
+        )
+
+        params = self.request.GET.copy()
+        d_params = params.copy()
+        d_params.pop('d_page', None)
+        pd_params = params.copy()
+        pd_params.pop('pd_page', None)
+
+        context['educational_programs'] = educational_program_options
         context['selected_program'] = educational_program_id
         context['search_query'] = search
-        context['disciplines'] = disciplines
-        context['program_disciplines'] = program_disciplines
+        context['disciplines'] = d_page_obj.object_list
+        context['program_disciplines'] = pd_page_obj.object_list
+        context['d_page_obj'] = d_page_obj
+        context['pd_page_obj'] = pd_page_obj
+        context['d_query_params'] = d_params.urlencode()
+        context['pd_query_params'] = pd_params.urlencode()
+        context['per_page_choices'] = PER_PAGE_CHOICES
+        context['selected_per_page'] = per_page
         return context
 
 

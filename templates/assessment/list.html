@@ -9,7 +9,7 @@
     <form method="get" class="form-row">
         <div class="field">
             <label for="id_education_level">Уровень образования</label>
-            <select id="id_education_level" name="education_level">
+            <select id="id_education_level" name="education_level" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for level in education_levels %}
                     <option value="{{ level.id }}" {% if selected.education_level == level.id|stringformat:"s" %}selected{% endif %}>{{ level.name }}</option>
@@ -18,7 +18,7 @@
         </div>
         <div class="field">
             <label for="id_training_direction">Направление</label>
-            <select id="id_training_direction" name="training_direction" data-autocomplete-kind="training_direction" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название направления">
+            <select id="id_training_direction" name="training_direction" data-autocomplete-kind="training_direction" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название направления" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for direction in training_directions %}
                     <option value="{{ direction.id }}" {% if selected.training_direction == direction.id|stringformat:"s" %}selected{% endif %}>{{ direction.code }} — {{ direction.name }}</option>
@@ -27,7 +27,7 @@
         </div>
         <div class="field">
             <label for="id_program_profile">Профиль</label>
-            <select id="id_program_profile" name="program_profile" data-autocomplete-kind="program_profile" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название профиля">
+            <select id="id_program_profile" name="program_profile" data-autocomplete-kind="program_profile" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название профиля" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for profile in program_profiles %}
                     <option value="{{ profile.id }}" {% if selected.program_profile == profile.id|stringformat:"s" %}selected{% endif %}>{{ profile.code }} — {{ profile.name }}</option>
@@ -36,7 +36,7 @@
         </div>
         <div class="field">
             <label for="id_educational_program">Образовательная программа</label>
-            <select id="id_educational_program" name="educational_program" data-autocomplete-kind="educational_program" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите профиль, кафедру или год набора">
+            <select id="id_educational_program" name="educational_program" data-autocomplete-kind="educational_program" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите профиль, кафедру или год набора" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for program in educational_programs %}
                     <option value="{{ program.id }}" {% if selected.educational_program == program.id|stringformat:"s" %}selected{% endif %}>{{ program }}</option>
@@ -45,7 +45,7 @@
         </div>
         <div class="field">
             <label for="id_discipline">Дисциплина</label>
-            <select id="id_discipline" name="discipline" data-autocomplete-kind="discipline" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите название дисциплины">
+            <select id="id_discipline" name="discipline" data-autocomplete-kind="discipline" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите название дисциплины" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for discipline in disciplines %}
                     <option value="{{ discipline.id }}" {% if selected.discipline == discipline.id|stringformat:"s" %}selected{% endif %}>{{ discipline.name }}</option>
@@ -54,7 +54,7 @@
         </div>
         <div class="field">
             <label for="id_assessment_item_type">Тип задания</label>
-            <select id="id_assessment_item_type" name="assessment_item_type">
+            <select id="id_assessment_item_type" name="assessment_item_type" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for item_type in assessment_item_types %}
                     <option value="{{ item_type.id }}" {% if selected.assessment_item_type == item_type.id|stringformat:"s" %}selected{% endif %}>{{ item_type.ui_name|default:item_type.name }}</option>
@@ -63,7 +63,7 @@
         </div>
         <div class="field">
             <label for="id_competence">Компетенция</label>
-            <select id="id_competence" name="competence" data-autocomplete-kind="competence" data-autocomplete-url="/core/lookup/" data-autocomplete-parent="id_educational_program" data-autocomplete-parent-param="educational_program_id" data-autocomplete-placeholder="Введите код или наименование компетенции">
+            <select id="id_competence" name="competence" data-autocomplete-kind="competence" data-autocomplete-url="/core/lookup/" data-autocomplete-parent="id_educational_program" data-autocomplete-parent-param="educational_program_id" data-autocomplete-placeholder="Введите код или наименование компетенции" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for competence in competences %}
                     <option value="{{ competence.id }}" {% if selected.competence == competence.id|stringformat:"s" %}selected{% endif %}>{{ competence.code }} — {{ competence.name|truncatechars:60 }}</option>
@@ -73,6 +73,14 @@
         <div class="field" style="min-width: 260px;">
             <label for="id_q">Поиск по тексту задания</label>
             <input id="id_q" type="text" name="q" value="{{ selected.q }}" placeholder="Введите часть текста задания">
+        </div>
+        <div class="field" style="max-width: 170px;">
+            <label for="id_per_page">Строк на странице</label>
+            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected.per_page == option|stringformat:"s" %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="actions">
             <button class="btn" type="submit">Применить фильтры</button>

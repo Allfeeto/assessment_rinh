@@ -14,6 +14,50 @@
 {% endif %}
 
 <div class="panel">
+    <h2>Фильтр контекста</h2>
+    <form method="get" class="form-row" style="margin-bottom: 14px;">
+        <div class="field">
+            <label for="id_filter_program">Образовательная программа</label>
+            <select
+                id="id_filter_program"
+                name="educational_program"
+                data-autocomplete-kind="educational_program"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите профиль, кафедру или год набора"
+                data-auto-submit-change="1"
+            >
+                <option value="">Выберите программу</option>
+                {% for program in educational_program_options %}
+                    <option value="{{ program.id }}" {% if selected_program_id == program.id|stringformat:"s" %}selected{% endif %}>{{ program }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_filter_discipline">Дисциплина</label>
+            <select id="id_filter_discipline" name="discipline" data-auto-submit-change="1">
+                <option value="">Все дисциплины программы</option>
+                {% for option in discipline_filter_options %}
+                    <option value="{{ option.discipline_id }}" {% if selected_discipline_id == option.discipline_id|stringformat:"s" %}selected{% endif %}>
+                        {{ option.discipline__name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field" style="max-width: 160px;">
+            <label for="id_filter_per_page">Строк на странице</label>
+            <select id="id_filter_per_page" name="per_page" data-auto-submit-change="1">
+                {% for option in per_page_choices %}
+                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="actions">
+            <button class="btn" type="submit">Применить</button>
+            <a class="btn secondary" href="{% url 'disciplines_root' %}">Сбросить</a>
+        </div>
+    </form>
+
+    <h2>Добавление дисциплины в учебный план</h2>
     <form method="post" novalidate>
         {% csrf_token %}
         <div class="field" style="margin-bottom: 12px;">
@@ -85,6 +129,57 @@
                         Для выбранной программы дисциплины пока не добавлены.
                     {% else %}
                         Сначала выберите образовательную программу.
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if pd_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            {% if pd_page_obj.has_previous %}
+                <a href="?pd_page=1{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Первая</a>
+                <a href="?pd_page={{ pd_page_obj.previous_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Назад</a>
+            {% endif %}
+            <span class="current">Страница {{ pd_page_obj.number }} / {{ pd_page_obj.paginator.num_pages }}</span>
+            {% if pd_page_obj.has_next %}
+                <a href="?pd_page={{ pd_page_obj.next_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Вперёд</a>
+                <a href="?pd_page={{ pd_page_obj.paginator.num_pages }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Последняя</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="panel table-wrap">
+    <h2>
+        Компетенции дисциплины
+        {% if selected_program_discipline %}
+            «{{ selected_program_discipline.discipline.name }}»
+        {% endif %}
+    </h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th>Компетенция</th>
+            <th>Тип</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for link in discipline_competence_links %}
+            <tr>
+                <td>{{ link.competence.code }}</td>
+                <td>{{ link.competence.name }}</td>
+                <td>{{ link.competence.competence_type.name }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="3" class="muted">
+                    {% if selected_program_discipline %}
+                        Для выбранной дисциплины компетенции пока не связаны.
+                    {% else %}
+                        Выберите программу и дисциплину, чтобы увидеть компетенции.
                     {% endif %}
                 </td>
             </tr>

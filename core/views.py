@@ -2,6 +2,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
+import re
 
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
@@ -24,6 +25,24 @@ from .view_helpers import (
     NamedListView,
     NamedUpdateView,
 )
+
+
+LOOKUP_STOP_WORDS = {'набор', 'года', 'год', 'программа', 'профиль'}
+
+
+def _tokenize_lookup_query(query: str) -> list[str]:
+    if not query:
+        return []
+    tokens = re.split(r'[\s|,;:()«»"\'/\\\-]+', query)
+    cleaned = []
+    for token in tokens:
+        value = token.strip().lower()
+        if not value or value in LOOKUP_STOP_WORDS:
+            continue
+        if value.isdigit() and len(value) < 4:
+            continue
+        cleaned.append(value)
+    return cleaned
 
 
 class HomeView(TemplateView):
@@ -349,27 +368,39 @@ def lookup_options(request):
             'department',
         ).order_by('program_profile__code', 'admission_year')
         if query:
-            filters = (
-                Q(program_profile__code__icontains=query)
-                | Q(program_profile__name__icontains=query)
-                | Q(program_profile__training_direction__code__icontains=query)
-                | Q(department__number__icontains=query)
-                | Q(department__short_name__icontains=query)
-            )
-            if query.isdigit():
-                filters |= Q(admission_year=int(query))
-            queryset = queryset.filter(filters)
+            tokens = _tokenize_lookup_query(query)
+            if not tokens:
+                tokens = [query.strip().lower()]
+            for token in tokens:
+                token_filter = (
+                    Q(program_profile__code__icontains=token)
+                    | Q(program_profile__name__icontains=token)
+                    | Q(program_profile__training_direction__code__icontains=token)
+                    | Q(program_profile__training_direction__name__icontains=token)
+                    | Q(department__number__icontains=token)
+                    | Q(department__short_name__icontains=token)
+                    | Q(department__full_name__icontains=token)
+                )
+                if token.isdigit() and len(token) == 4:
+                    token_filter |= Q(admission_year=int(token))
+                queryset = queryset.filter(token_filter)
         results = [{'id': obj.id, 'label': str(obj)} for obj in queryset[:limit]]
         return JsonResponse({'results': results})
 
     if kind == 'discipline':
         queryset = Discipline.objects.order_by('name')
         exclude_program_id = request.GET.get('exclude_program_id')
+        educational_program_id = request.GET.get('educational_program_id')
         if exclude_program_id:
             linked_ids = ProgramDiscipline.objects.filter(
                 educational_program_id=exclude_program_id
             ).values_list('discipline_id', flat=True)
             queryset = queryset.exclude(id__in=linked_ids)
+        if educational_program_id:
+            linked_ids = ProgramDiscipline.objects.filter(
+                educational_program_id=educational_program_id
+            ).values_list('discipline_id', flat=True)
+            queryset = queryset.filter(id__in=linked_ids)
         if query:
             queryset = queryset.filter(name__icontains=query)
         results = [{'id': obj.id, 'label': obj.name} for obj in queryset[:limit]]
@@ -389,15 +420,20 @@ def lookup_options(request):
         if educational_program_id:
             queryset = queryset.filter(educational_program_id=educational_program_id)
         if query:
-            filters = (
-                Q(discipline__name__icontains=query)
-                | Q(educational_program__program_profile__code__icontains=query)
-                | Q(educational_program__program_profile__name__icontains=query)
-                | Q(educational_program__department__short_name__icontains=query)
-            )
-            if query.isdigit():
-                filters |= Q(educational_program__admission_year=int(query))
-            queryset = queryset.filter(filters)
+            tokens = _tokenize_lookup_query(query)
+            if not tokens:
+                tokens = [query.strip().lower()]
+            for token in tokens:
+                token_filter = (
+                    Q(discipline__name__icontains=token)
+                    | Q(educational_program__program_profile__code__icontains=token)
+                    | Q(educational_program__program_profile__name__icontains=token)
+                    | Q(educational_program__department__short_name__icontains=token)
+                    | Q(educational_program__department__full_name__icontains=token)
+                )
+                if token.isdigit() and len(token) == 4:
+                    token_filter |= Q(educational_program__admission_year=int(token))
+                queryset = queryset.filter(token_filter)
         results = [
             {'id': obj.id, 'label': f'{obj.educational_program} | {obj.discipline.name}'}
             for obj in queryset[:limit]

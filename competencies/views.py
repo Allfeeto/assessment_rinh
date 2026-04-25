@@ -1,8 +1,8 @@
-from django.db.models import Count, Q
+from django.core.paginator import Paginator
+from django.db.models import Count, F, Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
 
-from assessment.models import AssessmentItem
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -18,6 +18,18 @@ from .forms import CompetenceForm, DisciplineCompetenceForm
 from .models import Competence, DisciplineCompetence
 
 
+PER_PAGE_CHOICES = (50, 100, 200)
+
+
+def _get_per_page(request):
+    raw_value = (request.GET.get('per_page') or '').strip()
+    if raw_value.isdigit():
+        per_page = int(raw_value)
+        if per_page in PER_PAGE_CHOICES:
+            return per_page
+    return PER_PAGE_CHOICES[0]
+
+
 class CompetenciesDashboardView(TemplateView):
     template_name = 'competencies/list.html'
 
@@ -27,12 +39,14 @@ class CompetenciesDashboardView(TemplateView):
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         discipline_id = self.request.GET.get('discipline', '').strip()
         search = self.request.GET.get('q', '').strip()
+        per_page = _get_per_page(self.request)
 
         competences_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
         ).annotate(
             disciplines_count=Count('discipline_competences', distinct=True),
+            items_count=Count('assessment_item_links__assessment_item', distinct=True),
         ).order_by('educational_program__program_profile__code', 'code')
 
         if educational_program_id:
@@ -40,20 +54,19 @@ class CompetenciesDashboardView(TemplateView):
         if search:
             competences_qs = competences_qs.filter(Q(code__icontains=search) | Q(name__icontains=search))
 
-        competences = list(competences_qs)
-        for competence_obj in competences:
-            competence_obj.items_count = (
-                AssessmentItem.objects.filter(
-                    Q(competence=competence_obj) | Q(competence_links__competence=competence_obj)
-                )
-                .distinct()
-                .count()
-            )
-
         discipline_competences_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
+            'competence',
+        ).annotate(
+            items_count=Count(
+                'program_discipline__assessment_items',
+                filter=Q(
+                    program_discipline__assessment_items__competence_links__competence_id=F('competence_id')
+                ),
+                distinct=True,
+            ),
         ).order_by(
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
@@ -64,40 +77,86 @@ class CompetenciesDashboardView(TemplateView):
             discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__educational_program_id=educational_program_id
             )
+        discipline_options = []
+        if educational_program_id:
+            discipline_options_qs = ProgramDiscipline.objects.select_related('discipline').filter(
+                educational_program_id=educational_program_id
+            )
+            discipline_options = list(
+                discipline_options_qs.order_by('discipline__name').values(
+                    'discipline_id',
+                    'discipline__name',
+                ).distinct()
+            )
+        elif discipline_id:
+            discipline_id = ''
+        valid_discipline_ids = {str(item['discipline_id']) for item in discipline_options}
+        if discipline_id and discipline_id not in valid_discipline_ids:
+            discipline_id = ''
         if discipline_id:
             discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__discipline_id=discipline_id
             )
 
-        discipline_competences = list(discipline_competences_qs)
-        for link in discipline_competences:
-            link.items_count = (
-                AssessmentItem.objects.filter(program_discipline=link.program_discipline)
-                .filter(
-                    Q(competence=link.competence) | Q(competence_links__competence=link.competence)
-                )
-                .distinct()
-                .count()
+        selected_program = (
+            EducationalProgram.objects.select_related('program_profile', 'department')
+            .filter(pk=educational_program_id)
+            .first()
+            if educational_program_id
+            else None
+        )
+        educational_program_options = (
+            EducationalProgram.objects.filter(pk=selected_program.pk)
+            if selected_program
+            else EducationalProgram.objects.none()
+        )
+
+        competences_paginator = Paginator(competences_qs, per_page)
+        competences_page_obj = competences_paginator.get_page(self.request.GET.get('comp_page') or 1)
+
+        discipline_competences_paginator = Paginator(discipline_competences_qs, per_page)
+        discipline_competences_page_obj = discipline_competences_paginator.get_page(
+            self.request.GET.get('link_page') or 1
+        )
+
+        selected_discipline_name = None
+        if discipline_id:
+            for option in discipline_options:
+                if str(option['discipline_id']) == discipline_id:
+                    selected_discipline_name = option['discipline__name']
+                    break
+
+        discipline_competence_competences = []
+        if discipline_id:
+            discipline_competence_competences = list(
+                discipline_competences_qs.values(
+                    'competence__code',
+                    'competence__name',
+                    'competence__competence_type__name',
+                ).distinct().order_by('competence__code')
             )
 
-        discipline_options = ProgramDiscipline.objects.select_related('discipline')
-        if educational_program_id:
-            discipline_options = discipline_options.filter(educational_program_id=educational_program_id)
-        discipline_options = discipline_options.order_by('discipline__name').values(
-            'discipline_id',
-            'discipline__name',
-        ).distinct()
+        params = self.request.GET.copy()
+        competences_params = params.copy()
+        competences_params.pop('comp_page', None)
+        links_params = params.copy()
+        links_params.pop('link_page', None)
 
-        context['educational_programs'] = EducationalProgram.objects.select_related(
-            'program_profile',
-            'department',
-        ).order_by('program_profile__code', 'admission_year')
+        context['educational_programs'] = educational_program_options
         context['discipline_options'] = discipline_options
         context['selected_program'] = educational_program_id
         context['selected_discipline'] = discipline_id
+        context['selected_discipline_name'] = selected_discipline_name
         context['search_query'] = search
-        context['competences'] = competences
-        context['discipline_competences'] = discipline_competences
+        context['competences'] = competences_page_obj.object_list
+        context['discipline_competences'] = discipline_competences_page_obj.object_list
+        context['discipline_competence_competences'] = discipline_competence_competences
+        context['competences_page_obj'] = competences_page_obj
+        context['discipline_competences_page_obj'] = discipline_competences_page_obj
+        context['competences_query_params'] = competences_params.urlencode()
+        context['discipline_competences_query_params'] = links_params.urlencode()
+        context['per_page_choices'] = PER_PAGE_CHOICES
+        context['selected_per_page'] = per_page
         return context
 
 

@@ -15,7 +15,8 @@ def resolve_attr(obj, path):
 class NamedListView(ListView):
     template_name = 'common/list.html'
     context_object_name = 'objects'
-    paginate_by = 20
+    paginate_by = 50
+    per_page_choices = (50, 100, 200)
     title = ''
     search_fields = ()
     list_columns = ()
@@ -35,6 +36,14 @@ class NamedListView(ListView):
             queryset = queryset.filter(conditions)
         return queryset
 
+    def get_paginate_by(self, queryset):
+        raw_per_page = (self.request.GET.get('per_page') or '').strip()
+        if raw_per_page.isdigit():
+            per_page = int(raw_per_page)
+            if per_page in self.per_page_choices:
+                return per_page
+        return self.paginate_by
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['title'] = self.title
@@ -44,6 +53,8 @@ class NamedListView(ListView):
         context['detail_url_name'] = self.detail_url_name
         context['update_url_name'] = self.update_url_name
         context['delete_url_name'] = self.delete_url_name
+        context['per_page_choices'] = self.per_page_choices
+        context['selected_per_page'] = self.get_paginate_by(context.get('object_list'))
 
         rows = []
         for obj in context['object_list']:
