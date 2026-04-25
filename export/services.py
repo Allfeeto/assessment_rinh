@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 from datetime import datetime
 from io import BytesIO
@@ -27,7 +28,18 @@ MAKET_PATH = Path(__file__).resolve().parent.parent / 'templates' / 'export' / '
 FONT_NAME = 'Times New Roman'
 FONT_SIZE_PT = 12
 TITLE_FONT_SIZE_PT = 14
+MAX_EXPORT_ITEMS = 1000
 RUS_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З', 'И', 'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С', 'Т']
+logger = logging.getLogger(__name__)
+
+
+class WordExportError(ValueError):
+    status_code = 400
+
+
+class WordExportNotFoundError(WordExportError):
+    status_code = 404
+
 
 ANSWER_INSTRUCTION_BY_TYPE = {
     TYPE_MATCHING: 'Запишите выбранные цифры под соответствующими буквами, каждый элемент правого столбца используется один раз:',
@@ -221,7 +233,18 @@ def _prepare_export_item(item, number: int, rng: random.Random):
     type_code = infer_item_type_code(item.assessment_item_type.name)
 
     if type_code not in {TYPE_MATCHING, TYPE_SEQUENCE, TYPE_MULTIPLE, TYPE_SINGLE, TYPE_OPEN}:
-        raise ValueError(f'Неизвестный тип задания: {item.assessment_item_type.name}')
+        logger.warning(
+            'Unsupported assessment item type during Word export',
+            extra={
+                'assessment_item_id': item.id,
+                'assessment_item_type_id': item.assessment_item_type_id,
+                'assessment_item_type_name': item.assessment_item_type.name,
+            },
+        )
+        raise WordExportError(
+            'В выбранном наборе есть задания с неподдерживаемым типом. '
+            'Проверьте типы заданий и повторите экспорт.'
+        )
 
     prepared = {
         'number': number,
@@ -536,7 +559,8 @@ def _add_keys_table(doc: Document, prepared_items: list[dict]):
 
 def _build_document(program_discipline, prepared_items: list[dict]) -> Document:
     if not MAKET_PATH.exists():
-        raise ValueError(f'Не найден макет экспорта: {MAKET_PATH}')
+        logger.error('Word export template is missing', extra={'template_path': str(MAKET_PATH)})
+        raise WordExportError('Не удалось сформировать Word-файл: не найден шаблон документа.')
 
     doc = Document(str(MAKET_PATH))
     _clear_document_content(doc)
@@ -588,11 +612,28 @@ def generate_docx(program_id, discipline_id, filters):
         .first()
     )
     if not program_discipline:
-        raise ValueError('Связка программы и дисциплины не найдена.')
+        raise WordExportNotFoundError('Связка программы и дисциплины не найдена.')
 
-    items = list(_filtered_items(program_id, discipline_id, filters))
+    items_queryset = _filtered_items(program_id, discipline_id, filters)
+    items_count = items_queryset.count()
+    if items_count > MAX_EXPORT_ITEMS:
+        logger.info(
+            'Word export item limit exceeded',
+            extra={
+                'program_id': program_id,
+                'discipline_id': discipline_id,
+                'items_count': items_count,
+                'max_export_items': MAX_EXPORT_ITEMS,
+            },
+        )
+        raise WordExportError(
+            f'В экспорт попало слишком много заданий: {items_count}. '
+            f'Уточните фильтры, максимум за один экспорт — {MAX_EXPORT_ITEMS}.'
+        )
+
+    items = list(items_queryset)
     if not items:
-        raise ValueError('По выбранным фильтрам задания не найдены.')
+        raise WordExportNotFoundError('По выбранным фильтрам задания не найдены.')
 
     seed = f'{program_id}:{discipline_id}:{len(items)}:{datetime.now().strftime("%Y%m%d%H%M%S%f")}'
     rng = random.Random(seed)

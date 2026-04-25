@@ -40,7 +40,7 @@ class WordExportForm(forms.Form):
         label='Компетенция',
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, validate_required=True, **kwargs):
         super().__init__(*args, **kwargs)
 
         program_id = None
@@ -68,13 +68,30 @@ class WordExportForm(forms.Form):
             kind='educational_program',
             placeholder='Введите профиль, кафедру или год набора',
         )
+        if not validate_required:
+            self.fields['educational_program'].required = False
+            self.fields['discipline'].required = False
 
         base_discipline_qs = Discipline.objects.order_by('name')
+        linked_disciplines_qs = ProgramDiscipline.objects.all()
+        if program_id:
+            linked_disciplines_qs = linked_disciplines_qs.filter(educational_program_id=program_id)
+        if selected_competence_id:
+            linked_disciplines_qs = linked_disciplines_qs.filter(
+                discipline_competences__competence_id=selected_competence_id
+            )
+        if program_id or selected_competence_id:
+            base_discipline_qs = base_discipline_qs.filter(
+                id__in=linked_disciplines_qs.values_list('discipline_id', flat=True)
+            ).distinct()
         self.fields['discipline'].queryset = autocomplete_queryset(base_discipline_qs, discipline_id)
         apply_autocomplete_attrs(
             self.fields['discipline'],
             kind='discipline',
             placeholder='Введите наименование дисциплины',
+            parent_field_id='id_educational_program',
+            parent_param='educational_program_id',
+            dynamic_params=(('id_competence', 'competence_id'),),
         )
 
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
@@ -87,21 +104,18 @@ class WordExportForm(forms.Form):
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
 
-        if program_id and discipline_id:
-            program_discipline = ProgramDiscipline.objects.filter(
-                educational_program_id=program_id,
+        if discipline_id:
+            program_disciplines = ProgramDiscipline.objects.filter(
                 discipline_id=discipline_id,
-            ).first()
-            if program_discipline:
-                linked_ids = DisciplineCompetence.objects.filter(
-                    program_discipline=program_discipline,
-                ).values_list('competence_id', flat=True)
-                competence_qs = competence_qs.filter(id__in=linked_ids)
-            else:
-                competence_qs = competence_qs.none()
-
-        if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
-            competence_qs = Competence.objects.filter(pk=selected_competence_id)
+            )
+            if program_id:
+                program_disciplines = program_disciplines.filter(
+                    educational_program_id=program_id,
+                )
+            linked_ids = DisciplineCompetence.objects.filter(
+                program_discipline_id__in=program_disciplines.values_list('id', flat=True),
+            ).values_list('competence_id', flat=True)
+            competence_qs = competence_qs.filter(id__in=linked_ids)
 
         self.fields['competence'].queryset = competence_qs
         apply_autocomplete_attrs(
@@ -110,8 +124,11 @@ class WordExportForm(forms.Form):
             placeholder='Введите код или наименование компетенции',
             parent_field_id='id_educational_program',
             parent_param='educational_program_id',
-            parent_required=True,
+            dynamic_params=(('id_discipline', 'discipline_id'),),
         )
+
+        for field_name in ('educational_program', 'discipline', 'competence', 'assessment_item_type'):
+            self.fields[field_name].widget.attrs['data-auto-submit-change'] = '1'
 
     def clean(self):
         cleaned_data = super().clean()

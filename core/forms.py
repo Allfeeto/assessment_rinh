@@ -59,6 +59,7 @@ def apply_autocomplete_attrs(
     parent_field_id=None,
     parent_param=None,
     parent_required=False,
+    dynamic_params=None,
     extra_params=None,
 ):
     attrs = field.widget.attrs
@@ -72,5 +73,9 @@ def apply_autocomplete_attrs(
         attrs['data-autocomplete-parent-param'] = parent_param
     if parent_required:
         attrs['data-autocomplete-parent-required'] = '1'
+    if dynamic_params:
+        attrs['data-autocomplete-dynamic-params'] = ','.join(
+            f'{field_id}:{param_name}' for field_id, param_name in dynamic_params
+        )
     if extra_params:
         attrs['data-autocomplete-extra'] = urlencode(extra_params)

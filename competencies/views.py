@@ -30,6 +30,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         discipline_id = self.request.GET.get('discipline', '').strip()
+        competence_id = self.request.GET.get('competence', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
 
@@ -43,6 +44,19 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         if educational_program_id:
             competences_qs = competences_qs.filter(educational_program_id=educational_program_id)
+        if discipline_id:
+            linked_competence_ids = DisciplineCompetence.objects.filter(
+                program_discipline__discipline_id=discipline_id,
+            )
+            if educational_program_id:
+                linked_competence_ids = linked_competence_ids.filter(
+                    program_discipline__educational_program_id=educational_program_id,
+                )
+            competences_qs = competences_qs.filter(
+                id__in=linked_competence_ids.values_list('competence_id', flat=True)
+            )
+        if competence_id:
+            competences_qs = competences_qs.filter(pk=competence_id)
         if search:
             competences_qs = competences_qs.filter(Q(code__icontains=search) | Q(name__icontains=search))
 
@@ -69,19 +83,24 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__educational_program_id=educational_program_id
             )
+        if competence_id:
+            discipline_competences_qs = discipline_competences_qs.filter(competence_id=competence_id)
         discipline_options = []
+        discipline_options_qs = ProgramDiscipline.objects.select_related('discipline')
         if educational_program_id:
-            discipline_options_qs = ProgramDiscipline.objects.select_related('discipline').filter(
+            discipline_options_qs = discipline_options_qs.filter(
                 educational_program_id=educational_program_id
             )
-            discipline_options = list(
-                discipline_options_qs.order_by('discipline__name').values(
-                    'discipline_id',
-                    'discipline__name',
-                ).distinct()
+        if competence_id:
+            discipline_options_qs = discipline_options_qs.filter(
+                discipline_competences__competence_id=competence_id
             )
-        elif discipline_id:
-            discipline_id = ''
+        discipline_options = list(
+            discipline_options_qs.order_by('discipline__name').values(
+                'discipline_id',
+                'discipline__name',
+            ).distinct()
+        )
         valid_discipline_ids = {str(item['discipline_id']) for item in discipline_options}
         if discipline_id and discipline_id not in valid_discipline_ids:
             discipline_id = ''
@@ -101,6 +120,11 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             EducationalProgram.objects.filter(pk=selected_program.pk)
             if selected_program
             else EducationalProgram.objects.none()
+        )
+        competence_options = (
+            Competence.objects.filter(pk=competence_id)
+            if competence_id
+            else Competence.objects.none()
         )
 
         competences_paginator = Paginator(competences_qs, per_page)
@@ -138,8 +162,10 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         context['discipline_options'] = discipline_options
         context['selected_program'] = educational_program_id
         context['selected_discipline'] = discipline_id
+        context['selected_competence'] = competence_id
         context['selected_discipline_name'] = selected_discipline_name
         context['search_query'] = search
+        context['competence_options'] = competence_options
         context['competences'] = competences_page_obj.object_list
         context['discipline_competences'] = discipline_competences_page_obj.object_list
         context['discipline_competence_competences'] = discipline_competence_competences

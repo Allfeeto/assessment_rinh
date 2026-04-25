@@ -2,7 +2,7 @@ from .base import *  # noqa: F401,F403
 
 
 SECRET_KEY = env_value('DJANGO_SECRET_KEY', required=True)
-DEBUG = env_bool('DJANGO_DEBUG', default=False)
+DEBUG = False
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', required=True)
 
 SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', default=True)

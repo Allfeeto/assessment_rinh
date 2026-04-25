@@ -402,6 +402,26 @@
         }
     }
 
+    function parseDynamicParams(raw) {
+        if (!raw) {
+            return [];
+        }
+        return raw.split(',')
+            .map(item => item.trim())
+            .filter(Boolean)
+            .map(item => {
+                const separatorIndex = item.indexOf(':');
+                if (separatorIndex < 0) {
+                    return null;
+                }
+                return {
+                    fieldId: item.slice(0, separatorIndex).trim(),
+                    paramName: item.slice(separatorIndex + 1).trim(),
+                };
+            })
+            .filter(item => item && item.fieldId && item.paramName);
+    }
+
     function ensureOption(select, id, label) {
         const value = String(id);
         let option = Array.from(select.options).find(item => item.value === value);
@@ -414,6 +434,8 @@
             option.textContent = label;
         }
         option.selected = true;
+        select.dataset.autocompleteSelectedLabel = label;
+        delete select.dataset.autocompleteCleared;
     }
 
     function buildLookupUrl(select, query) {
@@ -442,6 +464,14 @@
 
         const extraParams = parseExtraParams(select.dataset.autocompleteExtra);
         extraParams.forEach((value, key) => params.set(key, value));
+
+        const dynamicParams = parseDynamicParams(select.dataset.autocompleteDynamicParams);
+        dynamicParams.forEach(item => {
+            const field = document.getElementById(item.fieldId);
+            if (field && field.value) {
+                params.set(item.paramName, field.value);
+            }
+        });
 
         const hasQuery = baseUrl.indexOf('?') >= 0;
         const separator = hasQuery ? '&' : '?';
@@ -481,6 +511,7 @@
         const selectedOption = select.options[select.selectedIndex];
         if (selectedOption && selectedOption.value) {
             input.value = selectedOption.textContent || '';
+            select.dataset.autocompleteSelectedLabel = input.value;
         }
 
         wrapper.appendChild(input);
@@ -494,6 +525,23 @@
             menu.innerHTML = '';
         }
 
+        function clearSelection() {
+            if (select.value) {
+                select.dataset.autocompleteCleared = '1';
+            }
+            select.value = '';
+            delete select.dataset.autocompleteSelectedLabel;
+        }
+
+        function getLookupQuery() {
+            const query = input.value.trim();
+            const selectedLabel = (select.dataset.autocompleteSelectedLabel || '').trim();
+            if (select.value && selectedLabel && query === selectedLabel) {
+                return '';
+            }
+            return query;
+        }
+
         function setInputStateByParent() {
             const parentId = select.dataset.autocompleteParent;
             if (!parentId || select.dataset.autocompleteParentRequired !== '1') {
@@ -505,7 +553,7 @@
             input.disabled = !hasParentValue;
             if (input.disabled) {
                 input.value = '';
-                select.value = '';
+                clearSelection();
                 closeMenu();
             }
         }
@@ -562,14 +610,23 @@
         }
 
         input.addEventListener('input', () => {
-            select.value = '';
+            const selectedLabel = (select.dataset.autocompleteSelectedLabel || '').trim();
             const query = input.value.trim();
+            if (select.value && query !== selectedLabel) {
+                clearSelection();
+            }
             fetchResults(query);
         });
 
         input.addEventListener('focus', () => {
-            const query = input.value.trim();
-            fetchResults(query);
+            fetchResults(getLookupQuery());
+        });
+
+        input.addEventListener('blur', () => {
+            if (!input.value.trim() && select.dataset.autocompleteCleared === '1') {
+                delete select.dataset.autocompleteCleared;
+                select.dispatchEvent(new Event('change', {bubbles: true}));
+            }
         });
 
         document.addEventListener('click', event => {
@@ -584,7 +641,7 @@
             if (parentField) {
                 parentField.addEventListener('change', () => {
                     input.value = '';
-                    select.value = '';
+                    clearSelection();
                     closeMenu();
                     setInputStateByParent();
                 });
@@ -604,11 +661,7 @@
                 if ((form.method || 'get').toLowerCase() !== 'get') {
                     return;
                 }
-                if (typeof form.requestSubmit === 'function') {
-                    form.requestSubmit();
-                } else {
-                    form.submit();
-                }
+                form.submit();
             });
         });
     }

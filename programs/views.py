@@ -1,6 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.generic import TemplateView
@@ -23,7 +22,16 @@ from .services import PlxConflictError, PlxImportError, PlxImportService
 from .services.plx_dto import PlxProgramImportDTO
 
 
-class ProgramsDashboardView(LoginRequiredMixin, TemplateView):
+class StaffRequiredPostMixin(UserPassesTestMixin):
+    raise_exception = True
+
+    def test_func(self):
+        if self.request.method != 'POST':
+            return True
+        return self.request.user.is_staff or self.request.user.is_superuser
+
+
+class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, TemplateView):
     template_name = 'programs/dashboard.html'
     pending_session_key = 'plx_import_pending_dto'
     import_service = PlxImportService()
@@ -93,9 +101,6 @@ class ProgramsDashboardView(LoginRequiredMixin, TemplateView):
         return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
-        if not (request.user.is_staff or request.user.is_superuser):
-            raise PermissionDenied('Импорт учебных планов доступен только сотрудникам с правами staff.')
-
         action = request.POST.get('action', 'upload')
         if action == 'confirm_replace':
             return self._handle_confirm_replace(request)

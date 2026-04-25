@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError, transaction
@@ -30,6 +32,9 @@ from .services import (
     split_rows_for_detail,
     sync_assessment_item_competences,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_next_url(request, fallback):
@@ -645,6 +650,13 @@ class TeacherWorkspaceCopyItemsView(TeacherRequiredMixin, View):
             return redirect(next_url)
 
         set_clipboard_item_ids(request.session, valid_item_ids)
+        logger.info(
+            'Teacher workspace copied assessment items',
+            extra={
+                'user_id': request.user.id,
+                'source_ids': valid_item_ids,
+            },
+        )
         messages.success(request, f'Скопировано заданий: {len(valid_item_ids)}.')
         return redirect(next_url)
 
@@ -717,6 +729,15 @@ class TeacherWorkspacePasteItemsView(TeacherRequiredMixin, View):
             )
         else:
             messages.success(request, f'Успешно вставлено заданий: {copied_count}.')
+        logger.info(
+            'Teacher workspace pasted assessment items',
+            extra={
+                'user_id': request.user.id,
+                'source_ids': [item.id for item in source_items],
+                'target_program_discipline_id': int(target_program_discipline_id),
+                'copied_count': copied_count,
+            },
+        )
         return redirect(next_url)
 
 

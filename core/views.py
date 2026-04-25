@@ -336,6 +336,9 @@ def lookup_options(request):
 
     if kind == 'training_direction':
         queryset = TrainingDirection.objects.order_by('code')
+        education_level_id = request.GET.get('education_level_id')
+        if education_level_id:
+            queryset = queryset.filter(education_level_id=education_level_id)
         if query:
             queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))
         results = [
@@ -347,6 +350,9 @@ def lookup_options(request):
     if kind == 'program_profile':
         queryset = ProgramProfile.objects.select_related('training_direction').order_by('code')
         direction_id = request.GET.get('training_direction_id')
+        education_level_id = request.GET.get('education_level_id')
+        if education_level_id:
+            queryset = queryset.filter(training_direction__education_level_id=education_level_id)
         if direction_id:
             queryset = queryset.filter(training_direction_id=direction_id)
         if query:
@@ -370,6 +376,23 @@ def lookup_options(request):
             'program_profile__training_direction',
             'department',
         ).order_by('program_profile__code', 'admission_year')
+        education_level_id = request.GET.get('education_level_id')
+        training_direction_id = request.GET.get('training_direction_id')
+        program_profile_id = request.GET.get('program_profile_id')
+        discipline_id = request.GET.get('discipline_id')
+        competence_id = request.GET.get('competence_id')
+        if education_level_id:
+            queryset = queryset.filter(
+                program_profile__training_direction__education_level_id=education_level_id
+            )
+        if training_direction_id:
+            queryset = queryset.filter(program_profile__training_direction_id=training_direction_id)
+        if program_profile_id:
+            queryset = queryset.filter(program_profile_id=program_profile_id)
+        if discipline_id:
+            queryset = queryset.filter(program_disciplines__discipline_id=discipline_id)
+        if competence_id:
+            queryset = queryset.filter(competences__id=competence_id)
         if query:
             tokens = _tokenize_lookup_query(query)
             if not tokens:
@@ -387,26 +410,55 @@ def lookup_options(request):
                 if token.isdigit() and len(token) == 4:
                     token_filter |= Q(admission_year=int(token))
                 queryset = queryset.filter(token_filter)
-        results = [{'id': obj.id, 'label': str(obj)} for obj in queryset[:limit]]
+        results = [{'id': obj.id, 'label': str(obj)} for obj in queryset.distinct()[:limit]]
         return JsonResponse({'results': results})
 
     if kind == 'discipline':
         queryset = Discipline.objects.order_by('name')
         exclude_program_id = request.GET.get('exclude_program_id')
+        education_level_id = request.GET.get('education_level_id')
+        training_direction_id = request.GET.get('training_direction_id')
+        program_profile_id = request.GET.get('program_profile_id')
         educational_program_id = request.GET.get('educational_program_id')
+        competence_id = request.GET.get('competence_id')
         if exclude_program_id:
             linked_ids = ProgramDiscipline.objects.filter(
                 educational_program_id=exclude_program_id
             ).values_list('discipline_id', flat=True)
             queryset = queryset.exclude(id__in=linked_ids)
-        if educational_program_id:
-            linked_ids = ProgramDiscipline.objects.filter(
-                educational_program_id=educational_program_id
-            ).values_list('discipline_id', flat=True)
+        if (
+            education_level_id
+            or training_direction_id
+            or program_profile_id
+            or educational_program_id
+            or competence_id
+        ):
+            linked_program_disciplines = ProgramDiscipline.objects.all()
+            if education_level_id:
+                linked_program_disciplines = linked_program_disciplines.filter(
+                    educational_program__program_profile__training_direction__education_level_id=education_level_id
+                )
+            if training_direction_id:
+                linked_program_disciplines = linked_program_disciplines.filter(
+                    educational_program__program_profile__training_direction_id=training_direction_id
+                )
+            if program_profile_id:
+                linked_program_disciplines = linked_program_disciplines.filter(
+                    educational_program__program_profile_id=program_profile_id
+                )
+            if educational_program_id:
+                linked_program_disciplines = linked_program_disciplines.filter(
+                    educational_program_id=educational_program_id
+                )
+            if competence_id:
+                linked_program_disciplines = linked_program_disciplines.filter(
+                    discipline_competences__competence_id=competence_id
+                )
+            linked_ids = linked_program_disciplines.values_list('discipline_id', flat=True)
             queryset = queryset.filter(id__in=linked_ids)
         if query:
             queryset = queryset.filter(name__icontains=query)
-        results = [{'id': obj.id, 'label': obj.name} for obj in queryset[:limit]]
+        results = [{'id': obj.id, 'label': obj.name} for obj in queryset.distinct()[:limit]]
         return JsonResponse({'results': results})
 
     if kind == 'program_discipline':
@@ -451,7 +503,22 @@ def lookup_options(request):
 
         educational_program_id = request.GET.get('educational_program_id')
         program_discipline_id = request.GET.get('program_discipline_id')
+        discipline_id = request.GET.get('discipline_id')
+        education_level_id = request.GET.get('education_level_id')
+        training_direction_id = request.GET.get('training_direction_id')
+        program_profile_id = request.GET.get('program_profile_id')
         linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
+
+        if education_level_id:
+            queryset = queryset.filter(
+                educational_program__program_profile__training_direction__education_level_id=education_level_id
+            )
+        if training_direction_id:
+            queryset = queryset.filter(
+                educational_program__program_profile__training_direction_id=training_direction_id
+            )
+        if program_profile_id:
+            queryset = queryset.filter(educational_program__program_profile_id=program_profile_id)
 
         if program_discipline_id:
             program_id = (
@@ -470,6 +537,17 @@ def lookup_options(request):
                 queryset = queryset.none()
         elif educational_program_id:
             queryset = queryset.filter(educational_program_id=educational_program_id)
+
+        if discipline_id:
+            discipline_links = DisciplineCompetence.objects.filter(
+                program_discipline__discipline_id=discipline_id
+            )
+            if educational_program_id:
+                discipline_links = discipline_links.filter(
+                    program_discipline__educational_program_id=educational_program_id
+                )
+            linked_ids = discipline_links.values_list('competence_id', flat=True)
+            queryset = queryset.filter(id__in=linked_ids)
 
         if query:
             queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))

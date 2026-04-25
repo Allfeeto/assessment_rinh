@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
@@ -8,17 +10,21 @@ from assessment.access import can_access_program_discipline
 from disciplines.models import ProgramDiscipline
 
 from .forms import WordExportForm
-from .services import generate_docx
+from .services import WordExportError, generate_docx
+
+
+logger = logging.getLogger(__name__)
 
 
 class WordExportView(LoginRequiredMixin, View):
     template_name = 'export/word.html'
 
     def get(self, request, *args, **kwargs):
-        has_params = bool(request.GET.get('educational_program') or request.GET.get('discipline'))
-        form = WordExportForm(request.GET if has_params else None)
+        has_params = bool(request.GET)
+        wants_download = request.GET.get('download') == '1'
+        form = WordExportForm(request.GET if has_params else None, validate_required=wants_download)
 
-        if not has_params:
+        if not wants_download:
             return render(request, self.template_name, {'form': form})
 
         if not form.is_valid():
@@ -41,7 +47,7 @@ class WordExportView(LoginRequiredMixin, View):
             form.add_error('discipline', 'Выбранная дисциплина не включена в указанную образовательную программу.')
             return render(request, self.template_name, {'form': form}, status=404)
 
-        if not can_access_program_discipline(request.user, program_discipline_id, allow_staff=True):
+        if not can_access_program_discipline(request.user, program_discipline_id):
             raise PermissionDenied('У вас нет доступа к экспорту материалов по выбранной дисциплине.')
 
         try:
@@ -53,9 +59,21 @@ class WordExportView(LoginRequiredMixin, View):
                     'competence_id': competence.id if competence else None,
                 },
             )
-        except ValueError as exc:
+        except WordExportError as exc:
             form.add_error(None, str(exc))
-            return render(request, self.template_name, {'form': form}, status=404)
+            return render(request, self.template_name, {'form': form}, status=exc.status_code)
+
+        logger.info(
+            'Word export generated',
+            extra={
+                'user_id': request.user.id,
+                'program_id': educational_program.id,
+                'discipline_id': discipline.id,
+                'program_discipline_id': program_discipline_id,
+                'assessment_item_type_id': assessment_item_type.id if assessment_item_type else None,
+                'competence_id': competence.id if competence else None,
+            },
+        )
 
         filename = (
             f'assessment_program_{educational_program.id}_discipline_{discipline.id}.docx'

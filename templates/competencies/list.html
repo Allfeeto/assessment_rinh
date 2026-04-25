@@ -33,7 +33,7 @@
                 data-autocomplete-placeholder="Введите название дисциплины"
                 data-autocomplete-parent="id_program"
                 data-autocomplete-parent-param="educational_program_id"
-                data-autocomplete-parent-required="1"
+                data-autocomplete-dynamic-params="id_competence:competence_id"
                 data-auto-submit-change="1"
             >
                 <option value="">Все дисциплины</option>
@@ -43,8 +43,23 @@
             </select>
         </div>
         <div class="field">
-            <label for="id_q">Поиск компетенции</label>
-            <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Код или наименование">
+            <label for="id_competence">Поиск компетенции</label>
+            <select
+                id="id_competence"
+                name="competence"
+                data-autocomplete-kind="competence"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите код или наименование компетенции"
+                data-autocomplete-parent="id_program"
+                data-autocomplete-parent-param="educational_program_id"
+                data-autocomplete-dynamic-params="id_discipline:discipline_id"
+                data-auto-submit-change="1"
+            >
+                <option value="">Все компетенции</option>
+                {% for competence in competence_options %}
+                    <option value="{{ competence.id }}" {% if selected_competence == competence.id|stringformat:"s" %}selected{% endif %}>{{ competence.code }} — {{ competence.name }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="field" style="max-width: 160px;">
             <label for="id_per_page">Строк на странице</label>
