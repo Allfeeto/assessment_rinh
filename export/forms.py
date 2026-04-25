@@ -67,6 +67,7 @@ class WordExportForm(forms.Form):
             self.fields['educational_program'],
             kind='educational_program',
             placeholder='Введите профиль, кафедру или год набора',
+            dynamic_params=(('id_discipline', 'discipline_id'), ('id_competence', 'competence_id')),
         )
         if not validate_required:
             self.fields['educational_program'].required = False

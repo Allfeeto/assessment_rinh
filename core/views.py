@@ -30,21 +30,51 @@ from .view_helpers import (
 
 
 LOOKUP_STOP_WORDS = {'набор', 'года', 'год', 'программа', 'профиль'}
+LOOKUP_SPLIT_RE = r'[\s|,;:()«»"\'/\\\-\u2010-\u2015]+'
 
 
 def _tokenize_lookup_query(query: str) -> list[str]:
     if not query:
         return []
-    tokens = re.split(r'[\s|,;:()«»"\'/\\\-]+', query)
+    tokens = re.split(LOOKUP_SPLIT_RE, query.replace('ё', 'е').replace('Ё', 'Е'))
     cleaned = []
     for token in tokens:
         value = token.strip().lower()
         if not value or value in LOOKUP_STOP_WORDS:
             continue
-        if value.isdigit() and len(value) < 4:
-            continue
         cleaned.append(value)
     return cleaned
+
+
+def _apply_lookup_tokens(queryset, query, fields):
+    tokens = _tokenize_lookup_query(query)
+    if not tokens and query:
+        tokens = [query.strip().lower()]
+    for token in tokens:
+        conditions = Q()
+        for field in fields:
+            conditions |= Q(**{f'{field}__icontains': token})
+        queryset = queryset.filter(conditions)
+    return queryset
+
+
+def _filter_selected_id(queryset, selected_id):
+    if selected_id and selected_id.isdigit():
+        return queryset.filter(pk=int(selected_id))
+    return queryset
+
+
+def _unique_lookup_results(queryset, limit, label_factory):
+    results = []
+    seen_ids = set()
+    for obj in queryset:
+        if obj.id in seen_ids:
+            continue
+        seen_ids.add(obj.id)
+        results.append({'id': obj.id, 'label': label_factory(obj)})
+        if len(results) >= limit:
+            break
+    return results
 
 
 class HomeView(LoginRequiredMixin, TemplateView):
@@ -271,6 +301,7 @@ class AcademicTitleDeleteView(NamedDeleteView):
 def lookup_options(request):
     kind = (request.GET.get('kind') or '').strip()
     query = (request.GET.get('q') or '').strip()
+    selected_id = request.GET.get('selected_id')
 
     try:
         limit = int(request.GET.get('limit', 20))
@@ -281,15 +312,13 @@ def lookup_options(request):
     if kind == 'department':
         queryset = Department.objects.order_by('number')
         if query:
-            queryset = queryset.filter(
-                Q(number__icontains=query)
-                | Q(short_name__icontains=query)
-                | Q(full_name__icontains=query)
-            )
-        results = [
-            {'id': obj.id, 'label': f'{obj.number} — {obj.short_name}'}
-            for obj in queryset[:limit]
-        ]
+            queryset = _apply_lookup_tokens(queryset, query, ('number', 'short_name', 'full_name'))
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset,
+            limit,
+            lambda obj: f'{obj.number} — {obj.short_name}',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'teacher':
@@ -298,15 +327,17 @@ def lookup_options(request):
         if department_id:
             queryset = queryset.filter(department_id=department_id)
         if query:
-            queryset = queryset.filter(
-                Q(full_name__icontains=query)
-                | Q(department__number__icontains=query)
-                | Q(department__short_name__icontains=query)
+            queryset = _apply_lookup_tokens(
+                queryset,
+                query,
+                ('full_name', 'department__number', 'department__short_name'),
             )
-        results = [
-            {'id': obj.id, 'label': f'{obj.full_name} ({obj.department.short_name})'}
-            for obj in queryset[:limit]
-        ]
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset,
+            limit,
+            lambda obj: f'{obj.full_name} ({obj.department.short_name})',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'auth_user':
@@ -318,20 +349,22 @@ def lookup_options(request):
         else:
             queryset = queryset.filter(teacher_profile__isnull=True)
         if query:
-            queryset = queryset.filter(
-                Q(username__icontains=query)
-                | Q(first_name__icontains=query)
-                | Q(last_name__icontains=query)
-                | Q(email__icontains=query)
-            )
+            queryset = _apply_lookup_tokens(queryset, query, ('username', 'first_name', 'last_name', 'email'))
+        queryset = _filter_selected_id(queryset, selected_id)
         results = []
-        for obj in queryset[:limit]:
+        seen_ids = set()
+        for obj in queryset:
+            if obj.id in seen_ids:
+                continue
+            seen_ids.add(obj.id)
             display_name = ' '.join(part for part in [obj.last_name, obj.first_name] if part).strip()
             if display_name:
                 label = f'{obj.username} ({display_name})'
             else:
                 label = obj.username
             results.append({'id': obj.id, 'label': label})
+            if len(results) >= limit:
+                break
         return JsonResponse({'results': results})
 
     if kind == 'training_direction':
@@ -340,11 +373,13 @@ def lookup_options(request):
         if education_level_id:
             queryset = queryset.filter(education_level_id=education_level_id)
         if query:
-            queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))
-        results = [
-            {'id': obj.id, 'label': f'{obj.code} — {obj.name}'}
-            for obj in queryset[:limit]
-        ]
+            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset,
+            limit,
+            lambda obj: f'{obj.code} — {obj.name}',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'program_profile':
@@ -356,19 +391,17 @@ def lookup_options(request):
         if direction_id:
             queryset = queryset.filter(training_direction_id=direction_id)
         if query:
-            queryset = queryset.filter(
-                Q(code__icontains=query)
-                | Q(name__icontains=query)
-                | Q(training_direction__code__icontains=query)
-                | Q(training_direction__name__icontains=query)
+            queryset = _apply_lookup_tokens(
+                queryset,
+                query,
+                ('code', 'name', 'training_direction__code', 'training_direction__name'),
             )
-        results = [
-            {
-                'id': obj.id,
-                'label': f'{obj.code} — {obj.name} ({obj.training_direction.code})',
-            }
-            for obj in queryset[:limit]
-        ]
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset,
+            limit,
+            lambda obj: f'{obj.code} — {obj.name} ({obj.training_direction.code})',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'educational_program':
@@ -410,7 +443,8 @@ def lookup_options(request):
                 if token.isdigit() and len(token) == 4:
                     token_filter |= Q(admission_year=int(token))
                 queryset = queryset.filter(token_filter)
-        results = [{'id': obj.id, 'label': str(obj)} for obj in queryset.distinct()[:limit]]
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(queryset.distinct(), limit, str)
         return JsonResponse({'results': results})
 
     if kind == 'discipline':
@@ -457,8 +491,9 @@ def lookup_options(request):
             linked_ids = linked_program_disciplines.values_list('discipline_id', flat=True)
             queryset = queryset.filter(id__in=linked_ids)
         if query:
-            queryset = queryset.filter(name__icontains=query)
-        results = [{'id': obj.id, 'label': obj.name} for obj in queryset.distinct()[:limit]]
+            queryset = _apply_lookup_tokens(queryset, query, ('name',))
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(queryset.distinct(), limit, lambda obj: obj.name)
         return JsonResponse({'results': results})
 
     if kind == 'program_discipline':
@@ -489,10 +524,12 @@ def lookup_options(request):
                 if token.isdigit() and len(token) == 4:
                     token_filter |= Q(educational_program__admission_year=int(token))
                 queryset = queryset.filter(token_filter)
-        results = [
-            {'id': obj.id, 'label': f'{obj.educational_program} | {obj.discipline.name}'}
-            for obj in queryset[:limit]
-        ]
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset.distinct(),
+            limit,
+            lambda obj: f'{obj.educational_program} | {obj.discipline.name}',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'competence':
@@ -550,19 +587,22 @@ def lookup_options(request):
             queryset = queryset.filter(id__in=linked_ids)
 
         if query:
-            queryset = queryset.filter(Q(code__icontains=query) | Q(name__icontains=query))
+            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
 
-        results = [
-            {'id': obj.id, 'label': f'{obj.code} — {obj.name}'}
-            for obj in queryset.distinct()[:limit]
-        ]
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(
+            queryset.distinct(),
+            limit,
+            lambda obj: f'{obj.code} — {obj.name}',
+        )
         return JsonResponse({'results': results})
 
     if kind == 'assessment_item_type':
         queryset = AssessmentItemType.objects.order_by('name')
         if query:
-            queryset = queryset.filter(name__icontains=query)
-        results = [{'id': obj.id, 'label': obj.name} for obj in queryset[:limit]]
+            queryset = _apply_lookup_tokens(queryset, query, ('name',))
+        queryset = _filter_selected_id(queryset, selected_id)
+        results = _unique_lookup_results(queryset, limit, lambda obj: obj.name)
         return JsonResponse({'results': results})
 
     return JsonResponse({'results': []})

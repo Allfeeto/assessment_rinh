@@ -449,6 +449,10 @@
         params.set('kind', kind);
         params.set('q', query || '');
         params.set('limit', '20');
+        const selectedLabel = (select.dataset.autocompleteSelectedLabel || '').trim();
+        if (select.value && selectedLabel && !(query || '').trim()) {
+            params.set('selected_id', select.value);
+        }
 
         const parentId = select.dataset.autocompleteParent;
         const parentParam = select.dataset.autocompleteParentParam;
