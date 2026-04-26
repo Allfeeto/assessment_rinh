@@ -1,21 +1,12 @@
 from django import forms
 
-from assessment.services import get_item_type_ui_name, get_ui_assessment_item_types_queryset
+from assessment.services import get_ui_assessment_item_types_queryset
 from competencies.models import Competence, DisciplineCompetence
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from core.form_fields import AssessmentItemTypeChoiceField, CompetenceChoiceField
 from core.models import AssessmentItemType
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram
-
-
-class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return get_item_type_ui_name(obj)
-
-
-class CompetenceChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return f'{obj.code} — {obj.name}'
 
 
 class ReportFilterForm(forms.Form):

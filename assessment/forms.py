@@ -5,6 +5,11 @@ from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from core.form_fields import (
+    AssessmentItemTypeChoiceField,
+    CompetenceChoiceField,  # noqa: F401 — используется внешними импортами
+    CompetenceMultipleChoiceField,
+)
 from competencies.models import Competence, DisciplineCompetence
 from core.models import AssessmentItemType
 from disciplines.models import ProgramDiscipline
@@ -27,21 +32,6 @@ def _clean_text(value):
     if value is None:
         return ''
     return str(value).strip()
-
-
-class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return get_item_type_ui_name(obj)
-
-
-class CompetenceChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return f'{obj.code} — {obj.name}'
-
-
-class CompetenceMultipleChoiceField(forms.ModelMultipleChoiceField):
-    def label_from_instance(self, obj):
-        return f'{obj.code} — {obj.name}'
 
 
 class AssessmentItemForm(forms.ModelForm):

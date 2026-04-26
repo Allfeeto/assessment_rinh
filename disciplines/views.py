@@ -3,13 +3,15 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.db.models import Count
+from django.db.models import Count, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
+from assessment.models import AssessmentItem
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -144,21 +146,65 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
 
+        # Считаем агрегаты через Subquery, чтобы избежать инфляции
+        # из-за пересекающихся JOIN’ов при нескольких Count(distinct=True).
+        discipline_programs_count = (
+            ProgramDiscipline.objects.filter(discipline=OuterRef('pk'))
+            .order_by()
+            .values('discipline')
+            .annotate(total=Count('id'))
+            .values('total')
+        )
+        discipline_items_count = (
+            AssessmentItem.objects.filter(program_discipline__discipline=OuterRef('pk'))
+            .order_by()
+            .values('program_discipline__discipline')
+            .annotate(total=Count('id'))
+            .values('total')
+        )
+
         disciplines_qs = Discipline.objects.annotate(
-            programs_count=Count('program_disciplines', distinct=True),
-            items_count=Count('program_disciplines__assessment_items', distinct=True),
+            programs_count=Coalesce(
+                Subquery(discipline_programs_count, output_field=IntegerField()),
+                0,
+            ),
+            items_count=Coalesce(
+                Subquery(discipline_items_count, output_field=IntegerField()),
+                0,
+            ),
         ).order_by('name')
 
         if search:
             disciplines_qs = disciplines_qs.filter(name__icontains=search)
+
+        program_discipline_competences_count = (
+            DisciplineCompetence.objects.filter(program_discipline=OuterRef('pk'))
+            .order_by()
+            .values('program_discipline')
+            .annotate(total=Count('id'))
+            .values('total')
+        )
+        program_discipline_items_count = (
+            AssessmentItem.objects.filter(program_discipline=OuterRef('pk'))
+            .order_by()
+            .values('program_discipline')
+            .annotate(total=Count('id'))
+            .values('total')
+        )
 
         program_disciplines_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
         ).annotate(
-            competences_count=Count('discipline_competences', distinct=True),
-            items_count=Count('assessment_items', distinct=True),
+            competences_count=Coalesce(
+                Subquery(program_discipline_competences_count, output_field=IntegerField()),
+                0,
+            ),
+            items_count=Coalesce(
+                Subquery(program_discipline_items_count, output_field=IntegerField()),
+                0,
+            ),
         ).order_by(
             'educational_program__program_profile__code',
             'educational_program__admission_year',

@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views.generic import TemplateView
@@ -78,23 +80,34 @@ def _unique_lookup_results(queryset, limit, label_factory, key_factory=None):
     return results
 
 
+HOME_STATS_CACHE_KEY = 'core:home_stats'
+
+
+def _build_home_stats():
+    return {
+        'education_levels': EducationLevel.objects.count(),
+        'departments': Department.objects.count(),
+        'teachers': Teacher.objects.count(),
+        'training_directions': TrainingDirection.objects.count(),
+        'program_profiles': ProgramProfile.objects.count(),
+        'educational_programs': EducationalProgram.objects.count(),
+        'disciplines': Discipline.objects.count(),
+        'competences': Competence.objects.count(),
+        'assessment_items': AssessmentItem.objects.count(),
+    }
+
+
 class HomeView(LoginRequiredMixin, TemplateView):
     template_name = 'home.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['stats'] = {
-            'education_levels': EducationLevel.objects.count(),
-            'departments': Department.objects.count(),
-            'teachers': Teacher.objects.count(),
-            'training_directions': TrainingDirection.objects.count(),
-            'program_profiles': ProgramProfile.objects.count(),
-            'educational_programs': EducationalProgram.objects.count(),
-            'programs': EducationalProgram.objects.count(),
-            'disciplines': Discipline.objects.count(),
-            'competences': Competence.objects.count(),
-            'assessment_items': AssessmentItem.objects.count(),
-        }
+        ttl = getattr(settings, 'HOME_STATS_CACHE_TTL', 60)
+        stats = cache.get(HOME_STATS_CACHE_KEY)
+        if stats is None:
+            stats = _build_home_stats()
+            cache.set(HOME_STATS_CACHE_KEY, stats, ttl)
+        context['stats'] = stats
         return context
 
 
@@ -298,6 +311,314 @@ class AcademicTitleDeleteView(NamedDeleteView):
     list_url_name = 'core_academic_title_list'
 
 
+def _lookup_department(request, query, selected_id, limit):
+    queryset = Department.objects.order_by('number')
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('number', 'short_name', 'full_name'))
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset,
+        limit,
+        lambda obj: f'{obj.number} — {obj.short_name}',
+    )
+
+
+def _lookup_teacher(request, query, selected_id, limit):
+    queryset = Teacher.objects.select_related('department').order_by('full_name')
+    department_id = request.GET.get('department_id')
+    if department_id:
+        queryset = queryset.filter(department_id=department_id)
+    if query:
+        queryset = _apply_lookup_tokens(
+            queryset,
+            query,
+            ('full_name', 'department__number', 'department__short_name'),
+        )
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset,
+        limit,
+        lambda obj: f'{obj.full_name} ({obj.department.short_name})',
+    )
+
+
+def _lookup_auth_user(request, query, selected_id, limit):
+    user_model = get_user_model()
+    queryset = user_model.objects.order_by('username')
+    selected_user_id = request.GET.get('selected_user_id')
+    if selected_user_id and selected_user_id.isdigit():
+        queryset = queryset.filter(Q(teacher_profile__isnull=True) | Q(id=int(selected_user_id)))
+    else:
+        queryset = queryset.filter(teacher_profile__isnull=True)
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('username', 'first_name', 'last_name', 'email'))
+    queryset = _filter_selected_id(queryset, selected_id)
+    results = []
+    seen_ids = set()
+    for obj in queryset:
+        if obj.id in seen_ids:
+            continue
+        seen_ids.add(obj.id)
+        display_name = ' '.join(part for part in [obj.last_name, obj.first_name] if part).strip()
+        label = f'{obj.username} ({display_name})' if display_name else obj.username
+        results.append({'id': obj.id, 'label': label})
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _lookup_training_direction(request, query, selected_id, limit):
+    queryset = TrainingDirection.objects.order_by('code')
+    education_level_id = request.GET.get('education_level_id')
+    if education_level_id:
+        queryset = queryset.filter(education_level_id=education_level_id)
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset,
+        limit,
+        lambda obj: f'{obj.code} — {obj.name}',
+    )
+
+
+def _lookup_program_profile(request, query, selected_id, limit):
+    queryset = ProgramProfile.objects.select_related('training_direction').order_by('code')
+    direction_id = request.GET.get('training_direction_id')
+    education_level_id = request.GET.get('education_level_id')
+    if education_level_id:
+        queryset = queryset.filter(training_direction__education_level_id=education_level_id)
+    if direction_id:
+        queryset = queryset.filter(training_direction_id=direction_id)
+    if query:
+        queryset = _apply_lookup_tokens(
+            queryset,
+            query,
+            ('code', 'name', 'training_direction__code', 'training_direction__name'),
+        )
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset,
+        limit,
+        lambda obj: f'{obj.code} — {obj.name} ({obj.training_direction.code})',
+    )
+
+
+def _lookup_educational_program(request, query, selected_id, limit):
+    queryset = EducationalProgram.objects.select_related(
+        'program_profile__training_direction',
+        'department',
+    ).order_by('program_profile__code', 'admission_year')
+    education_level_id = request.GET.get('education_level_id')
+    training_direction_id = request.GET.get('training_direction_id')
+    program_profile_id = request.GET.get('program_profile_id')
+    discipline_id = request.GET.get('discipline_id')
+    competence_id = request.GET.get('competence_id')
+    if education_level_id:
+        queryset = queryset.filter(
+            program_profile__training_direction__education_level_id=education_level_id
+        )
+    if training_direction_id:
+        queryset = queryset.filter(program_profile__training_direction_id=training_direction_id)
+    if program_profile_id:
+        queryset = queryset.filter(program_profile_id=program_profile_id)
+    if discipline_id:
+        queryset = queryset.filter(program_disciplines__discipline_id=discipline_id)
+    if competence_id:
+        queryset = queryset.filter(competences__id=competence_id)
+    if query:
+        tokens = _tokenize_lookup_query(query) or [query.strip().lower()]
+        for token in tokens:
+            token_filter = (
+                Q(program_profile__code__icontains=token)
+                | Q(program_profile__name__icontains=token)
+                | Q(program_profile__training_direction__code__icontains=token)
+                | Q(program_profile__training_direction__name__icontains=token)
+                | Q(department__number__icontains=token)
+                | Q(department__short_name__icontains=token)
+                | Q(department__full_name__icontains=token)
+            )
+            if token.isdigit() and len(token) == 4:
+                token_filter |= Q(admission_year=int(token))
+            queryset = queryset.filter(token_filter)
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(queryset.distinct(), limit, str)
+
+
+def _lookup_discipline(request, query, selected_id, limit):
+    queryset = Discipline.objects.order_by('name')
+    exclude_program_id = request.GET.get('exclude_program_id')
+    education_level_id = request.GET.get('education_level_id')
+    training_direction_id = request.GET.get('training_direction_id')
+    program_profile_id = request.GET.get('program_profile_id')
+    educational_program_id = request.GET.get('educational_program_id')
+    competence_id = request.GET.get('competence_id')
+    if exclude_program_id:
+        linked_ids = ProgramDiscipline.objects.filter(
+            educational_program_id=exclude_program_id
+        ).values_list('discipline_id', flat=True)
+        queryset = queryset.exclude(id__in=linked_ids)
+    if (
+        education_level_id
+        or training_direction_id
+        or program_profile_id
+        or educational_program_id
+        or competence_id
+    ):
+        linked_program_disciplines = ProgramDiscipline.objects.all()
+        if education_level_id:
+            linked_program_disciplines = linked_program_disciplines.filter(
+                educational_program__program_profile__training_direction__education_level_id=education_level_id
+            )
+        if training_direction_id:
+            linked_program_disciplines = linked_program_disciplines.filter(
+                educational_program__program_profile__training_direction_id=training_direction_id
+            )
+        if program_profile_id:
+            linked_program_disciplines = linked_program_disciplines.filter(
+                educational_program__program_profile_id=program_profile_id
+            )
+        if educational_program_id:
+            linked_program_disciplines = linked_program_disciplines.filter(
+                educational_program_id=educational_program_id
+            )
+        if competence_id:
+            linked_program_disciplines = linked_program_disciplines.filter(
+                discipline_competences__competence_id=competence_id
+            )
+        linked_ids = linked_program_disciplines.values_list('discipline_id', flat=True)
+        queryset = queryset.filter(id__in=linked_ids)
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('name',))
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(queryset.distinct(), limit, lambda obj: obj.name)
+
+
+def _lookup_program_discipline(request, query, selected_id, limit):
+    queryset = ProgramDiscipline.objects.select_related(
+        'educational_program__program_profile',
+        'educational_program__department',
+        'discipline',
+    ).order_by(
+        'educational_program__program_profile__code',
+        'educational_program__admission_year',
+        'discipline__name',
+    )
+    educational_program_id = request.GET.get('educational_program_id')
+    if educational_program_id:
+        queryset = queryset.filter(educational_program_id=educational_program_id)
+    if query:
+        tokens = _tokenize_lookup_query(query) or [query.strip().lower()]
+        for token in tokens:
+            token_filter = (
+                Q(discipline__name__icontains=token)
+                | Q(educational_program__program_profile__code__icontains=token)
+                | Q(educational_program__program_profile__name__icontains=token)
+                | Q(educational_program__department__short_name__icontains=token)
+                | Q(educational_program__department__full_name__icontains=token)
+            )
+            if token.isdigit() and len(token) == 4:
+                token_filter |= Q(educational_program__admission_year=int(token))
+            queryset = queryset.filter(token_filter)
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset.distinct(),
+        limit,
+        lambda obj: f'{obj.educational_program} | {obj.discipline.name}',
+    )
+
+
+def _lookup_competence(request, query, selected_id, limit):
+    queryset = Competence.objects.select_related(
+        'educational_program__program_profile',
+        'competence_type',
+    ).order_by('code')
+
+    educational_program_id = request.GET.get('educational_program_id')
+    program_discipline_id = request.GET.get('program_discipline_id')
+    discipline_id = request.GET.get('discipline_id')
+    education_level_id = request.GET.get('education_level_id')
+    training_direction_id = request.GET.get('training_direction_id')
+    program_profile_id = request.GET.get('program_profile_id')
+    linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
+
+    if education_level_id:
+        queryset = queryset.filter(
+            educational_program__program_profile__training_direction__education_level_id=education_level_id
+        )
+    if training_direction_id:
+        queryset = queryset.filter(
+            educational_program__program_profile__training_direction_id=training_direction_id
+        )
+    if program_profile_id:
+        queryset = queryset.filter(educational_program__program_profile_id=program_profile_id)
+
+    if program_discipline_id:
+        program_id = (
+            ProgramDiscipline.objects.filter(pk=program_discipline_id)
+            .values_list('educational_program_id', flat=True)
+            .first()
+        )
+        if program_id:
+            queryset = queryset.filter(educational_program_id=program_id)
+            if linked_only:
+                linked_ids = DisciplineCompetence.objects.filter(
+                    program_discipline_id=program_discipline_id
+                ).values_list('competence_id', flat=True)
+                queryset = queryset.filter(id__in=linked_ids)
+        else:
+            queryset = queryset.none()
+    elif educational_program_id:
+        queryset = queryset.filter(educational_program_id=educational_program_id)
+
+    if discipline_id:
+        discipline_links = DisciplineCompetence.objects.filter(
+            program_discipline__discipline_id=discipline_id
+        )
+        if educational_program_id:
+            discipline_links = discipline_links.filter(
+                program_discipline__educational_program_id=educational_program_id
+            )
+        linked_ids = discipline_links.values_list('competence_id', flat=True)
+        queryset = queryset.filter(id__in=linked_ids)
+
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
+
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(
+        queryset.distinct(),
+        limit,
+        lambda obj: f'{obj.code} — {obj.name}',
+        key_factory=lambda obj: (obj.code, obj.name),
+    )
+
+
+def _lookup_assessment_item_type(request, query, selected_id, limit):
+    queryset = AssessmentItemType.objects.order_by('code', 'name')
+    if query:
+        queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
+    queryset = _filter_selected_id(queryset, selected_id)
+    return _unique_lookup_results(queryset, limit, lambda obj: obj.name)
+
+
+# Регистр обработчиков autocomplete: kind → функция, возвращающая список
+# словарей вида {'id': int, 'label': str}. Каждая функция принимает
+# (request, query, selected_id, limit) и сама достаёт нужные GET-параметры.
+LOOKUP_BUILDERS = {
+    'department': _lookup_department,
+    'teacher': _lookup_teacher,
+    'auth_user': _lookup_auth_user,
+    'training_direction': _lookup_training_direction,
+    'program_profile': _lookup_program_profile,
+    'educational_program': _lookup_educational_program,
+    'discipline': _lookup_discipline,
+    'program_discipline': _lookup_program_discipline,
+    'competence': _lookup_competence,
+    'assessment_item_type': _lookup_assessment_item_type,
+}
+
+
 @login_required
 def lookup_options(request):
     kind = (request.GET.get('kind') or '').strip()
@@ -310,301 +631,8 @@ def lookup_options(request):
         limit = 20
     limit = max(1, min(limit, 50))
 
-    if kind == 'department':
-        queryset = Department.objects.order_by('number')
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('number', 'short_name', 'full_name'))
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset,
-            limit,
-            lambda obj: f'{obj.number} — {obj.short_name}',
-        )
-        return JsonResponse({'results': results})
+    builder = LOOKUP_BUILDERS.get(kind)
+    if builder is None:
+        return JsonResponse({'results': []})
 
-    if kind == 'teacher':
-        queryset = Teacher.objects.select_related('department').order_by('full_name')
-        department_id = request.GET.get('department_id')
-        if department_id:
-            queryset = queryset.filter(department_id=department_id)
-        if query:
-            queryset = _apply_lookup_tokens(
-                queryset,
-                query,
-                ('full_name', 'department__number', 'department__short_name'),
-            )
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset,
-            limit,
-            lambda obj: f'{obj.full_name} ({obj.department.short_name})',
-        )
-        return JsonResponse({'results': results})
-
-    if kind == 'auth_user':
-        user_model = get_user_model()
-        queryset = user_model.objects.order_by('username')
-        selected_user_id = request.GET.get('selected_user_id')
-        if selected_user_id and selected_user_id.isdigit():
-            queryset = queryset.filter(Q(teacher_profile__isnull=True) | Q(id=int(selected_user_id)))
-        else:
-            queryset = queryset.filter(teacher_profile__isnull=True)
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('username', 'first_name', 'last_name', 'email'))
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = []
-        seen_ids = set()
-        for obj in queryset:
-            if obj.id in seen_ids:
-                continue
-            seen_ids.add(obj.id)
-            display_name = ' '.join(part for part in [obj.last_name, obj.first_name] if part).strip()
-            if display_name:
-                label = f'{obj.username} ({display_name})'
-            else:
-                label = obj.username
-            results.append({'id': obj.id, 'label': label})
-            if len(results) >= limit:
-                break
-        return JsonResponse({'results': results})
-
-    if kind == 'training_direction':
-        queryset = TrainingDirection.objects.order_by('code')
-        education_level_id = request.GET.get('education_level_id')
-        if education_level_id:
-            queryset = queryset.filter(education_level_id=education_level_id)
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset,
-            limit,
-            lambda obj: f'{obj.code} — {obj.name}',
-        )
-        return JsonResponse({'results': results})
-
-    if kind == 'program_profile':
-        queryset = ProgramProfile.objects.select_related('training_direction').order_by('code')
-        direction_id = request.GET.get('training_direction_id')
-        education_level_id = request.GET.get('education_level_id')
-        if education_level_id:
-            queryset = queryset.filter(training_direction__education_level_id=education_level_id)
-        if direction_id:
-            queryset = queryset.filter(training_direction_id=direction_id)
-        if query:
-            queryset = _apply_lookup_tokens(
-                queryset,
-                query,
-                ('code', 'name', 'training_direction__code', 'training_direction__name'),
-            )
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset,
-            limit,
-            lambda obj: f'{obj.code} — {obj.name} ({obj.training_direction.code})',
-        )
-        return JsonResponse({'results': results})
-
-    if kind == 'educational_program':
-        queryset = EducationalProgram.objects.select_related(
-            'program_profile__training_direction',
-            'department',
-        ).order_by('program_profile__code', 'admission_year')
-        education_level_id = request.GET.get('education_level_id')
-        training_direction_id = request.GET.get('training_direction_id')
-        program_profile_id = request.GET.get('program_profile_id')
-        discipline_id = request.GET.get('discipline_id')
-        competence_id = request.GET.get('competence_id')
-        if education_level_id:
-            queryset = queryset.filter(
-                program_profile__training_direction__education_level_id=education_level_id
-            )
-        if training_direction_id:
-            queryset = queryset.filter(program_profile__training_direction_id=training_direction_id)
-        if program_profile_id:
-            queryset = queryset.filter(program_profile_id=program_profile_id)
-        if discipline_id:
-            queryset = queryset.filter(program_disciplines__discipline_id=discipline_id)
-        if competence_id:
-            queryset = queryset.filter(competences__id=competence_id)
-        if query:
-            tokens = _tokenize_lookup_query(query)
-            if not tokens:
-                tokens = [query.strip().lower()]
-            for token in tokens:
-                token_filter = (
-                    Q(program_profile__code__icontains=token)
-                    | Q(program_profile__name__icontains=token)
-                    | Q(program_profile__training_direction__code__icontains=token)
-                    | Q(program_profile__training_direction__name__icontains=token)
-                    | Q(department__number__icontains=token)
-                    | Q(department__short_name__icontains=token)
-                    | Q(department__full_name__icontains=token)
-                )
-                if token.isdigit() and len(token) == 4:
-                    token_filter |= Q(admission_year=int(token))
-                queryset = queryset.filter(token_filter)
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(queryset.distinct(), limit, str)
-        return JsonResponse({'results': results})
-
-    if kind == 'discipline':
-        queryset = Discipline.objects.order_by('name')
-        exclude_program_id = request.GET.get('exclude_program_id')
-        education_level_id = request.GET.get('education_level_id')
-        training_direction_id = request.GET.get('training_direction_id')
-        program_profile_id = request.GET.get('program_profile_id')
-        educational_program_id = request.GET.get('educational_program_id')
-        competence_id = request.GET.get('competence_id')
-        if exclude_program_id:
-            linked_ids = ProgramDiscipline.objects.filter(
-                educational_program_id=exclude_program_id
-            ).values_list('discipline_id', flat=True)
-            queryset = queryset.exclude(id__in=linked_ids)
-        if (
-            education_level_id
-            or training_direction_id
-            or program_profile_id
-            or educational_program_id
-            or competence_id
-        ):
-            linked_program_disciplines = ProgramDiscipline.objects.all()
-            if education_level_id:
-                linked_program_disciplines = linked_program_disciplines.filter(
-                    educational_program__program_profile__training_direction__education_level_id=education_level_id
-                )
-            if training_direction_id:
-                linked_program_disciplines = linked_program_disciplines.filter(
-                    educational_program__program_profile__training_direction_id=training_direction_id
-                )
-            if program_profile_id:
-                linked_program_disciplines = linked_program_disciplines.filter(
-                    educational_program__program_profile_id=program_profile_id
-                )
-            if educational_program_id:
-                linked_program_disciplines = linked_program_disciplines.filter(
-                    educational_program_id=educational_program_id
-                )
-            if competence_id:
-                linked_program_disciplines = linked_program_disciplines.filter(
-                    discipline_competences__competence_id=competence_id
-                )
-            linked_ids = linked_program_disciplines.values_list('discipline_id', flat=True)
-            queryset = queryset.filter(id__in=linked_ids)
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('name',))
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(queryset.distinct(), limit, lambda obj: obj.name)
-        return JsonResponse({'results': results})
-
-    if kind == 'program_discipline':
-        queryset = ProgramDiscipline.objects.select_related(
-            'educational_program__program_profile',
-            'educational_program__department',
-            'discipline',
-        ).order_by(
-            'educational_program__program_profile__code',
-            'educational_program__admission_year',
-            'discipline__name',
-        )
-        educational_program_id = request.GET.get('educational_program_id')
-        if educational_program_id:
-            queryset = queryset.filter(educational_program_id=educational_program_id)
-        if query:
-            tokens = _tokenize_lookup_query(query)
-            if not tokens:
-                tokens = [query.strip().lower()]
-            for token in tokens:
-                token_filter = (
-                    Q(discipline__name__icontains=token)
-                    | Q(educational_program__program_profile__code__icontains=token)
-                    | Q(educational_program__program_profile__name__icontains=token)
-                    | Q(educational_program__department__short_name__icontains=token)
-                    | Q(educational_program__department__full_name__icontains=token)
-                )
-                if token.isdigit() and len(token) == 4:
-                    token_filter |= Q(educational_program__admission_year=int(token))
-                queryset = queryset.filter(token_filter)
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset.distinct(),
-            limit,
-            lambda obj: f'{obj.educational_program} | {obj.discipline.name}',
-        )
-        return JsonResponse({'results': results})
-
-    if kind == 'competence':
-        queryset = Competence.objects.select_related(
-            'educational_program__program_profile',
-            'competence_type',
-        ).order_by('code')
-
-        educational_program_id = request.GET.get('educational_program_id')
-        program_discipline_id = request.GET.get('program_discipline_id')
-        discipline_id = request.GET.get('discipline_id')
-        education_level_id = request.GET.get('education_level_id')
-        training_direction_id = request.GET.get('training_direction_id')
-        program_profile_id = request.GET.get('program_profile_id')
-        linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
-
-        if education_level_id:
-            queryset = queryset.filter(
-                educational_program__program_profile__training_direction__education_level_id=education_level_id
-            )
-        if training_direction_id:
-            queryset = queryset.filter(
-                educational_program__program_profile__training_direction_id=training_direction_id
-            )
-        if program_profile_id:
-            queryset = queryset.filter(educational_program__program_profile_id=program_profile_id)
-
-        if program_discipline_id:
-            program_id = (
-                ProgramDiscipline.objects.filter(pk=program_discipline_id)
-                .values_list('educational_program_id', flat=True)
-                .first()
-            )
-            if program_id:
-                queryset = queryset.filter(educational_program_id=program_id)
-                if linked_only:
-                    linked_ids = DisciplineCompetence.objects.filter(
-                        program_discipline_id=program_discipline_id
-                    ).values_list('competence_id', flat=True)
-                    queryset = queryset.filter(id__in=linked_ids)
-            else:
-                queryset = queryset.none()
-        elif educational_program_id:
-            queryset = queryset.filter(educational_program_id=educational_program_id)
-
-        if discipline_id:
-            discipline_links = DisciplineCompetence.objects.filter(
-                program_discipline__discipline_id=discipline_id
-            )
-            if educational_program_id:
-                discipline_links = discipline_links.filter(
-                    program_discipline__educational_program_id=educational_program_id
-                )
-            linked_ids = discipline_links.values_list('competence_id', flat=True)
-            queryset = queryset.filter(id__in=linked_ids)
-
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
-
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(
-            queryset.distinct(),
-            limit,
-            lambda obj: f'{obj.code} — {obj.name}',
-            key_factory=lambda obj: (obj.code, obj.name),
-        )
-        return JsonResponse({'results': results})
-
-    if kind == 'assessment_item_type':
-        queryset = AssessmentItemType.objects.order_by('code', 'name')
-        if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
-        queryset = _filter_selected_id(queryset, selected_id)
-        results = _unique_lookup_results(queryset, limit, lambda obj: obj.name)
-        return JsonResponse({'results': results})
-
-    return JsonResponse({'results': []})
+    return JsonResponse({'results': builder(request, query, selected_id, limit)})

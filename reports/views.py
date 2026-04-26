@@ -1,8 +1,8 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, F, Q
+from django.db.models import Count, Q
 from django.views.generic import TemplateView
 
-from assessment.models import AssessmentItem, AssessmentItemCompetence
+from assessment.models import AssessmentItem
 from assessment.services import get_item_type_ui_name
 from competencies.models import Competence, DisciplineCompetence
 from core.models import AssessmentItemType
@@ -14,77 +14,71 @@ from .forms import ReportFilterForm
 
 
 def _count_items_by_competence(filtered_item_ids, competence_ids):
+    """Сколько отфильтрованных заданий проверяют каждую компетенцию.
+
+    Источников связи два — основная FK ``AssessmentItem.competence`` и таблица
+    ``AssessmentItemCompetence``. Берём UNION одним запросом через ``Q`` и
+    считаем уникальные пары (competence, item).
+    """
     if not competence_ids:
         return {}
 
-    primary_pairs = (
+    rows = (
         AssessmentItem.objects.filter(
+            Q(competence_id__in=competence_ids)
+            | Q(competence_links__competence_id__in=competence_ids),
             id__in=filtered_item_ids,
-            competence_id__in=competence_ids,
         )
-        .annotate(
-            competence_key=F('competence_id'),
-            item_key=F('id'),
-        )
-        .values('competence_key', 'item_key')
-    )
-    linked_pairs = (
-        AssessmentItemCompetence.objects.filter(
-            assessment_item_id__in=filtered_item_ids,
-            competence_id__in=competence_ids,
-        )
-        .annotate(
-            competence_key=F('competence_id'),
-            item_key=F('assessment_item_id'),
-        )
-        .values('competence_key', 'item_key')
+        .values('competence_id', 'competence_links__competence_id', 'id')
+        .distinct()
     )
 
-    grouped = {}
-    for pair in primary_pairs.union(linked_pairs):
-        grouped.setdefault(pair['competence_key'], set()).add(pair['item_key'])
-    return {competence_id: len(item_ids) for competence_id, item_ids in grouped.items()}
+    grouped: dict[int, set[int]] = {}
+    competence_ids_set = set(competence_ids)
+    for row in rows:
+        item_id = row['id']
+        for key in (row['competence_id'], row['competence_links__competence_id']):
+            if key in competence_ids_set:
+                grouped.setdefault(key, set()).add(item_id)
+    return {competence_id: len(items) for competence_id, items in grouped.items()}
 
 
 def _count_items_by_program_discipline_competence(filtered_item_ids, pairs):
+    """Аналогично _count_items_by_competence, но ключ — (program_discipline, competence)."""
     if not pairs:
         return {}
 
     program_discipline_ids = {pair[0] for pair in pairs}
     competence_ids = {pair[1] for pair in pairs}
+    pair_set = set(pairs)
 
-    primary_pairs = (
+    rows = (
         AssessmentItem.objects.filter(
+            Q(competence_id__in=competence_ids)
+            | Q(competence_links__competence_id__in=competence_ids),
             id__in=filtered_item_ids,
             program_discipline_id__in=program_discipline_ids,
-            competence_id__in=competence_ids,
         )
-        .annotate(
-            program_discipline_key=F('program_discipline_id'),
-            competence_key=F('competence_id'),
-            item_key=F('id'),
+        .values(
+            'program_discipline_id',
+            'competence_id',
+            'competence_links__competence_id',
+            'id',
         )
-        .values('program_discipline_key', 'competence_key', 'item_key')
-    )
-    linked_pairs = (
-        AssessmentItemCompetence.objects.filter(
-            assessment_item_id__in=filtered_item_ids,
-            assessment_item__program_discipline_id__in=program_discipline_ids,
-            competence_id__in=competence_ids,
-        )
-        .annotate(
-            program_discipline_key=F('assessment_item__program_discipline_id'),
-            competence_key=F('competence_id'),
-            item_key=F('assessment_item_id'),
-        )
-        .values('program_discipline_key', 'competence_key', 'item_key')
+        .distinct()
     )
 
-    grouped = {}
-    for pair in primary_pairs.union(linked_pairs):
-        key = (pair['program_discipline_key'], pair['competence_key'])
-        grouped.setdefault(key, set()).add(pair['item_key'])
-    return {key: len(item_ids) for key, item_ids in grouped.items()}
+    grouped: dict[tuple[int, int], set[int]] = {}
+    for row in rows:
+        program_discipline_id = row['program_discipline_id']
+        item_id = row['id']
+        for key in (row['competence_id'], row['competence_links__competence_id']):
+            if key is None:
+                continue
+            pair = (program_discipline_id, key)
+            if pair in pair_set:
+                grouped.setdefault(pair, set()).add(item_id)
+    return {pair: len(items) for pair, items in grouped.items()}
 
 
 class ReportsDashboardView(LoginRequiredMixin, TemplateView):

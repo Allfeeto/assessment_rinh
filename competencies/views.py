@@ -1,10 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.views.generic import TemplateView
 
+from assessment.models import AssessmentItem, AssessmentItemCompetence
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -34,12 +36,33 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
 
+        competence_disciplines_count = (
+            DisciplineCompetence.objects.filter(competence=OuterRef('pk'))
+            .order_by()
+            .values('competence')
+            .annotate(total=Count('id'))
+            .values('total')
+        )
+        competence_items_count = (
+            AssessmentItemCompetence.objects.filter(competence=OuterRef('pk'))
+            .order_by()
+            .values('competence')
+            .annotate(total=Count('assessment_item_id', distinct=True))
+            .values('total')
+        )
+
         competences_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
         ).annotate(
-            disciplines_count=Count('discipline_competences', distinct=True),
-            items_count=Count('assessment_item_links__assessment_item', distinct=True),
+            disciplines_count=Coalesce(
+                Subquery(competence_disciplines_count, output_field=IntegerField()),
+                0,
+            ),
+            items_count=Coalesce(
+                Subquery(competence_items_count, output_field=IntegerField()),
+                0,
+            ),
         ).order_by('educational_program__program_profile__code', 'code')
 
         if educational_program_id:
@@ -60,18 +83,29 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         if search:
             competences_qs = competences_qs.filter(Q(code__icontains=search) | Q(name__icontains=search))
 
+        # Сколько заданий внутри (program_discipline, competence) реально проверяет
+        # эту компетенцию (через AssessmentItemCompetence). Считаем подзапросом, чтобы
+        # не дублировать строки множественными JOIN’ами.
+        link_items_count = (
+            AssessmentItemCompetence.objects.filter(
+                competence_id=OuterRef('competence_id'),
+                assessment_item__program_discipline_id=OuterRef('program_discipline_id'),
+            )
+            .order_by()
+            .values('competence_id')
+            .annotate(total=Count('assessment_item_id', distinct=True))
+            .values('total')
+        )
+
         discipline_competences_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
             'competence',
         ).annotate(
-            items_count=Count(
-                'program_discipline__assessment_items',
-                filter=Q(
-                    program_discipline__assessment_items__competence_links__competence_id=F('competence_id')
-                ),
-                distinct=True,
+            items_count=Coalesce(
+                Subquery(link_items_count, output_field=IntegerField()),
+                0,
             ),
         ).order_by(
             'program_discipline__educational_program__program_profile__code',

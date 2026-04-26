@@ -1,1 +1,1 @@
-from django.contrib import admin
+# В reports нет собственных моделей, поэтому регистрировать в админке нечего.

@@ -394,17 +394,46 @@ python manage.py runserver
 
 ## Проверка качества
 
-На момент обновления README выполнены команды:
+На момент обновления README выполняются команды:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py check
-.\.venv\Scripts\python.exe manage.py test
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 Результат:
 
 - `check` проходит без ошибок;
-- автоматизированных тестов в проекте не обнаружено: `Found 0 test(s)`.
+- pytest исполняет тесты из `tests/test_stage5.py` (типы заданий, scope преподавателя, лимит экспорта).
+
+## Кэширование и переменные окружения
+
+В `assessment_rinh/settings/base.py` настроен кэш по умолчанию (`LocMemCache`).
+Это используется как минимум `core.views.HomeView`, чтобы не дёргать
+агрегаты `count()` на каждый запрос главной страницы.
+
+| Переменная | Назначение |
+| --- | --- |
+| `DJANGO_CACHE_BACKEND` | Можно переопределить кэш-бэкенд (Redis/Memcached на проде). |
+| `DJANGO_CACHE_LOCATION` | LOCATION для кэша. По умолчанию имя процесса. |
+| `DJANGO_HOME_STATS_CACHE_TTL` | TTL для агрегатов главной страницы, секунды (по умолчанию 60). |
+
+## Статика
+
+CSS и JS базового шаблона лежат в `static/css/base.css` и `static/js/base.js`.
+В `STATICFILES_DIRS` подключена корневая директория `static/`. На проде стоит запускать
+`python manage.py collectstatic`.
+
+## Тесты
+
+В корне проекта лежит `pytest.ini` и `conftest.py`. Запуск:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Тесты используют `DJANGO_ENV=dev` и SQLite в памяти, поэтому не требуют поднятой
+PostgreSQL-базы.
 
 ## Что в проекте не реализовано
 
@@ -413,9 +442,7 @@ python manage.py runserver
 - Dockerfile или docker-compose;
 - REST API;
 - frontend framework;
-- отдельные статические JS-файлы;
 - CI-конфигурация;
-- автоматизированные тесты;
 - пользовательский сценарий прохождения тестов студентами;
 - учет попыток, результатов прохождения или журнала оценок.
 
@@ -423,10 +450,9 @@ python manage.py runserver
 
 - Production-режим настроек есть в `assessment_rinh/settings/prod.py`, но реальные `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DB_PASSWORD` и другие значения нужно задавать через окружение.
 - Предметная схема БД находится вне Django migrations.
-- Permissions для группы преподавателей создаются, но большинство пользовательских views не проверяют их явно.
-- `reports/models.py` и `export/models.py` не содержат предметных моделей.
-- В репозитории есть IDE/cache-артефакты.
-- Тестовое покрытие отсутствует.
+- Permissions для группы преподавателей создаются, но большинство пользовательских views не проверяют их явно — используются `LoginRequiredMixin` + ручные scope-проверки.
+- `reports/models.py` и `export/models.py` намеренно пустые (только комментарий) — у этих приложений нет своих сущностей.
+- Покрытие тестами минимальное и сосредоточено в `tests/test_stage5.py`.
 
 ## Краткий рабочий сценарий
 

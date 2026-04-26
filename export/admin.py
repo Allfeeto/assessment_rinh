@@ -1,1 +1,1 @@
-from django.contrib import admin
+# В export нет собственных моделей, поэтому регистрировать в админке нечего.
