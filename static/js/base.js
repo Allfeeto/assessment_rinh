@@ -252,8 +252,10 @@
             const parentField = document.getElementById(parentId);
             if (parentField) {
                 parentField.addEventListener('change', () => {
-                    input.value = '';
-                    clearSelection();
+                    // Не сбрасываем уже выбранное дочернее значение автоматически —
+                    // если оно несовместимо с новым родителем, сервер вернёт ошибку
+                    // при отправке формы. Сбрасываем только когда родитель обязателен
+                    // и стал пустым (тогда поле должно стать неактивным).
                     closeMenu();
                     setInputStateByParent();
                 });

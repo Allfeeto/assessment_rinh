@@ -110,34 +110,42 @@
                     <th style="width: 40px;"></th>
                     <th>ID</th>
                     <th>Текст задания</th>
-                    <th>Тип</th>
                     <th>Компетенции</th>
                     <th>Действия</th>
                 </tr>
                 </thead>
-                <tbody>
-                {% for item in items %}
-                    <tr>
-                        <td><input type="checkbox" name="item_ids" value="{{ item.id }}"></td>
-                        <td>{{ item.id }}</td>
-                        <td>{{ item.prompt_text|truncatechars:140 }}</td>
-                        <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
-                        <td>{{ item.ui_competence_codes }}</td>
-                        <td>
-                            <div class="actions">
-                                <a class="btn secondary" href="{% url 'assessment_detail' item.id %}?next={{ next_url|urlencode }}">Открыть</a>
-                                <a class="btn secondary" href="{% url 'assessment_update' item.id %}?next={{ next_url|urlencode }}">Изменить</a>
-                                <a class="btn danger" href="{% url 'assessment_delete' item.id %}?next={{ next_url|urlencode }}">Удалить</a>
-                                <button class="btn secondary" type="submit" name="item_id" value="{{ item.id }}">Копировать</button>
-                            </div>
-                        </td>
+                {% for group in items_grouped %}
+                    <tbody class="items-group">
+                    <tr class="items-group-heading">
+                        <th colspan="5" style="background:#eef5f6; color: var(--accent); text-align:left; text-transform:none; font-size:13px; letter-spacing:.2px;">
+                            {{ group.type_ui_name }}
+                            <span class="muted" style="font-weight:normal; margin-left:6px;">— {{ group.items|length }} шт.</span>
+                        </th>
                     </tr>
+                    {% for item in group.items %}
+                        <tr>
+                            <td><input type="checkbox" name="item_ids" value="{{ item.id }}"></td>
+                            <td>{{ item.id }}</td>
+                            <td>{{ item.prompt_text|truncatechars:140 }}</td>
+                            <td>{{ item.ui_competence_codes }}</td>
+                            <td>
+                                <div class="actions">
+                                    <a class="btn secondary" href="{% url 'assessment_detail' item.id %}?next={{ next_url|urlencode }}">Открыть</a>
+                                    <a class="btn secondary" href="{% url 'assessment_update' item.id %}?next={{ next_url|urlencode }}">Изменить</a>
+                                    <a class="btn danger" href="{% url 'assessment_delete' item.id %}?next={{ next_url|urlencode }}">Удалить</a>
+                                    <button class="btn secondary" type="submit" name="item_id" value="{{ item.id }}">Копировать</button>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
                 {% empty %}
+                    <tbody>
                     <tr>
-                        <td colspan="6" class="muted">В текущем контексте заданий пока нет.</td>
+                        <td colspan="5" class="muted">В текущем контексте заданий пока нет.</td>
                     </tr>
+                    </tbody>
                 {% endfor %}
-                </tbody>
             </table>
             {% if items_page_obj.paginator.num_pages > 1 %}
                 <div class="pagination">

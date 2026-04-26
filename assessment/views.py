@@ -559,7 +559,13 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                     'program_discipline__educational_program__program_profile',
                 )
                 .prefetch_related('competence_links__competence')
-                .order_by('-id')
+                # Сначала группа по типу задания (с устойчивым кодом),
+                # внутри группы — по убыванию id, чтобы свежие наверху.
+                .order_by(
+                    'assessment_item_type__code',
+                    'assessment_item_type__name',
+                    '-id',
+                )
             )
             if selected_competence:
                 items = items.filter(
@@ -582,6 +588,24 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
 
         for item in items_page:
             item.ui_competence_codes = get_item_competence_codes(item)
+
+        # Готовим группировку по типу задания: список словарей
+        # {'type_code': str, 'type_ui_name': str, 'items': [...]}.
+        # В шаблоне выводим как подзаголовок над каждой группой.
+        items_grouped: list[dict] = []
+        groups_index: dict[int, dict] = {}
+        for item in items_page:
+            type_id = item.assessment_item_type_id
+            group = groups_index.get(type_id)
+            if group is None:
+                group = {
+                    'type_id': type_id,
+                    'type_ui_name': get_item_type_ui_name(item.assessment_item_type),
+                    'items': [],
+                }
+                groups_index[type_id] = group
+                items_grouped.append(group)
+            group['items'].append(item)
 
         item_query_params = self.request.GET.copy()
         item_query_params.pop('page', None)
@@ -618,6 +642,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 'competences': competences,
                 'assessment_item_types': assessment_item_types,
                 'items': items_page,
+                'items_grouped': items_grouped,
                 'items_page_obj': items_page_obj,
                 'items_query_params': item_query_params.urlencode(),
                 'per_page_choices': PER_PAGE_CHOICES,

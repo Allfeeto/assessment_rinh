@@ -26,6 +26,183 @@
     </div>
 </div>
 
+<div class="panel" id="assignment-panel"
+     data-panel-url="{% url 'teachers_assignments_panel' %}"
+     data-toggle-url="{% url 'teachers_assignments_toggle' %}">
+    <h2>Назначение преподавателей на дисциплины</h2>
+
+    {% if assignment_active_teacher %}
+        <div class="muted" style="margin-bottom: 10px;">
+            Активный преподаватель:
+            <strong style="color: var(--accent);">{{ assignment_active_teacher.full_name }}</strong>
+            {% if assignment_can_change_teacher %}
+                (можно сменить ниже)
+            {% else %}
+                (вы редактируете назначения только для себя)
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="alert">
+            Не найден профиль преподавателя для текущего пользователя.
+            Назначать дисциплины можно только пользователям, у которых есть карточка преподавателя.
+        </div>
+    {% endif %}
+
+    <div class="form-row" style="margin-bottom: 12px;">
+        {% if assignment_can_change_teacher %}
+            <div class="field">
+                <label for="assignment-teacher">Преподаватель</label>
+                <select id="assignment-teacher" name="teacher" class="js-assignment-control">
+                    {% for teacher in assignment_teachers %}
+                        <option value="{{ teacher.id }}"
+                            {% if assignment_active_teacher and teacher.id == assignment_active_teacher.id %}selected{% endif %}>
+                            {{ teacher.full_name }}{% if teacher.department %} ({{ teacher.department.short_name }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
+        <div class="field">
+            <label for="assignment-program">Образовательная программа</label>
+            <select id="assignment-program" name="assignment_program" class="js-assignment-control"
+                    data-autocomplete-kind="educational_program"
+                    data-autocomplete-url="/core/lookup/"
+                    data-autocomplete-placeholder="Введите профиль, кафедру или год набора">
+                <option value="">— выберите программу —</option>
+                {% if assignment_active_program %}
+                    <option value="{{ assignment_active_program.id }}" selected>{{ assignment_active_program }}</option>
+                {% endif %}
+            </select>
+        </div>
+        <div class="field" style="min-width: 220px;">
+            <label for="assignment-search">Поиск по дисциплине</label>
+            <input type="text" id="assignment-search" name="assignment_q"
+                   value="{{ assignment_query }}" placeholder="Часть названия дисциплины">
+        </div>
+    </div>
+
+    <div id="assignment-table-wrap" class="table-wrap">
+        {% include 'teachers/_assignment_table.html' %}
+    </div>
+
+    <div class="muted" style="margin-top: 10px; font-size: 13px;">
+        Назначения сохраняются мгновенно — при клике по галочке. Назначенные дисциплины
+        автоматически перемещаются в начало списка.
+    </div>
+</div>
+
+<script>
+(function () {
+    const panel = document.getElementById('assignment-panel');
+    if (!panel) {
+        return;
+    }
+    const panelUrl = panel.dataset.panelUrl;
+    const toggleUrl = panel.dataset.toggleUrl;
+    const teacherSelect = document.getElementById('assignment-teacher');
+    const programSelect = document.getElementById('assignment-program');
+    const searchInput = document.getElementById('assignment-search');
+    const tableWrap = document.getElementById('assignment-table-wrap');
+
+    function getCsrfToken() {
+        const cookieMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        if (cookieMatch) {
+            return decodeURIComponent(cookieMatch[1]);
+        }
+        const input = document.querySelector('input[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+
+    function buildQueryParams() {
+        const params = new URLSearchParams();
+        if (teacherSelect && teacherSelect.value) {
+            params.set('teacher', teacherSelect.value);
+        }
+        if (programSelect && programSelect.value) {
+            params.set('assignment_program', programSelect.value);
+        }
+        if (searchInput && searchInput.value.trim()) {
+            params.set('assignment_q', searchInput.value.trim());
+        }
+        return params;
+    }
+
+    function reloadTable() {
+        const params = buildQueryParams();
+        fetch(panelUrl + '?' + params.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+        })
+            .then(response => response.text())
+            .then(html => {
+                tableWrap.innerHTML = html;
+                bindCheckboxes();
+            })
+            .catch(() => {});
+    }
+
+    function toggleAssignment(checkbox) {
+        const programDisciplineId = checkbox.dataset.programDisciplineId;
+        const teacherId = teacherSelect ? teacherSelect.value : '';
+        if (!teacherId) {
+            checkbox.checked = !checkbox.checked;
+            return;
+        }
+        const assign = checkbox.checked ? '1' : '0';
+        const formData = new FormData();
+        formData.set('teacher_id', teacherId);
+        formData.set('program_discipline_id', programDisciplineId);
+        formData.set('assign', assign);
+
+        checkbox.disabled = true;
+        fetch(toggleUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData,
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('toggle failed: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(() => {
+                // Перерисуем таблицу, чтобы назначенные сразу всплыли наверх.
+                reloadTable();
+            })
+            .catch(() => {
+                checkbox.checked = !checkbox.checked;
+                checkbox.disabled = false;
+            });
+    }
+
+    function bindCheckboxes() {
+        tableWrap.querySelectorAll('.js-assignment-toggle').forEach(box => {
+            box.addEventListener('change', () => toggleAssignment(box));
+        });
+    }
+
+    if (teacherSelect) {
+        teacherSelect.addEventListener('change', reloadTable);
+    }
+    if (programSelect) {
+        programSelect.addEventListener('change', reloadTable);
+    }
+    if (searchInput) {
+        let timer = null;
+        searchInput.addEventListener('input', () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+            timer = setTimeout(reloadTable, 250);
+        });
+    }
+    bindCheckboxes();
+})();
+</script>
+
 <div class="panel table-wrap">
     <h2>Кафедры</h2>
     <table>

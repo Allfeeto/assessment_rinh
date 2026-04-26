@@ -250,3 +250,4 @@ generated/
 # OS files
 .DS_Store
 Thumbs.db
+*.plx

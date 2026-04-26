@@ -1,0 +1,41 @@
+{# Partial: таблица назначений преподавателя на дисциплины. #}
+{% if not assignment_active_program %}
+    <div class="muted">Выберите образовательную программу, чтобы увидеть список её дисциплин.</div>
+{% elif not assignment_rows %}
+    <div class="muted">По выбранной программе нет дисциплин (или поиск не дал результатов).</div>
+{% else %}
+    <table>
+        <thead>
+        <tr>
+            <th style="width:60px;">Назначен</th>
+            <th>Дисциплина</th>
+            <th>Другие преподаватели</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in assignment_rows %}
+            <tr>
+                <td style="text-align:center;">
+                    <input
+                        type="checkbox"
+                        class="js-assignment-toggle"
+                        data-program-discipline-id="{{ row.id }}"
+                        {% if row.is_assigned %}checked{% endif %}
+                        {% if not assignment_can_edit %}disabled{% endif %}
+                        aria-label="Назначить дисциплину «{{ row.discipline_name }}»"
+                    >
+                </td>
+                <td>
+                    {{ row.discipline_name }}
+                    {% if row.is_assigned %}
+                        <span class="muted" style="margin-left:6px;">— назначено</span>
+                    {% endif %}
+                </td>
+                <td class="muted">
+                    {{ row.other_teachers|default:"—" }}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endif %}

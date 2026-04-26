@@ -6,6 +6,8 @@ from .views import (
     DepartmentDetailView,
     DepartmentListView,
     DepartmentUpdateView,
+    TeacherAssignmentPanelView,
+    TeacherAssignmentToggleView,
     TeacherCreateView,
     TeacherDeleteView,
     TeacherDetailView,
@@ -21,6 +23,17 @@ from .views import (
 
 urlpatterns = [
     path('', TeachersDashboardView.as_view(), name='teachers_root'),
+
+    path(
+        'assignments/panel/',
+        TeacherAssignmentPanelView.as_view(),
+        name='teachers_assignments_panel',
+    ),
+    path(
+        'assignments/toggle/',
+        TeacherAssignmentToggleView.as_view(),
+        name='teachers_assignments_toggle',
+    ),
 
     path('departments/', DepartmentListView.as_view(), name='teachers_department_list'),
     path('departments/create/', DepartmentCreateView.as_view(), name='teachers_department_create'),
