@@ -9,6 +9,19 @@ TYPE_SEQUENCE = 'sequence'
 TYPE_OPEN = 'open'
 TYPE_UNKNOWN = 'unknown'
 
+TYPE_CODE_ALIASES = {
+    TYPE_SINGLE: TYPE_SINGLE,
+    TYPE_MULTIPLE: TYPE_MULTIPLE,
+    TYPE_MATCHING: TYPE_MATCHING,
+    TYPE_SEQUENCE: TYPE_SEQUENCE,
+    TYPE_OPEN: TYPE_OPEN,
+    'single_choice': TYPE_SINGLE,
+    'multiple_choice': TYPE_MULTIPLE,
+    'matching': TYPE_MATCHING,
+    'sequence': TYPE_SEQUENCE,
+    'open_answer': TYPE_OPEN,
+}
+
 TYPE_UI_LABELS = {
     TYPE_MATCHING: 'Задание закрытого типа на установление соответствия',
     TYPE_SEQUENCE: 'Задание закрытого типа на установление последовательности',
@@ -19,8 +32,20 @@ TYPE_UI_LABELS = {
 CLIPBOARD_SESSION_KEY = 'assessment_clipboard_item_ids'
 
 
-def infer_item_type_code(type_name: str | None) -> str:
-    value = (type_name or '').strip().lower()
+def _normalize_item_type_code(value: str | None) -> str:
+    normalized = (value or '').strip().lower()
+    return TYPE_CODE_ALIASES.get(normalized, TYPE_UNKNOWN)
+
+
+def infer_item_type_code(item_type) -> str:
+    code = _normalize_item_type_code(getattr(item_type, 'code', None))
+    if code != TYPE_UNKNOWN:
+        return code
+
+    value = str(getattr(item_type, 'name', item_type) or '').strip().lower()
+    code = _normalize_item_type_code(value)
+    if code != TYPE_UNKNOWN:
+        return code
 
     if 'соответств' in value:
         return TYPE_MATCHING
@@ -36,20 +61,20 @@ def infer_item_type_code(type_name: str | None) -> str:
     return TYPE_UNKNOWN
 
 
-def get_item_type_ui_name(type_name: str | None) -> str:
-    code = infer_item_type_code(type_name)
-    return TYPE_UI_LABELS.get(code, type_name or '')
+def get_item_type_ui_name(item_type) -> str:
+    code = infer_item_type_code(item_type)
+    fallback = str(getattr(item_type, 'name', item_type) or '')
+    return TYPE_UI_LABELS.get(code, fallback)
 
 
 def get_ui_assessment_item_types_queryset():
     from core.models import AssessmentItemType
 
-    ui_qs = AssessmentItemType.objects.filter(name__istartswith='Задание').order_by('name')
-    return ui_qs if ui_qs.exists() else AssessmentItemType.objects.order_by('name')
+    return AssessmentItemType.objects.order_by('code', 'name')
 
 
-def split_rows_for_detail(type_name: str | None, rows: Iterable):
-    code = infer_item_type_code(type_name)
+def split_rows_for_detail(item_type, rows: Iterable):
+    code = infer_item_type_code(item_type)
     rows_list = list(rows)
 
     if code in {TYPE_SINGLE, TYPE_MULTIPLE}:

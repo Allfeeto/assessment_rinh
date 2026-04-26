@@ -10,7 +10,7 @@ from programs.models import EducationalProgram
 
 class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
-        return get_item_type_ui_name(obj.name)
+        return get_item_type_ui_name(obj)
 
 
 class CompetenceChoiceField(forms.ModelChoiceField):
@@ -67,6 +67,7 @@ class ReportFilterForm(forms.Form):
             self.fields['educational_program'],
             kind='educational_program',
             placeholder='Введите профиль, кафедру или год набора',
+            dynamic_params=(('id_discipline', 'discipline_id'), ('id_competence', 'competence_id')),
         )
 
         base_discipline_qs = Discipline.objects.order_by('name')
@@ -75,6 +76,9 @@ class ReportFilterForm(forms.Form):
             self.fields['discipline'],
             kind='discipline',
             placeholder='Введите наименование дисциплины',
+            parent_field_id='id_educational_program',
+            parent_param='educational_program_id',
+            dynamic_params=(('id_competence', 'competence_id'),),
         )
 
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
@@ -100,9 +104,14 @@ class ReportFilterForm(forms.Form):
                 competence_qs = competence_qs.filter(id__in=linked_ids)
             else:
                 competence_qs = competence_qs.none()
+        elif discipline_id:
+            linked_ids = DisciplineCompetence.objects.filter(
+                program_discipline__discipline_id=discipline_id,
+            ).values_list('competence_id', flat=True)
+            competence_qs = competence_qs.filter(id__in=linked_ids)
 
         if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
-            competence_qs = Competence.objects.filter(pk=selected_competence_id)
+            competence_qs = Competence.objects.filter(pk=selected_competence_id) | competence_qs
 
         self.fields['competence'].queryset = competence_qs
         apply_autocomplete_attrs(
@@ -111,7 +120,7 @@ class ReportFilterForm(forms.Form):
             placeholder='Введите код или наименование компетенции',
             parent_field_id='id_educational_program',
             parent_param='educational_program_id',
-            parent_required=True,
+            dynamic_params=(('id_discipline', 'discipline_id'),),
         )
 
         for field_name in ('educational_program', 'discipline', 'competence'):

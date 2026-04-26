@@ -194,7 +194,7 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         context['disciplines'] = Discipline.objects.order_by('name')
         assessment_item_types = list(get_ui_assessment_item_types_queryset())
         for item_type in assessment_item_types:
-            item_type.ui_name = get_item_type_ui_name(item_type.name)
+            item_type.ui_name = get_item_type_ui_name(item_type)
         context['assessment_item_types'] = assessment_item_types
         context['competences'] = competences
 
@@ -243,11 +243,11 @@ class AssessmentItemDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
 
         rows = list(self.object.rows.order_by('sort_order', 'id'))
-        split = split_rows_for_detail(self.object.assessment_item_type.name, rows)
+        split = split_rows_for_detail(self.object.assessment_item_type, rows)
 
         context['rows'] = rows
         context['item_type_code'] = split['code']
-        context['item_type_ui_name'] = get_item_type_ui_name(self.object.assessment_item_type.name)
+        context['item_type_ui_name'] = get_item_type_ui_name(self.object.assessment_item_type)
         context['options'] = split['options']
         context['matching_pairs'] = split['matching_pairs']
         context['matching_distractors'] = split['matching_distractors']
@@ -274,11 +274,11 @@ class AssessmentItemFormMixin:
             if item_type_id:
                 item_type = AssessmentItemType.objects.filter(pk=item_type_id).first()
                 if item_type:
-                    return item_type.name
+                    return item_type
             return ''
 
         if obj and obj.assessment_item_type_id:
-            return obj.assessment_item_type.name
+            return obj.assessment_item_type
 
         return ''
 
@@ -578,7 +578,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
 
         assessment_item_types = list(get_ui_assessment_item_types_queryset())
         for item_type in assessment_item_types:
-            item_type.ui_name = get_item_type_ui_name(item_type.name)
+            item_type.ui_name = get_item_type_ui_name(item_type)
 
         for item in items_page:
             item.ui_competence_codes = get_item_competence_codes(item)

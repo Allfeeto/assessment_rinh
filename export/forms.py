@@ -10,7 +10,7 @@ from programs.models import EducationalProgram
 
 class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
-        return get_item_type_ui_name(obj.name)
+        return get_item_type_ui_name(obj)
 
 
 class CompetenceChoiceField(forms.ModelChoiceField):

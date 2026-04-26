@@ -31,7 +31,7 @@ def _clean_text(value):
 
 class AssessmentItemTypeChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
-        return get_item_type_ui_name(obj.name)
+        return get_item_type_ui_name(obj)
 
 
 class CompetenceChoiceField(forms.ModelChoiceField):
@@ -126,11 +126,13 @@ class AssessmentItemForm(forms.ModelForm):
                 id__in=linked_competence_ids
             ).order_by('code')
 
-        missing_ids = [
-            comp_id
+        selected_ids = {
+            int(comp_id)
             for comp_id in selected_competence_ids
-            if comp_id and not competence_queryset.filter(pk=comp_id).exists()
-        ]
+            if str(comp_id).isdigit()
+        }
+        available_ids = set(competence_queryset.values_list('pk', flat=True))
+        missing_ids = list(selected_ids - available_ids)
         if missing_ids:
             competence_queryset = Competence.objects.filter(pk__in=missing_ids) | competence_queryset
 
@@ -184,7 +186,7 @@ class AssessmentItemForm(forms.ModelForm):
                 )
                 break
 
-        item_type_code = infer_item_type_code(item_type.name if item_type else '')
+        item_type_code = infer_item_type_code(item_type)
         if item_type_code != TYPE_MATCHING:
             cleaned_data['left_column_title'] = None
             cleaned_data['right_column_title'] = None

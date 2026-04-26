@@ -125,8 +125,8 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
                     distinct=True,
                 )
             )
-            .values('name', 'total')
-            .order_by('name')
+            .values('code', 'name', 'total')
+            .order_by('code', 'name')
         )
         report_by_type_page_obj = paginate_queryset(
             self.request,
@@ -136,7 +136,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         )
         report_by_type = list(report_by_type_page_obj.object_list)
         for row in report_by_type:
-            row['ui_name'] = get_item_type_ui_name(row['name'])
+            row['ui_name'] = get_item_type_ui_name(row.get('code') or row['name'])
 
         report_by_program_qs = (
             EducationalProgram.objects.select_related('program_profile', 'department')

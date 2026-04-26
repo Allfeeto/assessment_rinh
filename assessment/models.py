@@ -46,7 +46,7 @@ class AssessmentItem(models.Model):
         override = getattr(self, '_item_type_ui_name_override', None)
         if override:
             return override
-        return get_item_type_ui_name(self.assessment_item_type.name)
+        return get_item_type_ui_name(self.assessment_item_type)
 
     @item_type_ui_name.setter
     def item_type_ui_name(self, value):

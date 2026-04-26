@@ -26,7 +26,7 @@ class CompetenceTypeForm(forms.ModelForm):
 class AssessmentItemTypeForm(forms.ModelForm):
     class Meta:
         model = AssessmentItemType
-        fields = ('name',)
+        fields = ('code', 'name')
 
 
 class AcademicDegreeForm(forms.ModelForm):

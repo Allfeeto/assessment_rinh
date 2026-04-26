@@ -229,8 +229,8 @@ def _prepare_open_rows(rows):
 
 def _prepare_export_item(item, number: int, rng: random.Random):
     rows = _iter_rows(item)
-    type_name = get_item_type_ui_name(item.assessment_item_type.name)
-    type_code = infer_item_type_code(item.assessment_item_type.name)
+    type_name = get_item_type_ui_name(item.assessment_item_type)
+    type_code = infer_item_type_code(item.assessment_item_type)
 
     if type_code not in {TYPE_MATCHING, TYPE_SEQUENCE, TYPE_MULTIPLE, TYPE_SINGLE, TYPE_OPEN}:
         logger.warning(

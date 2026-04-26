@@ -64,13 +64,14 @@ def _filter_selected_id(queryset, selected_id):
     return queryset
 
 
-def _unique_lookup_results(queryset, limit, label_factory):
+def _unique_lookup_results(queryset, limit, label_factory, key_factory=None):
     results = []
-    seen_ids = set()
+    seen_keys = set()
     for obj in queryset:
-        if obj.id in seen_ids:
+        key = key_factory(obj) if key_factory else obj.id
+        if key in seen_keys:
             continue
-        seen_ids.add(obj.id)
+        seen_keys.add(key)
         results.append({'id': obj.id, 'label': label_factory(obj)})
         if len(results) >= limit:
             break
@@ -180,8 +181,8 @@ class CompetenceTypeDeleteView(NamedDeleteView):
 class AssessmentItemTypeListView(NamedListView):
     model = AssessmentItemType
     title = 'Справочник типов заданий'
-    search_fields = ('name',)
-    list_columns = (('ID', 'id'), ('Наименование', 'name'))
+    search_fields = ('code', 'name')
+    list_columns = (('ID', 'id'), ('Код', 'code'), ('Наименование', 'name'))
     create_url_name = 'core_assessment_item_type_create'
     detail_url_name = 'core_assessment_item_type_detail'
     update_url_name = 'core_assessment_item_type_update'
@@ -194,7 +195,7 @@ class AssessmentItemTypeDetailView(NamedDetailView):
     list_url_name = 'core_assessment_item_type_list'
     update_url_name = 'core_assessment_item_type_update'
     delete_url_name = 'core_assessment_item_type_delete'
-    detail_fields = (('ID', 'id'), ('Наименование', 'name'))
+    detail_fields = (('ID', 'id'), ('Код', 'code'), ('Наименование', 'name'))
 
 
 class AssessmentItemTypeCreateView(NamedCreateView):
@@ -594,13 +595,14 @@ def lookup_options(request):
             queryset.distinct(),
             limit,
             lambda obj: f'{obj.code} — {obj.name}',
+            key_factory=lambda obj: (obj.code, obj.name),
         )
         return JsonResponse({'results': results})
 
     if kind == 'assessment_item_type':
-        queryset = AssessmentItemType.objects.order_by('name')
+        queryset = AssessmentItemType.objects.order_by('code', 'name')
         if query:
-            queryset = _apply_lookup_tokens(queryset, query, ('name',))
+            queryset = _apply_lookup_tokens(queryset, query, ('code', 'name'))
         queryset = _filter_selected_id(queryset, selected_id)
         results = _unique_lookup_results(queryset, limit, lambda obj: obj.name)
         return JsonResponse({'results': results})

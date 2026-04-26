@@ -47,7 +47,7 @@ class AssessmentItemAdmin(admin.ModelAdmin):
 
     @staticmethod
     def item_type_name(obj):
-        return get_item_type_ui_name(obj.assessment_item_type.name)
+        return get_item_type_ui_name(obj.assessment_item_type)
 
     item_type_name.short_description = 'Тип задания'
 
