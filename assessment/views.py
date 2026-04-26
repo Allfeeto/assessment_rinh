@@ -187,6 +187,24 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
                 discipline_competences__program_discipline_id__in=program_discipline_ids
             ).distinct()
 
+        # Если в URL остался выбранный competence/discipline/training_direction/profile/program
+        # из прошлой программы, явно подмешиваем их в queryset, чтобы <option selected>
+        # не пропадал из <select> и UI не «забывал» выбор.
+        def _force_include(queryset, model, selected_value):
+            if not selected_value or not str(selected_value).isdigit():
+                return queryset
+            forced = model.objects.filter(pk=int(selected_value))
+            return (queryset | forced).distinct()
+
+        directions = _force_include(directions, TrainingDirection, selected_training_direction)
+        profiles = _force_include(profiles, ProgramProfile, selected_program_profile)
+        programs = _force_include(programs, EducationalProgram, selected_educational_program)
+        competences = _force_include(
+            competences,
+            Competence,
+            self.request.GET.get('competence'),
+        )
+
         context['education_levels'] = EducationLevel.objects.order_by('id')
         context['training_directions'] = directions
         context['program_profiles'] = profiles
@@ -547,8 +565,18 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 .distinct()
                 .order_by('code')
             )
-            if selected_competence and not competences.filter(pk=selected_competence).exists():
-                selected_competence = ''
+            # Не сбрасываем выбранную компетенцию автоматически — оставляем её в
+            # options, чтобы UI не «забывал» выбор. Если она несовместима, items
+            # отфильтруются в пустой список, пользователь увидит и поправит сам.
+            if (
+                selected_competence
+                and selected_competence.isdigit()
+                and not competences.filter(pk=selected_competence).exists()
+            ):
+                forced = Competence.objects.select_related('competence_type').filter(
+                    pk=int(selected_competence)
+                )
+                competences = (competences | forced).distinct()
 
             items = (
                 AssessmentItem.objects.filter(program_discipline=current_program_discipline)

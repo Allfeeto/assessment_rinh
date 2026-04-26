@@ -51,9 +51,14 @@
             {% endif %}
         </div>
 
-        <div class="field" style="margin-bottom: 12px;">
+        <div class="field" style="margin-bottom: 12px;" id="competencies-field">
             <label>{{ form.competencies.label }} *</label>
-            {{ form.competencies }}
+            <div id="competencies-checkboxes" data-name="competencies">
+                {{ form.competencies }}
+            </div>
+            <div id="competencies-loading" class="muted" style="display:none; margin-top:6px;">
+                Обновляем список компетенций…
+            </div>
             <small class="helptext">Доступны только компетенции, связанные с выбранной дисциплиной учебного плана.</small>
             {% if form.competencies.errors %}
                 <ul class="errors">
@@ -320,6 +325,97 @@
 
     if (addRowButton) {
         addRowButton.addEventListener('click', addRow);
+    }
+
+    // ---- Перерисовка списка компетенций при смене дисциплины учебного плана ----
+    const programDisciplineSelect = document.getElementById('id_program_discipline');
+    const competenciesBox = document.getElementById('competencies-checkboxes');
+    const competenciesLoading = document.getElementById('competencies-loading');
+
+    function getSelectedCompetenceIds() {
+        if (!competenciesBox) {
+            return new Set();
+        }
+        const result = new Set();
+        competenciesBox.querySelectorAll('input[type="checkbox"]:checked').forEach(input => {
+            if (input.value) {
+                result.add(String(input.value));
+            }
+        });
+        return result;
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderCompetenceCheckboxes(items, previouslySelected) {
+        if (!competenciesBox) {
+            return;
+        }
+        if (!items.length) {
+            competenciesBox.innerHTML =
+                '<div class="muted">Нет компетенций, связанных с выбранной дисциплиной учебного плана. ' +
+                'Сначала добавьте связь в матрице дисциплина-компетенция.</div>';
+            return;
+        }
+        const parts = ['<ul style="list-style:none; padding:0; margin:0;">'];
+        items.forEach(item => {
+            const id = String(item.id);
+            const checked = previouslySelected.has(id) ? ' checked' : '';
+            const inputId = 'id_competencies_' + id;
+            parts.push(
+                '<li style="margin: 4px 0;">' +
+                '<label for="' + inputId + '" style="font-weight: normal; display: inline-flex; gap: 6px; align-items: flex-start;">' +
+                '<input type="checkbox" name="competencies" value="' + id + '" id="' + inputId + '"' + checked + '>' +
+                '<span>' + escapeHtml(item.label) + '</span>' +
+                '</label>' +
+                '</li>'
+            );
+        });
+        parts.push('</ul>');
+        competenciesBox.innerHTML = parts.join('');
+    }
+
+    function refreshCompetencies() {
+        if (!programDisciplineSelect || !competenciesBox) {
+            return;
+        }
+        const programDisciplineId = programDisciplineSelect.value;
+        const previouslySelected = getSelectedCompetenceIds();
+        if (!programDisciplineId) {
+            competenciesBox.innerHTML =
+                '<div class="muted">Сначала выберите дисциплину учебного плана.</div>';
+            return;
+        }
+        if (competenciesLoading) {
+            competenciesLoading.style.display = '';
+        }
+        const url = '/competencies/by-program-discipline/?program_discipline_id=' +
+            encodeURIComponent(programDisciplineId) + '&linked_only=1';
+        fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(response => response.json())
+            .then(data => {
+                renderCompetenceCheckboxes(data.results || [], previouslySelected);
+            })
+            .catch(() => {
+                competenciesBox.innerHTML =
+                    '<div class="muted">Не удалось загрузить компетенции. Обновите страницу и попробуйте снова.</div>';
+            })
+            .finally(() => {
+                if (competenciesLoading) {
+                    competenciesLoading.style.display = 'none';
+                }
+            });
+    }
+
+    if (programDisciplineSelect) {
+        programDisciplineSelect.addEventListener('change', refreshCompetencies);
     }
 })();
 </script>

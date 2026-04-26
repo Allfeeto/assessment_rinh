@@ -135,9 +135,22 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
                 'discipline__name',
             ).distinct()
         )
+        # Если выбранная дисциплина не входит в options текущей программы —
+        # не стираем её, а добавляем в options отдельной записью, чтобы UI
+        # сохранял выбор. Фильтр всё равно применяется ниже.
         valid_discipline_ids = {str(item['discipline_id']) for item in discipline_options}
-        if discipline_id and discipline_id not in valid_discipline_ids:
-            discipline_id = ''
+        if discipline_id and discipline_id not in valid_discipline_ids and discipline_id.isdigit():
+            from disciplines.models import Discipline as _Discipline
+            extra_name = (
+                _Discipline.objects.filter(pk=int(discipline_id))
+                .values_list('name', flat=True)
+                .first()
+            )
+            if extra_name:
+                discipline_options.append({
+                    'discipline_id': int(discipline_id),
+                    'discipline__name': extra_name,
+                })
         if discipline_id:
             discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__discipline_id=discipline_id
