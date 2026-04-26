@@ -115,10 +115,22 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         if not form.is_valid():
             return render(request, self.template_name, self.get_context_data(**context_kwargs), status=400)
 
+        # Шаг 1. Парсинг и маппинг загруженного файла в DTO.
+        # Здесь dto ещё не существует, поэтому в обработчиках исключений
+        # на dto не ссылаемся (иначе UnboundLocalError при ошибке парсинга).
         try:
             dto = self.import_service.build_dto_from_upload(form.cleaned_data['plx_file'])
+        except PlxImportError as exc:
+            context_kwargs['import_error'] = str(exc)
+            return render(request, self.template_name, self.get_context_data(**context_kwargs), status=400)
+
+        # На этой точке dto гарантированно создан.
+        context_kwargs['import_summary'] = dto.summary()
+
+        # Шаг 2. Поиск существующей программы, импорт. Эти ветки уже могут
+        # ссылаться на dto, потому что мы дошли сюда без исключения.
+        try:
             existing_program = self.import_service.find_existing_program(dto)
-            context_kwargs['import_summary'] = dto.summary()
 
             if existing_program:
                 request.session[self.pending_session_key] = {
