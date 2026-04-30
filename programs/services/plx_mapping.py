@@ -115,12 +115,18 @@ class PlxMapper:
         department = self._resolve_department(parsed, plan)
 
         disciplines, discipline_aliases = self._extract_disciplines(parsed, plan_code)
-        competences = self._extract_competences(parsed, plan_code, main_oop_code, active_oop.get('Код'))
+        competences, competence_aliases = self._extract_competences(
+            parsed,
+            plan_code,
+            main_oop_code,
+            active_oop.get('Код'),
+        )
         links = self._extract_links(
             parsed,
             disciplines=disciplines,
             competences=competences,
             discipline_aliases=discipline_aliases,
+            competence_aliases=competence_aliases,
         )
 
         return PlxProgramImportDTO(
@@ -260,13 +266,14 @@ class PlxMapper:
         plan_code: str,
         main_oop_code: str,
         active_oop_code: str | None,
-    ) -> list[CompetenceDTO]:
+    ) -> tuple[list[CompetenceDTO], dict[str, str]]:
         valid_oop_codes = {normalize_text(main_oop_code)}
         if active_oop_code:
             valid_oop_codes.add(normalize_text(active_oop_code))
 
         result: list[CompetenceDTO] = []
-        seen_codes: set[str] = set()
+        seen_codes: dict[str, str] = {}
+        aliases: dict[str, str] = {}
 
         for row in parsed.table('ПланыКомпетенции'):
             if normalize_text(row.get('КодПлана')) != plan_code:
@@ -279,14 +286,17 @@ class PlxMapper:
             competence_code = normalize_text(row.get('ШифрКомпетенции'))
             if not competence_code:
                 continue
+            external_id = ensure_required(row.get('Код'), 'ПланыКомпетенции.Код')
             code_key = normalize_key(competence_code)
-            if code_key in seen_codes:
+            kept_external_id = seen_codes.get(code_key)
+            if kept_external_id:
+                aliases[external_id] = kept_external_id
                 continue
-            seen_codes.add(code_key)
+            seen_codes[code_key] = external_id
 
             result.append(
                 CompetenceDTO(
-                    external_id=ensure_required(row.get('Код'), 'ПланыКомпетенции.Код'),
+                    external_id=external_id,
                     code=competence_code,
                     name=ensure_required(row.get('Наименование'), 'ПланыКомпетенции.Наименование'),
                     competence_type_name=_resolve_competence_type_name(row),
@@ -295,7 +305,7 @@ class PlxMapper:
 
         if not result:
             raise PlxMappingError('Не удалось извлечь компетенции из PLX.')
-        return result
+        return result, aliases
 
     def _extract_links(
         self,
@@ -304,10 +314,12 @@ class PlxMapper:
         disciplines: list[DisciplineDTO],
         competences: list[CompetenceDTO],
         discipline_aliases: dict[str, str] | None = None,
+        competence_aliases: dict[str, str] | None = None,
     ) -> list[DisciplineCompetenceLinkDTO]:
         discipline_ids = {item.external_id for item in disciplines}
         competence_ids = {item.external_id for item in competences}
         discipline_aliases = discipline_aliases or {}
+        competence_aliases = competence_aliases or {}
 
         links: list[DisciplineCompetenceLinkDTO] = []
         seen: set[tuple[str, str]] = set()
@@ -317,7 +329,11 @@ class PlxMapper:
                 raw_discipline_external_id,
                 raw_discipline_external_id,
             )
-            competence_external_id = normalize_text(row.get('КодКомпетенции'))
+            raw_competence_external_id = normalize_text(row.get('КодКомпетенции'))
+            competence_external_id = competence_aliases.get(
+                raw_competence_external_id,
+                raw_competence_external_id,
+            )
             if discipline_external_id not in discipline_ids:
                 continue
             if competence_external_id not in competence_ids:
