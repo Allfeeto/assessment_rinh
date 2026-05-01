@@ -90,14 +90,15 @@ def test_duplicate_discipline_rows_keep_all_competence_links():
     dto = PlxMapper().map_to_dto(parsed)
 
     assert [(item.external_id, item.name) for item in dto.disciplines] == [
-        ('discipline-row-1', 'Производственная практика')
+        ('discipline-row-1', 'Производственная практика'),
+        ('discipline-row-2', 'Производственная практика'),
     ]
-    assert [
+    assert sorted(
         (link.discipline_external_id, link.competence_external_id)
         for link in dto.discipline_competence_links
-    ] == [
+    ) == [
         ('discipline-row-1', 'competence-1'),
-        ('discipline-row-1', 'competence-2'),
+        ('discipline-row-2', 'competence-2'),
     ]
 
 

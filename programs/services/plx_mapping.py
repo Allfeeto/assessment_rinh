@@ -93,13 +93,7 @@ class PlxMapper:
         if not nested_oop:
             raise PlxMappingError('Не найдены профили (вложенные ООП) в файле PLX.')
 
-        active_oop = None
-        if active_oop_code:
-            active_oop = self._find_row(nested_oop, 'Код', active_oop_code)
-        if active_oop is None:
-            active_oop = self._find_first_true(nested_oop, 'Используется')
-        if active_oop is None:
-            active_oop = nested_oop[0]
+        active_oop = self._resolve_active_oop(nested_oop, active_oop_code)
 
         training_direction_code = ensure_required(main_oop.get('Шифр'), 'ООП.Шифр')
         training_direction_name = ensure_required(main_oop.get('Название'), 'ООП.Название')
@@ -167,6 +161,34 @@ class PlxMapper:
                 return row
         return None
 
+    def _resolve_active_oop(
+        self,
+        nested_oop: list[dict[str, str]],
+        active_oop_code: str | None,
+    ) -> dict[str, str]:
+        if active_oop_code:
+            active_oop = self._find_row(nested_oop, 'Код', active_oop_code)
+            if active_oop is None:
+                raise PlxMappingError(
+                    'КодАктивногоООП указан, но соответствующий профиль не найден в файле PLX.'
+                )
+            return active_oop
+
+        flagged = [row for row in nested_oop if _to_bool(row.get('Используется'))]
+        if len(flagged) == 1:
+            return flagged[0]
+        if len(flagged) > 1:
+            raise PlxMappingError(
+                'В файле PLX отмечено несколько активных профилей (Используется=true).'
+            )
+
+        if len(nested_oop) == 1:
+            return nested_oop[0]
+
+        raise PlxMappingError(
+            'Не удалось однозначно определить активный профиль: укажите КодАктивногоООП в PLX.'
+        )
+
     @staticmethod
     def _fallback_profile_code(filename: str) -> str:
         base = filename.rsplit('.', 1)[0]
@@ -177,7 +199,12 @@ class PlxMapper:
         if level_code:
             for row in parsed.table('Уровень_образования'):
                 if normalize_text(row.get('Код_записи')) == level_code:
-                    return _map_education_level_name(row.get('Уровень', ''))
+                    mapped = _map_education_level_name(row.get('Уровень', ''))
+                    if not mapped:
+                        raise PlxValidationError(
+                            'Найден уровень образования по коду, но его наименование пустое.'
+                        )
+                    return mapped
 
         level_name = normalize_text(parsed.document_attrs.get('УровеньОбразования'))
         if level_name:
@@ -188,8 +215,18 @@ class PlxMapper:
         department_code = normalize_text(plan.get('КодПрофКафедры'))
         if not department_code:
             profile_rows = parsed.table('ПланыПрофили')
-            if profile_rows:
-                department_code = normalize_text(profile_rows[0].get('КодПодразделения'))
+            candidate_codes = {
+                normalize_text(row.get('КодПодразделения'))
+                for row in profile_rows
+                if normalize_text(row.get('КодПодразделения'))
+            }
+            if len(candidate_codes) == 1:
+                department_code = next(iter(candidate_codes))
+            elif len(candidate_codes) > 1:
+                raise PlxMappingError(
+                    'В ПланыПрофили указано несколько разных кодов подразделений; '
+                    'невозможно однозначно определить кафедру.'
+                )
 
         if not department_code:
             raise PlxMappingError('Не найден код кафедры в файле PLX.')
@@ -223,8 +260,9 @@ class PlxMapper:
         plan_code: str,
     ) -> tuple[list[DisciplineDTO], dict[str, str]]:
         result: list[DisciplineDTO] = []
-        seen_names: dict[str, str] = {}
+        seen_by_name: dict[str, list[DisciplineDTO]] = {}
         aliases: dict[str, str] = {}
+        seen_external_ids: set[str] = set()
 
         for row in parsed.table('ПланыСтроки'):
             if normalize_text(row.get('КодПлана')) != plan_code:
@@ -241,20 +279,28 @@ class PlxMapper:
                 continue
 
             external_id = ensure_required(row.get('Код'), 'ПланыСтроки.Код')
-            key = normalize_key(name)
-            kept_external_id = seen_names.get(key)
-            if kept_external_id:
-                aliases[external_id] = kept_external_id
+            if external_id in seen_external_ids:
                 continue
-            seen_names[key] = external_id
+            seen_external_ids.add(external_id)
 
-            result.append(
-                DisciplineDTO(
-                    external_id=external_id,
-                    code=normalize_text(row.get('ДисциплинаКод')),
-                    name=name,
-                )
+            key = normalize_key(name)
+            duplicates = seen_by_name.get(key, [])
+            if duplicates:
+                kept = duplicates[0]
+                kept_code = normalize_text(kept.code)
+                new_code = normalize_text(row.get('ДисциплинаКод'))
+                # Полный дубль строки (по имени+коду) схлопываем через alias.
+                if kept_code == new_code:
+                    aliases[external_id] = kept.external_id
+                    continue
+
+            item = DisciplineDTO(
+                external_id=external_id,
+                code=normalize_text(row.get('ДисциплинаКод')),
+                name=name,
             )
+            seen_by_name.setdefault(key, []).append(item)
+            result.append(item)
 
         if not result:
             raise PlxMappingError('Не удалось извлечь дисциплины из PLX.')
@@ -272,7 +318,7 @@ class PlxMapper:
             valid_oop_codes.add(normalize_text(active_oop_code))
 
         result: list[CompetenceDTO] = []
-        seen_codes: dict[str, str] = {}
+        seen_by_code: dict[str, CompetenceDTO] = {}
         aliases: dict[str, str] = {}
 
         for row in parsed.table('ПланыКомпетенции'):
@@ -288,20 +334,30 @@ class PlxMapper:
                 continue
             external_id = ensure_required(row.get('Код'), 'ПланыКомпетенции.Код')
             code_key = normalize_key(competence_code)
-            kept_external_id = seen_codes.get(code_key)
-            if kept_external_id:
-                aliases[external_id] = kept_external_id
+            kept = seen_by_code.get(code_key)
+            if kept:
+                new_name = ensure_required(row.get('Наименование'), 'ПланыКомпетенции.Наименование')
+                new_type = _resolve_competence_type_name(row)
+                if normalize_key(kept.name) != normalize_key(new_name):
+                    raise PlxMappingError(
+                        'Обнаружены компетенции с одинаковым кодом, но разными наименованиями: '
+                        f'"{kept.code}".'
+                    )
+                if normalize_key(kept.competence_type_name) != normalize_key(new_type):
+                    raise PlxMappingError(
+                        'Обнаружены компетенции с одинаковым кодом, но разными типами: '
+                        f'"{kept.code}".'
+                    )
+                aliases[external_id] = kept.external_id
                 continue
-            seen_codes[code_key] = external_id
-
-            result.append(
-                CompetenceDTO(
-                    external_id=external_id,
-                    code=competence_code,
-                    name=ensure_required(row.get('Наименование'), 'ПланыКомпетенции.Наименование'),
-                    competence_type_name=_resolve_competence_type_name(row),
-                )
+            item = CompetenceDTO(
+                external_id=external_id,
+                code=competence_code,
+                name=ensure_required(row.get('Наименование'), 'ПланыКомпетенции.Наименование'),
+                competence_type_name=_resolve_competence_type_name(row),
             )
+            seen_by_code[code_key] = item
+            result.append(item)
 
         if not result:
             raise PlxMappingError('Не удалось извлечь компетенции из PLX.')
