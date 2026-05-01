@@ -92,7 +92,7 @@ class AssessmentItemForm(forms.ModelForm):
         base_program_discipline_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'discipline',
-        ).order_by(
+        ).filter(educational_program__is_deleted=False).order_by(
             'educational_program__program_profile__code',
             'educational_program__admission_year',
             'discipline__name',
@@ -110,10 +110,12 @@ class AssessmentItemForm(forms.ModelForm):
         competence_queryset = Competence.objects.none()
         if program_discipline_id:
             linked_competence_ids = DisciplineCompetence.objects.filter(
-                program_discipline_id=program_discipline_id
+                program_discipline_id=program_discipline_id,
+                program_discipline__educational_program__is_deleted=False,
             ).values_list('competence_id', flat=True)
             competence_queryset = Competence.objects.select_related('competence_type').filter(
-                id__in=linked_competence_ids
+                id__in=linked_competence_ids,
+                educational_program__is_deleted=False,
             ).order_by('code')
 
         selected_ids = {
@@ -124,7 +126,10 @@ class AssessmentItemForm(forms.ModelForm):
         available_ids = set(competence_queryset.values_list('pk', flat=True))
         missing_ids = list(selected_ids - available_ids)
         if missing_ids:
-            competence_queryset = Competence.objects.filter(pk__in=missing_ids) | competence_queryset
+            competence_queryset = Competence.objects.filter(
+                pk__in=missing_ids,
+                educational_program__is_deleted=False,
+            ) | competence_queryset
 
         self.fields['competencies'].queryset = competence_queryset.distinct().order_by('code')
         self.fields['competencies'].help_text = (
@@ -149,10 +154,14 @@ class AssessmentItemForm(forms.ModelForm):
 
         if not program_discipline:
             return cleaned_data
+        if program_discipline.educational_program.is_deleted:
+            self.add_error('program_discipline', 'Нельзя создавать или изменять задания в программе из корзины.')
+            return cleaned_data
 
         linked_ids = set(
             DisciplineCompetence.objects.filter(
-                program_discipline=program_discipline
+                program_discipline=program_discipline,
+                program_discipline__educational_program__is_deleted=False,
             ).values_list('competence_id', flat=True)
         )
 

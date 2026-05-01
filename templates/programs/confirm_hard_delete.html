@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Удалить программу насовсем{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Удалить программу насовсем</h1>
+
+<div class="alert">
+    Действие необратимо. Будут удалены только данные этой образовательной программы; общие справочники не удаляются.
+</div>
+
+<div class="panel">
+    <p><strong>{{ program.display_name }}</strong></p>
+    <div class="stats">
+        <div class="stat"><div class="muted">Образовательная программа</div><div class="stat-value">1</div></div>
+        <div class="stat"><div class="muted">Дисциплин учебного плана</div><div class="stat-value">{{ counts.program_disciplines }}</div></div>
+        <div class="stat"><div class="muted">Компетенций</div><div class="stat-value">{{ counts.competences }}</div></div>
+        <div class="stat"><div class="muted">Связей матрицы</div><div class="stat-value">{{ counts.discipline_competences }}</div></div>
+        <div class="stat"><div class="muted">Оценочных заданий</div><div class="stat-value">{{ counts.assessment_items }}</div></div>
+        <div class="stat"><div class="muted">Строк заданий</div><div class="stat-value">{{ counts.assessment_item_rows }}</div></div>
+        <div class="stat"><div class="muted">Связей задания-компетенции</div><div class="stat-value">{{ counts.assessment_item_competences }}</div></div>
+        <div class="stat"><div class="muted">Назначений преподавателей</div><div class="stat-value">{{ counts.teacher_assignments }}</div></div>
+    </div>
+    <form method="post" style="margin-top: 14px;">
+        {% csrf_token %}
+        <div class="actions">
+            <button class="btn danger" type="submit">Удалить насовсем</button>
+            <a class="btn secondary" href="{% url 'programs_trash_detail' program.id %}">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,28 +1,26 @@
 from __future__ import annotations
 
-from assessment.models import AssessmentItem, AssessmentItemRow
-from competencies.models import Competence, DisciplineCompetence
-from disciplines.models import ProgramDiscipline
+from .program_trash_service import ProgramTrashService
 
 
 class ProgramReplaceService:
     """
-    Удаляет только данные, привязанные к конкретной образовательной программе.
-    Общие справочники (кафедры, дисциплины, направления и т.п.) не затрагиваются.
+    Совместимый фасад для старого имени сервиса.
+
+    Замена через импорт больше не должна физически удалять программу: для этого
+    используется move_to_trash. Физическое удаление оставлено только как явная
+    операция над программой, уже находящейся в корзине.
     """
 
-    def delete_program_with_dependencies(self, educational_program) -> None:
-        assessment_items_qs = AssessmentItem.objects.filter(
-            program_discipline__educational_program=educational_program
+    def __init__(self):
+        self.trash_service = ProgramTrashService()
+
+    def move_to_trash(self, educational_program, *, user=None, reason=None):
+        return self.trash_service.move_to_trash(
+            educational_program,
+            user=user,
+            reason=reason,
         )
-        AssessmentItemRow.objects.filter(assessment_item__in=assessment_items_qs).delete()
-        assessment_items_qs.delete()
 
-        DisciplineCompetence.objects.filter(
-            program_discipline__educational_program=educational_program
-        ).delete()
-        ProgramDiscipline.objects.filter(educational_program=educational_program).delete()
-        Competence.objects.filter(educational_program=educational_program).delete()
-
-        educational_program.delete()
-
+    def delete_program_with_dependencies(self, educational_program) -> None:
+        self.trash_service.hard_delete(educational_program)

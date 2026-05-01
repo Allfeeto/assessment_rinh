@@ -52,7 +52,7 @@ class WordExportForm(forms.Form):
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).order_by('program_profile__code', 'admission_year')
+        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -65,7 +65,7 @@ class WordExportForm(forms.Form):
             self.fields['discipline'].required = False
 
         base_discipline_qs = Discipline.objects.order_by('name')
-        linked_disciplines_qs = ProgramDiscipline.objects.all()
+        linked_disciplines_qs = ProgramDiscipline.objects.filter(educational_program__is_deleted=False)
         if program_id:
             linked_disciplines_qs = linked_disciplines_qs.filter(educational_program_id=program_id)
         if selected_competence_id:
@@ -91,7 +91,7 @@ class WordExportForm(forms.Form):
         competence_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).order_by('code')
+        ).filter(educational_program__is_deleted=False).order_by('code')
 
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
@@ -99,6 +99,7 @@ class WordExportForm(forms.Form):
         if discipline_id:
             program_disciplines = ProgramDiscipline.objects.filter(
                 discipline_id=discipline_id,
+                educational_program__is_deleted=False,
             )
             if program_id:
                 program_disciplines = program_disciplines.filter(
@@ -130,10 +131,14 @@ class WordExportForm(forms.Form):
 
         if not educational_program or not discipline or not competence:
             return cleaned_data
+        if educational_program.is_deleted:
+            self.add_error('educational_program', 'Нельзя экспортировать образовательную программу из корзины.')
+            return cleaned_data
 
         program_discipline = ProgramDiscipline.objects.filter(
             educational_program=educational_program,
             discipline=discipline,
+            educational_program__is_deleted=False,
         ).first()
 
         if not program_discipline:

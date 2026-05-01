@@ -122,9 +122,12 @@ def test_import_existing_program_requires_confirm_and_replace_recreates_relation
 
     assert replacement_result.replaced_program_id == first_result.created_program_id
     assert replacement_result.created_program_id != first_result.created_program_id
-    assert not EducationalProgram.objects.filter(pk=first_result.created_program_id).exists()
+    old_program = EducationalProgram.objects.get(pk=first_result.created_program_id)
+    assert old_program.is_deleted is True
+    assert not EducationalProgram.objects.active().filter(pk=first_result.created_program_id).exists()
 
     program = EducationalProgram.objects.get(pk=replacement_result.created_program_id)
+    assert program.is_deleted is False
     assert list(program.program_disciplines.values_list('discipline__name', flat=True)) == [
         'Новая дисциплина'
     ]

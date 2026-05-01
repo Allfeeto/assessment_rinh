@@ -6,6 +6,7 @@ from .exceptions import (
     PlxValidationError,
 )
 from .plx_import_service import ImportResult, PlxImportService
+from .program_trash_service import ProgramTrashConflictError, ProgramTrashCounts, ProgramTrashService
 
 __all__ = [
     'ImportResult',
@@ -15,5 +16,7 @@ __all__ = [
     'PlxMappingError',
     'PlxParsingError',
     'PlxValidationError',
+    'ProgramTrashConflictError',
+    'ProgramTrashCounts',
+    'ProgramTrashService',
 ]
-

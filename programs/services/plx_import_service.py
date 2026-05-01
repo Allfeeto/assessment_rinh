@@ -15,7 +15,7 @@ from .exceptions import PlxConflictError, PlxImportError, PlxValidationError
 from .plx_dto import PlxProgramImportDTO
 from .plx_mapping import normalize_key, normalize_text, PlxMapper
 from .plx_parser import PlxParser
-from .program_replace_service import ProgramReplaceService
+from .program_trash_service import ProgramTrashService
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class PlxImportService:
     def __init__(self):
         self.parser = PlxParser()
         self.mapper = PlxMapper()
-        self.replace_service = ProgramReplaceService()
+        self.trash_service = ProgramTrashService()
 
     def build_dto_from_upload(self, uploaded_file) -> PlxProgramImportDTO:
         parsed = self.parser.parse_upload(uploaded_file)
@@ -48,13 +48,13 @@ class PlxImportService:
         if department is None:
             return None
 
-        return EducationalProgram.objects.filter(
+        return EducationalProgram.objects.active().filter(
             program_profile=profile,
             department=department,
             admission_year=dto.program.admission_year,
         ).first()
 
-    def import_program(self, dto: PlxProgramImportDTO, *, replace_existing: bool) -> ImportResult:
+    def import_program(self, dto: PlxProgramImportDTO, *, replace_existing: bool, user=None) -> ImportResult:
         with transaction.atomic():
             education_level = self._resolve_education_level(dto.program.education_level_name)
             direction = self._resolve_training_direction(
@@ -69,7 +69,7 @@ class PlxImportService:
             )
             department = self._resolve_department(dto.department.number, dto.department.short_name, dto.department.full_name)
 
-            existing_program = EducationalProgram.objects.filter(
+            existing_program = EducationalProgram.objects.active().filter(
                 program_profile=profile,
                 department=department,
                 admission_year=dto.program.admission_year,
@@ -79,12 +79,16 @@ class PlxImportService:
             if existing_program and not replace_existing:
                 raise PlxConflictError(
                     'Такая образовательная программа уже существует. '
-                    'Подтвердите замену, чтобы удалить старую версию и загрузить новую.',
+                    'Подтвердите замену, чтобы переместить старую версию в корзину и загрузить новую.',
                     existing_program_id=existing_program.id,
                 )
             if existing_program and replace_existing:
                 replaced_program_id = existing_program.id
-                self.replace_service.delete_program_with_dependencies(existing_program)
+                self.trash_service.move_to_trash(
+                    existing_program,
+                    user=user,
+                    reason='Замена образовательной программы через импорт PLX',
+                )
 
             program = EducationalProgram.objects.create(
                 program_profile=profile,
@@ -304,4 +308,3 @@ class PlxImportService:
             if is_created:
                 created += 1
         return created
-

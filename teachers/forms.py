@@ -106,7 +106,7 @@ class TeacherProgramDisciplineForm(forms.ModelForm):
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
-        ).order_by(
+        ).filter(educational_program__is_deleted=False).order_by(
             'educational_program__program_profile__code',
             'educational_program__admission_year',
             'discipline__name',

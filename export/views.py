@@ -39,6 +39,7 @@ class WordExportView(LoginRequiredMixin, View):
             ProgramDiscipline.objects.filter(
                 educational_program_id=educational_program.id,
                 discipline_id=discipline.id,
+                educational_program__is_deleted=False,
             )
             .values_list('id', flat=True)
             .first()

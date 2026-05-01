@@ -6,6 +6,10 @@ from .views import (
     EducationalProgramDetailView,
     EducationalProgramListView,
     EducationalProgramUpdateView,
+    ProgramTrashDetailView,
+    ProgramTrashHardDeleteView,
+    ProgramTrashListView,
+    ProgramTrashRestoreView,
     ProgramProfileCreateView,
     ProgramProfileDeleteView,
     ProgramProfileDetailView,
@@ -40,6 +44,11 @@ urlpatterns = [
     path('educational-programs/<int:pk>/', EducationalProgramDetailView.as_view(), name='programs_educational_program_detail'),
     path('educational-programs/<int:pk>/edit/', EducationalProgramUpdateView.as_view(), name='programs_educational_program_update'),
     path('educational-programs/<int:pk>/delete/', EducationalProgramDeleteView.as_view(), name='programs_educational_program_delete'),
+
+    path('trash/', ProgramTrashListView.as_view(), name='programs_trash'),
+    path('trash/<int:pk>/', ProgramTrashDetailView.as_view(), name='programs_trash_detail'),
+    path('trash/<int:pk>/restore/', ProgramTrashRestoreView.as_view(), name='programs_trash_restore'),
+    path('trash/<int:pk>/hard-delete/', ProgramTrashHardDeleteView.as_view(), name='programs_trash_hard_delete'),
 
     path('profiles-by-direction/', profiles_by_direction, name='programs_profiles_by_direction'),
 ]

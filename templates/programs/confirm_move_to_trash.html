@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+
+<div class="panel">
+    <p>Программа будет перемещена в корзину, а не удалена физически.</p>
+    <p><strong>{{ object.display_name }}</strong></p>
+    <p class="muted">
+        Дисциплины учебного плана, компетенции, матрица, оценочные средства и назначения преподавателей сохранятся.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="actions">
+            <button class="btn danger" type="submit">Переместить в корзину</button>
+            <a class="btn secondary" href="{% url list_url_name %}">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

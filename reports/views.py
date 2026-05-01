@@ -96,7 +96,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         competence = cleaned.get('competence')
         assessment_item_type = cleaned.get('assessment_item_type')
 
-        item_filters = Q()
+        item_filters = Q(program_discipline__educational_program__is_deleted=False)
         if educational_program:
             item_filters &= Q(program_discipline__educational_program=educational_program)
         if discipline:
@@ -133,7 +133,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
             row['ui_name'] = get_item_type_ui_name(row.get('code') or row['name'])
 
         report_by_program_qs = (
-            EducationalProgram.objects.select_related('program_profile', 'department')
+            EducationalProgram.objects.active().select_related('program_profile', 'department')
             .annotate(
                 total=Count(
                     'program_disciplines__assessment_items',
@@ -163,7 +163,10 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
             Discipline.objects.annotate(
                 total=Count(
                     'program_disciplines__assessment_items',
-                    filter=Q(program_disciplines__assessment_items__id__in=filtered_item_ids),
+                    filter=Q(
+                        program_disciplines__assessment_items__id__in=filtered_item_ids,
+                        program_disciplines__educational_program__is_deleted=False,
+                    ),
                     distinct=True,
                 )
             )
@@ -181,7 +184,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         competence_coverage_qs = Competence.objects.select_related(
             'educational_program__program_profile',
             'competence_type',
-        )
+        ).filter(educational_program__is_deleted=False)
         if educational_program:
             competence_coverage_qs = competence_coverage_qs.filter(educational_program=educational_program)
         if competence:
@@ -214,7 +217,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         discipline_competence_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'competence',
-        )
+        ).filter(program_discipline__educational_program__is_deleted=False)
         if educational_program:
             discipline_competence_qs = discipline_competence_qs.filter(
                 program_discipline__educational_program=educational_program

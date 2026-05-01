@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Восстановить программу{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Восстановить программу</h1>
+
+<div class="panel">
+    <p>Программа снова станет активной и появится в обычных списках, отчетах, экспорте и рабочем месте.</p>
+    <p><strong>{{ program.display_name }}</strong></p>
+    <form method="post">
+        {% csrf_token %}
+        <div class="actions">
+            <button class="btn" type="submit">Восстановить</button>
+            <a class="btn secondary" href="{% url 'programs_trash_detail' program.id %}">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

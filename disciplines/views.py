@@ -56,14 +56,18 @@ class ProgramDisciplineManagerView(LoginRequiredMixin, View):
         if selected_program_id:
             selected_program = (
                 EducationalProgram.objects.select_related('program_profile', 'department')
-                .filter(pk=selected_program_id)
+                .filter(pk=selected_program_id, is_deleted=False)
                 .first()
             )
             if selected_program:
-                educational_program_options = EducationalProgram.objects.filter(pk=selected_program.pk)
+                educational_program_options = EducationalProgram.objects.filter(
+                    pk=selected_program.pk,
+                    is_deleted=False,
+                )
 
             existing_program_disciplines_qs = ProgramDiscipline.objects.select_related('discipline').filter(
-                educational_program_id=selected_program_id
+                educational_program_id=selected_program_id,
+                educational_program__is_deleted=False,
             ).order_by('discipline__name')
 
             discipline_filter_options = list(
@@ -149,14 +153,20 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         # Считаем агрегаты через Subquery, чтобы избежать инфляции
         # из-за пересекающихся JOIN’ов при нескольких Count(distinct=True).
         discipline_programs_count = (
-            ProgramDiscipline.objects.filter(discipline=OuterRef('pk'))
+            ProgramDiscipline.objects.filter(
+                discipline=OuterRef('pk'),
+                educational_program__is_deleted=False,
+            )
             .order_by()
             .values('discipline')
             .annotate(total=Count('id'))
             .values('total')
         )
         discipline_items_count = (
-            AssessmentItem.objects.filter(program_discipline__discipline=OuterRef('pk'))
+            AssessmentItem.objects.filter(
+                program_discipline__discipline=OuterRef('pk'),
+                program_discipline__educational_program__is_deleted=False,
+            )
             .order_by()
             .values('program_discipline__discipline')
             .annotate(total=Count('id'))
@@ -178,14 +188,20 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             disciplines_qs = disciplines_qs.filter(name__icontains=search)
 
         program_discipline_competences_count = (
-            DisciplineCompetence.objects.filter(program_discipline=OuterRef('pk'))
+            DisciplineCompetence.objects.filter(
+                program_discipline=OuterRef('pk'),
+                program_discipline__educational_program__is_deleted=False,
+            )
             .order_by()
             .values('program_discipline')
             .annotate(total=Count('id'))
             .values('total')
         )
         program_discipline_items_count = (
-            AssessmentItem.objects.filter(program_discipline=OuterRef('pk'))
+            AssessmentItem.objects.filter(
+                program_discipline=OuterRef('pk'),
+                program_discipline__educational_program__is_deleted=False,
+            )
             .order_by()
             .values('program_discipline')
             .annotate(total=Count('id'))
@@ -196,7 +212,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
-        ).annotate(
+        ).filter(educational_program__is_deleted=False).annotate(
             competences_count=Coalesce(
                 Subquery(program_discipline_competences_count, output_field=IntegerField()),
                 0,
@@ -222,13 +238,13 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
-            .filter(pk=educational_program_id)
+            .filter(pk=educational_program_id, is_deleted=False)
             .first()
             if educational_program_id
             else None
         )
         educational_program_options = (
-            EducationalProgram.objects.filter(pk=selected_program.pk)
+            EducationalProgram.objects.filter(pk=selected_program.pk, is_deleted=False)
             if selected_program
             else EducationalProgram.objects.none()
         )
@@ -311,6 +327,9 @@ class ProgramDisciplineListView(NamedListView):
     update_url_name = 'disciplines_program_discipline_update'
     delete_url_name = 'disciplines_program_discipline_delete'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
+
 
 class ProgramDisciplineDetailView(NamedDetailView):
     model = ProgramDiscipline
@@ -323,6 +342,9 @@ class ProgramDisciplineDetailView(NamedDetailView):
         ('Программа', 'educational_program'),
         ('Дисциплина', 'discipline.name'),
     )
+
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
 
 
 class ProgramDisciplineCreateView(NamedCreateView):
@@ -338,11 +360,17 @@ class ProgramDisciplineUpdateView(NamedUpdateView):
     title = 'Редактировать дисциплину учебного плана'
     list_url_name = 'disciplines_program_discipline_list'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
+
 
 class ProgramDisciplineDeleteView(NamedDeleteView):
     model = ProgramDiscipline
     title = 'Удалить дисциплину учебного плана'
     list_url_name = 'disciplines_program_discipline_list'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
 
 
 @login_required
@@ -351,7 +379,7 @@ def program_discipline_by_program(request):
     queryset = ProgramDiscipline.objects.select_related(
         'educational_program__program_profile',
         'discipline',
-    ).order_by(
+    ).filter(educational_program__is_deleted=False).order_by(
         'educational_program__program_profile__code',
         'educational_program__admission_year',
         'discipline__name',

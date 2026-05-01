@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{{ program.display_name }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ program.display_name }}</h1>
+
+<div class="alert">
+    Эта образовательная программа находится в корзине. Она не участвует в отчетах, экспорте и обычном рабочем месте.
+    Оценочные средства доступны только для просмотра и копирования.
+</div>
+
+<div class="panel">
+    <div class="actions">
+        <a class="btn secondary" href="{% url 'programs_trash' %}">Назад к корзине</a>
+        <a class="btn secondary" href="{% url 'assessment_trash_workspace' %}?program={{ program.id }}">Рабочая область</a>
+        {% if can_manage_trash %}
+            <a class="btn secondary" href="{% url 'programs_trash_restore' program.id %}">Восстановить</a>
+            <a class="btn danger" href="{% url 'programs_trash_hard_delete' program.id %}">Удалить насовсем</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="panel">
+    <h2>Основная информация</h2>
+    <table>
+        <tbody>
+        <tr><th>Уровень</th><td>{{ program.program_profile.training_direction.education_level.name }}</td></tr>
+        <tr><th>Направление</th><td>{{ program.program_profile.training_direction }}</td></tr>
+        <tr><th>Профиль</th><td>{{ program.program_profile }}</td></tr>
+        <tr><th>Кафедра</th><td>{{ program.department }}</td></tr>
+        <tr><th>Год набора</th><td>{{ program.admission_year }}</td></tr>
+        <tr><th>Дата перемещения</th><td>{{ program.deleted_at|date:"d.m.Y H:i"|default:"—" }}</td></tr>
+        <tr><th>Кто переместил</th><td>{{ program.deleted_by.username|default:"—" }}</td></tr>
+        <tr><th>Причина</th><td>{{ program.delete_reason|default:"—" }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="panel">
+    <h2>Статистика</h2>
+    <div class="stats">
+        <div class="stat"><div class="muted">Дисциплин</div><div class="stat-value">{{ counts.program_disciplines }}</div></div>
+        <div class="stat"><div class="muted">Компетенций</div><div class="stat-value">{{ counts.competences }}</div></div>
+        <div class="stat"><div class="muted">Связей матрицы</div><div class="stat-value">{{ counts.discipline_competences }}</div></div>
+        <div class="stat"><div class="muted">Заданий</div><div class="stat-value">{{ counts.assessment_items }}</div></div>
+        <div class="stat"><div class="muted">Строк заданий</div><div class="stat-value">{{ counts.assessment_item_rows }}</div></div>
+        <div class="stat"><div class="muted">Назначений</div><div class="stat-value">{{ counts.teacher_assignments }}</div></div>
+    </div>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Дисциплины учебного плана</h2>
+    <table>
+        <thead><tr><th>ID</th><th>Дисциплина</th></tr></thead>
+        <tbody>
+        {% for pd in program_disciplines %}
+            <tr><td>{{ pd.id }}</td><td>{{ pd.discipline.name }}</td></tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">Дисциплины не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Компетенции</h2>
+    <table>
+        <thead><tr><th>Код</th><th>Тип</th><th>Наименование</th></tr></thead>
+        <tbody>
+        {% for competence in competences %}
+            <tr><td>{{ competence.code }}</td><td>{{ competence.competence_type.name }}</td><td>{{ competence.name }}</td></tr>
+        {% empty %}
+            <tr><td colspan="3" class="muted">Компетенции не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Матрица дисциплина-компетенция</h2>
+    <table>
+        <thead><tr><th>Дисциплина</th><th>Компетенция</th></tr></thead>
+        <tbody>
+        {% for link in discipline_competences %}
+            <tr><td>{{ link.program_discipline.discipline.name }}</td><td>{{ link.competence.code }} — {{ link.competence.name }}</td></tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">Связи не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel table-wrap">
+    <h2>Назначения преподавателей</h2>
+    <table>
+        <thead><tr><th>Преподаватель</th><th>Дисциплина</th></tr></thead>
+        <tbody>
+        {% for link in teacher_assignments %}
+            <tr><td>{{ link.teacher.full_name }}</td><td>{{ link.program_discipline.discipline.name }}</td></tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">Назначения не найдены.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

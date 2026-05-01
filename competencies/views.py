@@ -37,14 +37,20 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         per_page = get_per_page(self.request)
 
         competence_disciplines_count = (
-            DisciplineCompetence.objects.filter(competence=OuterRef('pk'))
+            DisciplineCompetence.objects.filter(
+                competence=OuterRef('pk'),
+                program_discipline__educational_program__is_deleted=False,
+            )
             .order_by()
             .values('competence')
             .annotate(total=Count('id'))
             .values('total')
         )
         competence_items_count = (
-            AssessmentItemCompetence.objects.filter(competence=OuterRef('pk'))
+            AssessmentItemCompetence.objects.filter(
+                competence=OuterRef('pk'),
+                assessment_item__program_discipline__educational_program__is_deleted=False,
+            )
             .order_by()
             .values('competence')
             .annotate(total=Count('assessment_item_id', distinct=True))
@@ -54,7 +60,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         competences_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).annotate(
+        ).filter(educational_program__is_deleted=False).annotate(
             disciplines_count=Coalesce(
                 Subquery(competence_disciplines_count, output_field=IntegerField()),
                 0,
@@ -70,6 +76,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         if discipline_id:
             linked_competence_ids = DisciplineCompetence.objects.filter(
                 program_discipline__discipline_id=discipline_id,
+                program_discipline__educational_program__is_deleted=False,
             )
             if educational_program_id:
                 linked_competence_ids = linked_competence_ids.filter(
@@ -90,6 +97,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             AssessmentItemCompetence.objects.filter(
                 competence_id=OuterRef('competence_id'),
                 assessment_item__program_discipline_id=OuterRef('program_discipline_id'),
+                assessment_item__program_discipline__educational_program__is_deleted=False,
             )
             .order_by()
             .values('competence_id')
@@ -102,7 +110,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
             'competence',
-        ).annotate(
+        ).filter(program_discipline__educational_program__is_deleted=False).annotate(
             items_count=Coalesce(
                 Subquery(link_items_count, output_field=IntegerField()),
                 0,
@@ -120,7 +128,9 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         if competence_id:
             discipline_competences_qs = discipline_competences_qs.filter(competence_id=competence_id)
         discipline_options = []
-        discipline_options_qs = ProgramDiscipline.objects.select_related('discipline')
+        discipline_options_qs = ProgramDiscipline.objects.filter(
+            educational_program__is_deleted=False
+        ).select_related('discipline')
         if educational_program_id:
             discipline_options_qs = discipline_options_qs.filter(
                 educational_program_id=educational_program_id
@@ -158,18 +168,18 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
-            .filter(pk=educational_program_id)
+            .filter(pk=educational_program_id, is_deleted=False)
             .first()
             if educational_program_id
             else None
         )
         educational_program_options = (
-            EducationalProgram.objects.filter(pk=selected_program.pk)
+            EducationalProgram.objects.filter(pk=selected_program.pk, is_deleted=False)
             if selected_program
             else EducationalProgram.objects.none()
         )
         competence_options = (
-            Competence.objects.filter(pk=competence_id)
+            Competence.objects.filter(pk=competence_id, educational_program__is_deleted=False)
             if competence_id
             else Competence.objects.none()
         )
@@ -241,6 +251,9 @@ class CompetenceListView(NamedListView):
     update_url_name = 'competencies_competence_update'
     delete_url_name = 'competencies_competence_delete'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
+
 
 class CompetenceDetailView(NamedDetailView):
     model = Competence
@@ -256,6 +269,9 @@ class CompetenceDetailView(NamedDetailView):
         ('Программа', 'educational_program'),
     )
 
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
+
 
 class CompetenceCreateView(NamedCreateView):
     model = Competence
@@ -270,11 +286,17 @@ class CompetenceUpdateView(NamedUpdateView):
     title = 'Редактировать компетенцию'
     list_url_name = 'competencies_competence_list'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
+
 
 class CompetenceDeleteView(NamedDeleteView):
     model = Competence
     title = 'Удалить компетенцию'
     list_url_name = 'competencies_competence_list'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(educational_program__is_deleted=False)
 
 
 class DisciplineCompetenceListView(NamedListView):
@@ -295,6 +317,9 @@ class DisciplineCompetenceListView(NamedListView):
     update_url_name = 'competencies_discipline_competence_update'
     delete_url_name = 'competencies_discipline_competence_delete'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+
 
 class DisciplineCompetenceDetailView(NamedDetailView):
     model = DisciplineCompetence
@@ -307,6 +332,9 @@ class DisciplineCompetenceDetailView(NamedDetailView):
         ('Дисциплина учебного плана', 'program_discipline'),
         ('Компетенция', 'competence'),
     )
+
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
 
 
 class DisciplineCompetenceCreateView(NamedCreateView):
@@ -322,11 +350,17 @@ class DisciplineCompetenceUpdateView(NamedUpdateView):
     title = 'Редактировать связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+
 
 class DisciplineCompetenceDeleteView(NamedDeleteView):
     model = DisciplineCompetence
     title = 'Удалить связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
 
 
 @login_required
@@ -334,10 +368,11 @@ def competences_by_program_discipline(request):
     program_discipline_id = request.GET.get('program_discipline_id')
     linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
 
-    queryset = Competence.objects.order_by('code')
+    queryset = Competence.objects.filter(educational_program__is_deleted=False).order_by('code')
     if program_discipline_id:
         educational_program_id = (
             ProgramDiscipline.objects.filter(pk=program_discipline_id)
+            .filter(educational_program__is_deleted=False)
             .values_list('educational_program_id', flat=True)
             .first()
         )

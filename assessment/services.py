@@ -259,29 +259,37 @@ def clear_clipboard(session) -> None:
 
 
 def clone_assessment_item_to_program_discipline(source_item, target_program_discipline):
-    from competencies.models import Competence, DisciplineCompetence
+    from competencies.models import DisciplineCompetence
     from .models import AssessmentItem, AssessmentItemRow
 
-    source_competences = get_item_competences(source_item)
-    source_competence_ids = [competence.id for competence in source_competences]
+    if target_program_discipline.educational_program.is_deleted:
+        raise ValueError('Нельзя вставлять задания в образовательную программу из корзины.')
 
-    allowed_competence_ids = list(
-        DisciplineCompetence.objects.filter(
-            program_discipline=target_program_discipline,
-            competence_id__in=source_competence_ids,
-        ).values_list('competence_id', flat=True)
+    source_competences = get_item_competences(source_item)
+    target_links = (
+        DisciplineCompetence.objects.filter(program_discipline=target_program_discipline)
+        .select_related('competence__competence_type')
+        .order_by('competence__code', 'competence_id')
     )
-    allowed_set = set(allowed_competence_ids)
-    ordered_allowed_ids = [comp_id for comp_id in source_competence_ids if comp_id in allowed_set]
-    competence_map = {
-        competence.id: competence
-        for competence in Competence.objects.filter(id__in=ordered_allowed_ids)
-    }
-    transferable_competences = [
-        competence_map[comp_id]
-        for comp_id in ordered_allowed_ids
-        if comp_id in competence_map
-    ]
+    target_by_key = {}
+    for link in target_links:
+        competence = link.competence
+        code_key = (competence.code or '').strip().lower()
+        type_id = competence.competence_type_id
+        type_name = (getattr(competence.competence_type, 'name', '') or '').strip().lower()
+        target_by_key.setdefault((code_key, type_id), competence)
+        target_by_key.setdefault((code_key, type_name), competence)
+
+    transferable_competences = []
+    seen_target_ids = set()
+    for source_competence in source_competences:
+        code_key = (source_competence.code or '').strip().lower()
+        type_id = source_competence.competence_type_id
+        type_name = (getattr(source_competence.competence_type, 'name', '') or '').strip().lower()
+        target_competence = target_by_key.get((code_key, type_id)) or target_by_key.get((code_key, type_name))
+        if target_competence and target_competence.id not in seen_target_ids:
+            seen_target_ids.add(target_competence.id)
+            transferable_competences.append(target_competence)
 
     new_item = AssessmentItem.objects.create(
         program_discipline=target_program_discipline,

@@ -90,10 +90,12 @@ def _build_home_stats():
         'teachers': Teacher.objects.count(),
         'training_directions': TrainingDirection.objects.count(),
         'program_profiles': ProgramProfile.objects.count(),
-        'educational_programs': EducationalProgram.objects.count(),
+        'educational_programs': EducationalProgram.objects.active().count(),
         'disciplines': Discipline.objects.count(),
-        'competences': Competence.objects.count(),
-        'assessment_items': AssessmentItem.objects.count(),
+        'competences': Competence.objects.filter(educational_program__is_deleted=False).count(),
+        'assessment_items': AssessmentItem.objects.filter(
+            program_discipline__educational_program__is_deleted=False
+        ).count(),
     }
 
 
@@ -405,7 +407,7 @@ def _lookup_program_profile(request, query, selected_id, limit):
 
 
 def _lookup_educational_program(request, query, selected_id, limit):
-    queryset = EducationalProgram.objects.select_related(
+    queryset = EducationalProgram.objects.active().select_related(
         'program_profile__training_direction',
         'department',
     ).order_by('program_profile__code', 'admission_year')
@@ -455,7 +457,8 @@ def _lookup_discipline(request, query, selected_id, limit):
     competence_id = request.GET.get('competence_id')
     if exclude_program_id:
         linked_ids = ProgramDiscipline.objects.filter(
-            educational_program_id=exclude_program_id
+            educational_program_id=exclude_program_id,
+            educational_program__is_deleted=False,
         ).values_list('discipline_id', flat=True)
         queryset = queryset.exclude(id__in=linked_ids)
     if (
@@ -465,7 +468,9 @@ def _lookup_discipline(request, query, selected_id, limit):
         or educational_program_id
         or competence_id
     ):
-        linked_program_disciplines = ProgramDiscipline.objects.all()
+        linked_program_disciplines = ProgramDiscipline.objects.filter(
+            educational_program__is_deleted=False
+        )
         if education_level_id:
             linked_program_disciplines = linked_program_disciplines.filter(
                 educational_program__program_profile__training_direction__education_level_id=education_level_id
@@ -499,7 +504,7 @@ def _lookup_program_discipline(request, query, selected_id, limit):
         'educational_program__program_profile',
         'educational_program__department',
         'discipline',
-    ).order_by(
+    ).filter(educational_program__is_deleted=False).order_by(
         'educational_program__program_profile__code',
         'educational_program__admission_year',
         'discipline__name',
@@ -532,7 +537,7 @@ def _lookup_competence(request, query, selected_id, limit):
     queryset = Competence.objects.select_related(
         'educational_program__program_profile',
         'competence_type',
-    ).order_by('code')
+    ).filter(educational_program__is_deleted=False).order_by('code')
 
     educational_program_id = request.GET.get('educational_program_id')
     program_discipline_id = request.GET.get('program_discipline_id')
@@ -556,6 +561,7 @@ def _lookup_competence(request, query, selected_id, limit):
     if program_discipline_id:
         program_id = (
             ProgramDiscipline.objects.filter(pk=program_discipline_id)
+            .filter(educational_program__is_deleted=False)
             .values_list('educational_program_id', flat=True)
             .first()
         )
@@ -573,7 +579,8 @@ def _lookup_competence(request, query, selected_id, limit):
 
     if discipline_id:
         discipline_links = DisciplineCompetence.objects.filter(
-            program_discipline__discipline_id=discipline_id
+            program_discipline__discipline_id=discipline_id,
+            program_discipline__educational_program__is_deleted=False,
         )
         if educational_program_id:
             discipline_links = discipline_links.filter(

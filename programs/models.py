@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class TrainingDirection(models.Model):
@@ -51,6 +53,21 @@ class ProgramProfile(models.Model):
         return f'{self.code} — {self.name}'
 
 
+class EducationalProgramQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_deleted=False)
+
+    def in_trash(self):
+        return self.filter(is_deleted=True)
+
+    def with_trash(self):
+        return self
+
+
+class EducationalProgramManager(models.Manager.from_queryset(EducationalProgramQuerySet)):
+    pass
+
+
 class EducationalProgram(models.Model):
     id = models.AutoField(primary_key=True)
     program_profile = models.ForeignKey(
@@ -68,6 +85,20 @@ class EducationalProgram(models.Model):
         verbose_name='Кафедра',
     )
     admission_year = models.SmallIntegerField(verbose_name='Год набора')
+    is_deleted = models.BooleanField(default=False, verbose_name='В корзине')
+    deleted_at = models.DateTimeField(blank=True, null=True, verbose_name='Дата перемещения в корзину')
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        db_column='deleted_by_id',
+        related_name='deleted_educational_programs',
+        blank=True,
+        null=True,
+        verbose_name='Кто переместил в корзину',
+    )
+    delete_reason = models.TextField(blank=True, null=True, verbose_name='Причина перемещения в корзину')
+
+    objects = EducationalProgramManager()
 
     class Meta:
         managed = False
@@ -77,12 +108,24 @@ class EducationalProgram(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=('program_profile', 'department', 'admission_year'),
-                name='educational_program_program_profile_id_department_id_admission_key',
+                condition=Q(is_deleted=False),
+                name='educational_program_active_unique_idx',
             )
         ]
 
-    def __str__(self):
+    @property
+    def base_name(self):
         return (
             f'{self.program_profile.code} | {self.department.short_name} | '
             f'набор {self.admission_year}'
         )
+
+    @property
+    def display_name(self):
+        label = self.base_name
+        if self.is_deleted and '(в корзине)' not in label:
+            return f'{label} (в корзине)'
+        return label
+
+    def __str__(self):
+        return self.display_name

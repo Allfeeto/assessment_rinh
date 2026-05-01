@@ -75,7 +75,10 @@ def _build_assignment_rows(teacher, educational_program, query):
         return []
 
     program_disciplines = (
-        ProgramDiscipline.objects.filter(educational_program=educational_program)
+        ProgramDiscipline.objects.filter(
+            educational_program=educational_program,
+            educational_program__is_deleted=False,
+        )
         .select_related('discipline')
         .order_by('discipline__name')
     )
@@ -131,7 +134,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile',
             'program_discipline__educational_program__department',
             'program_discipline__discipline',
-        ).order_by(
+        ).filter(program_discipline__educational_program__is_deleted=False).order_by(
             'teacher__full_name',
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
@@ -177,7 +180,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             active_program = (
                 EducationalProgram.objects.select_related(
                     'program_profile', 'department'
-                ).filter(pk=int(program_id_raw)).first()
+                ).filter(pk=int(program_id_raw), is_deleted=False).first()
             )
 
         assignment_query = self.request.GET.get('assignment_q', '').strip()
@@ -322,6 +325,9 @@ class TeacherProgramDisciplineListView(NamedListView):
     update_url_name = 'teachers_teacher_program_discipline_update'
     delete_url_name = 'teachers_teacher_program_discipline_delete'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+
 
 class TeacherProgramDisciplineDetailView(NamedDetailView):
     model = TeacherProgramDiscipline
@@ -335,6 +341,9 @@ class TeacherProgramDisciplineDetailView(NamedDetailView):
         ('Образовательная программа', 'program_discipline.educational_program'),
         ('Дисциплина', 'program_discipline.discipline.name'),
     )
+
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
 
 
 class TeacherProgramDisciplineCreateView(NamedCreateView):
@@ -350,11 +359,17 @@ class TeacherProgramDisciplineUpdateView(NamedUpdateView):
     title = 'Редактировать привязку преподавателя'
     list_url_name = 'teachers_teacher_program_discipline_list'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+
 
 class TeacherProgramDisciplineDeleteView(NamedDeleteView):
     model = TeacherProgramDiscipline
     title = 'Удалить привязку преподавателя'
     list_url_name = 'teachers_teacher_program_discipline_list'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
 
 
 class TeacherAssignmentPanelView(LoginRequiredMixin, View):
@@ -374,7 +389,7 @@ class TeacherAssignmentPanelView(LoginRequiredMixin, View):
         if program_id_raw and program_id_raw.isdigit():
             active_program = (
                 EducationalProgram.objects.select_related('program_profile', 'department')
-                .filter(pk=int(program_id_raw))
+                .filter(pk=int(program_id_raw), is_deleted=False)
                 .first()
             )
         query = request.GET.get('assignment_q', '').strip()
@@ -424,7 +439,10 @@ class TeacherAssignmentToggleView(LoginRequiredMixin, View):
         if not _user_can_assign(request.user, teacher):
             raise PermissionDenied('Назначения может менять только сам преподаватель или администратор.')
 
-        if not ProgramDiscipline.objects.filter(pk=program_discipline_id).exists():
+        if not ProgramDiscipline.objects.filter(
+            pk=program_discipline_id,
+            educational_program__is_deleted=False,
+        ).exists():
             return HttpResponseBadRequest('Дисциплина учебного плана не найдена.')
 
         with transaction.atomic():

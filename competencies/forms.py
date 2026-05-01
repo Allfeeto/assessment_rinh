@@ -23,7 +23,7 @@ class CompetenceForm(forms.ModelForm):
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).order_by('program_profile__code', 'admission_year')
+        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, selected_program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -52,7 +52,7 @@ class DisciplineCompetenceForm(forms.ModelForm):
         base_program_discipline_qs = ProgramDiscipline.objects.select_related(
             'educational_program__program_profile',
             'discipline',
-        ).order_by(
+        ).filter(educational_program__is_deleted=False).order_by(
             'educational_program__program_profile__code',
             'educational_program__admission_year',
             'discipline__name',
@@ -78,12 +78,15 @@ class DisciplineCompetenceForm(forms.ModelForm):
             if educational_program_id:
                 competence_qs = (
                     Competence.objects.select_related('competence_type')
-                    .filter(educational_program_id=educational_program_id)
+                    .filter(educational_program_id=educational_program_id, educational_program__is_deleted=False)
                     .order_by('code')
                 )
 
         if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
-            competence_qs = Competence.objects.filter(pk=selected_competence_id)
+            competence_qs = Competence.objects.filter(
+                pk=selected_competence_id,
+                educational_program__is_deleted=False,
+            )
 
         self.fields['competence'].queryset = competence_qs
         apply_autocomplete_attrs(
@@ -100,6 +103,8 @@ class DisciplineCompetenceForm(forms.ModelForm):
         program_discipline = cleaned_data.get('program_discipline')
         competence = cleaned_data.get('competence')
         if program_discipline and competence:
+            if program_discipline.educational_program.is_deleted:
+                self.add_error('program_discipline', 'Нельзя менять матрицу программы из корзины.')
             if program_discipline.educational_program_id != competence.educational_program_id:
                 self.add_error('competence', 'Компетенция должна быть из того же учебного плана.')
         return cleaned_data

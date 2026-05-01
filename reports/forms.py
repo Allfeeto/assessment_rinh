@@ -52,7 +52,7 @@ class ReportFilterForm(forms.Form):
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).order_by('program_profile__code', 'admission_year')
+        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -78,7 +78,7 @@ class ReportFilterForm(forms.Form):
         competence_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).order_by('code')
+        ).filter(educational_program__is_deleted=False).order_by('code')
 
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
@@ -87,6 +87,7 @@ class ReportFilterForm(forms.Form):
             program_discipline = ProgramDiscipline.objects.filter(
                 educational_program_id=program_id,
                 discipline_id=discipline_id,
+                educational_program__is_deleted=False,
             ).first()
             if program_discipline:
                 linked_ids = DisciplineCompetence.objects.filter(
@@ -98,11 +99,15 @@ class ReportFilterForm(forms.Form):
         elif discipline_id:
             linked_ids = DisciplineCompetence.objects.filter(
                 program_discipline__discipline_id=discipline_id,
+                program_discipline__educational_program__is_deleted=False,
             ).values_list('competence_id', flat=True)
             competence_qs = competence_qs.filter(id__in=linked_ids)
 
         if selected_competence_id and not competence_qs.filter(pk=selected_competence_id).exists():
-            competence_qs = Competence.objects.filter(pk=selected_competence_id) | competence_qs
+            competence_qs = Competence.objects.filter(
+                pk=selected_competence_id,
+                educational_program__is_deleted=False,
+            ) | competence_qs
 
         self.fields['competence'].queryset = competence_qs
         apply_autocomplete_attrs(

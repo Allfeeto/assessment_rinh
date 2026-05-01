@@ -1,9 +1,14 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Count, Q
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import TemplateView
 
+from assessment.models import AssessmentItem
+from competencies.models import Competence, DisciplineCompetence
+from core.models import EducationLevel
 from core.view_helpers import (
     PER_PAGE_CHOICES,
     NamedCreateView,
@@ -15,11 +20,14 @@ from core.view_helpers import (
     paginate_queryset,
     query_params_without,
 )
+from disciplines.models import ProgramDiscipline
+from teachers.models import Department, TeacherProgramDiscipline
 
 from .forms import EducationalProgramForm, PlxImportUploadForm, ProgramProfileForm, TrainingDirectionForm
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
 from .services import PlxConflictError, PlxImportError, PlxImportService
 from .services.plx_dto import PlxProgramImportDTO
+from .services.program_trash_service import ProgramTrashConflictError, ProgramTrashService
 
 
 class StaffRequiredPostMixin(UserPassesTestMixin):
@@ -29,6 +37,31 @@ class StaffRequiredPostMixin(UserPassesTestMixin):
         if self.request.method != 'POST':
             return True
         return self.request.user.is_staff or self.request.user.is_superuser
+
+
+class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    raise_exception = True
+
+    def test_func(self):
+        return self.request.user.is_staff or self.request.user.is_superuser
+
+
+def _trash_programs_for_user(user):
+    queryset = EducationalProgram.objects.in_trash().select_related(
+        'program_profile__training_direction__education_level',
+        'department',
+        'deleted_by',
+    )
+    if user.is_superuser or user.is_staff:
+        return queryset
+
+    teacher = getattr(user, 'teacher_profile', None)
+    if teacher is None:
+        return queryset.none()
+
+    return queryset.filter(
+        program_disciplines__teacher_program_disciplines__teacher=teacher
+    ).distinct()
 
 
 class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, TemplateView):
@@ -41,7 +74,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         per_page = get_per_page(self.request)
         directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
         profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
-        programs_qs = EducationalProgram.objects.select_related(
+        programs_qs = EducationalProgram.objects.active().select_related(
             'program_profile__training_direction',
             'department',
         ).order_by('program_profile__code', 'admission_year')
@@ -141,11 +174,11 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
                 context_kwargs['conflict_program'] = existing_program
                 context_kwargs['import_error'] = (
                     'Такая образовательная программа уже существует. '
-                    'Подтвердите замену для полного обновления данных.'
+                    'Подтвердите замену, чтобы переместить старую версию в корзину и загрузить новую.'
                 )
                 return render(request, self.template_name, self.get_context_data(**context_kwargs), status=409)
 
-            result = self.import_service.import_program(dto, replace_existing=False)
+            result = self.import_service.import_program(dto, replace_existing=False, user=request.user)
             request.session.pop(self.pending_session_key, None)
             context_kwargs['import_form'] = PlxImportUploadForm()
             context_kwargs['import_result'] = (
@@ -158,7 +191,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         except PlxConflictError as exc:
             existing_program = None
             if exc.existing_program_id:
-                existing_program = EducationalProgram.objects.filter(pk=exc.existing_program_id).first()
+                existing_program = EducationalProgram.objects.active().filter(pk=exc.existing_program_id).first()
             request.session[self.pending_session_key] = {
                 'dto': dto.to_dict(),
                 'existing_program_id': exc.existing_program_id,
@@ -186,10 +219,10 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         dto = PlxProgramImportDTO.from_dict(pending['dto'])
         context_kwargs = {'import_summary': dto.summary()}
         try:
-            result = self.import_service.import_program(dto, replace_existing=True)
+            result = self.import_service.import_program(dto, replace_existing=True, user=request.user)
             request.session.pop(self.pending_session_key, None)
             replaced_part = (
-                f' (заменена программа ID={result.replaced_program_id})'
+                f' (старая программа ID={result.replaced_program_id} перемещена в корзину)'
                 if result.replaced_program_id
                 else ''
             )
@@ -205,7 +238,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             existing_program = None
             existing_program_id = pending.get('existing_program_id')
             if existing_program_id:
-                existing_program = EducationalProgram.objects.filter(pk=existing_program_id).first()
+                existing_program = EducationalProgram.objects.active().filter(pk=existing_program_id).first()
             context_kwargs.update(
                 {
                     'pending_conflict': True,
@@ -226,7 +259,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         existing_program_id = pending.get('existing_program_id')
         existing_program = None
         if existing_program_id:
-            existing_program = EducationalProgram.objects.filter(pk=existing_program_id).first()
+            existing_program = EducationalProgram.objects.active().filter(pk=existing_program_id).first()
         return dto, existing_program
 
 
@@ -349,6 +382,9 @@ class EducationalProgramListView(NamedListView):
     update_url_name = 'programs_educational_program_update'
     delete_url_name = 'programs_educational_program_delete'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
 
 class EducationalProgramDetailView(NamedDetailView):
     model = EducationalProgram
@@ -365,6 +401,9 @@ class EducationalProgramDetailView(NamedDetailView):
         ('Год набора', 'admission_year'),
     )
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
 
 class EducationalProgramCreateView(NamedCreateView):
     model = EducationalProgram
@@ -379,11 +418,196 @@ class EducationalProgramUpdateView(NamedUpdateView):
     title = 'Редактировать образовательную программу'
     list_url_name = 'programs_educational_program_list'
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
 
 class EducationalProgramDeleteView(NamedDeleteView):
     model = EducationalProgram
-    title = 'Удалить образовательную программу'
+    template_name = 'programs/confirm_move_to_trash.html'
+    title = 'Переместить образовательную программу в корзину'
     list_url_name = 'programs_educational_program_list'
+
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        ProgramTrashService().move_to_trash(
+            self.object,
+            user=request.user,
+            reason='Удаление образовательной программы из обычного интерфейса',
+        )
+        messages.success(
+            request,
+            'Образовательная программа перемещена в корзину. '
+            'Оценочные средства и назначения преподавателей сохранены.',
+        )
+        return redirect(self.get_success_url())
+
+
+class ProgramTrashListView(LoginRequiredMixin, TemplateView):
+    template_name = 'programs/trash_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        per_page = get_per_page(self.request)
+
+        queryset = _trash_programs_for_user(self.request.user).annotate(
+            program_disciplines_count=Count('program_disciplines', distinct=True),
+            competences_count=Count('competences', distinct=True),
+            assessment_items_count=Count('program_disciplines__assessment_items', distinct=True),
+            teacher_assignments_count=Count(
+                'program_disciplines__teacher_program_disciplines',
+                distinct=True,
+            ),
+        )
+        selected = {
+            'education_level': self.request.GET.get('education_level', '').strip(),
+            'training_direction': self.request.GET.get('training_direction', '').strip(),
+            'program_profile': self.request.GET.get('program_profile', '').strip(),
+            'department': self.request.GET.get('department', '').strip(),
+            'admission_year': self.request.GET.get('admission_year', '').strip(),
+            'q': self.request.GET.get('q', '').strip(),
+        }
+
+        if selected['education_level'].isdigit():
+            queryset = queryset.filter(
+                program_profile__training_direction__education_level_id=selected['education_level']
+            )
+        if selected['training_direction'].isdigit():
+            queryset = queryset.filter(
+                program_profile__training_direction_id=selected['training_direction']
+            )
+        if selected['program_profile'].isdigit():
+            queryset = queryset.filter(program_profile_id=selected['program_profile'])
+        if selected['department'].isdigit():
+            queryset = queryset.filter(department_id=selected['department'])
+        if selected['admission_year'].isdigit():
+            queryset = queryset.filter(admission_year=selected['admission_year'])
+        if selected['q']:
+            query = selected['q']
+            queryset = queryset.filter(
+                Q(program_profile__code__icontains=query)
+                | Q(program_profile__name__icontains=query)
+                | Q(program_profile__training_direction__code__icontains=query)
+                | Q(program_profile__training_direction__name__icontains=query)
+                | Q(department__short_name__icontains=query)
+                | Q(department__full_name__icontains=query)
+            )
+
+        queryset = queryset.order_by('-deleted_at', 'program_profile__code', 'admission_year')
+        page_obj = paginate_queryset(self.request, queryset, page_param='page', per_page=per_page)
+
+        context.update(
+            {
+                'programs': page_obj.object_list,
+                'page_obj': page_obj,
+                'selected': selected,
+                'education_levels': EducationLevel.objects.order_by('name'),
+                'training_directions': TrainingDirection.objects.order_by('code'),
+                'program_profiles': ProgramProfile.objects.order_by('code'),
+                'departments': Department.objects.order_by('number'),
+                'per_page_choices': PER_PAGE_CHOICES,
+                'selected_per_page': per_page,
+                'query_params': query_params_without(self.request, 'page'),
+                'can_manage_trash': self.request.user.is_staff or self.request.user.is_superuser,
+            }
+        )
+        return context
+
+
+class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
+    template_name = 'programs/trash_detail.html'
+
+    def get_program(self):
+        return get_object_or_404(
+            _trash_programs_for_user(self.request.user),
+            pk=self.kwargs['pk'],
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        program = self.get_program()
+        program_disciplines = ProgramDiscipline.objects.filter(
+            educational_program=program
+        ).select_related('discipline').order_by('discipline__name')
+        competences = Competence.objects.filter(
+            educational_program=program
+        ).select_related('competence_type').order_by('code')
+        discipline_competences = DisciplineCompetence.objects.filter(
+            program_discipline__educational_program=program
+        ).select_related(
+            'program_discipline__discipline',
+            'competence__competence_type',
+        ).order_by('program_discipline__discipline__name', 'competence__code')
+        teacher_assignments = TeacherProgramDiscipline.objects.filter(
+            program_discipline__educational_program=program
+        ).select_related(
+            'teacher',
+            'program_discipline__discipline',
+        ).order_by('teacher__full_name', 'program_discipline__discipline__name')
+
+        context.update(
+            {
+                'program': program,
+                'counts': ProgramTrashService().get_counts(program),
+                'program_disciplines': program_disciplines,
+                'competences': competences,
+                'discipline_competences': discipline_competences,
+                'teacher_assignments': teacher_assignments,
+                'assessment_items_count': AssessmentItem.objects.filter(
+                    program_discipline__educational_program=program
+                ).count(),
+                'can_manage_trash': self.request.user.is_staff or self.request.user.is_superuser,
+            }
+        )
+        return context
+
+
+class ProgramTrashRestoreView(StaffRequiredMixin, TemplateView):
+    template_name = 'programs/confirm_restore.html'
+
+    def get_program(self):
+        return get_object_or_404(EducationalProgram.objects.in_trash(), pk=self.kwargs['pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['program'] = self.get_program()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        program = self.get_program()
+        try:
+            ProgramTrashService().restore_from_trash(program, user=request.user)
+        except ProgramTrashConflictError as exc:
+            messages.error(request, str(exc))
+            return redirect('programs_trash_detail', pk=program.pk)
+        messages.success(request, 'Образовательная программа восстановлена из корзины.')
+        return redirect('programs_educational_program_detail', pk=program.pk)
+
+
+class ProgramTrashHardDeleteView(StaffRequiredMixin, TemplateView):
+    template_name = 'programs/confirm_hard_delete.html'
+
+    def get_program(self):
+        return get_object_or_404(EducationalProgram.objects.in_trash(), pk=self.kwargs['pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        program = self.get_program()
+        context['program'] = program
+        context['counts'] = ProgramTrashService().get_counts(program)
+        return context
+
+    def post(self, request, *args, **kwargs):
+        program = self.get_program()
+        ProgramTrashService().hard_delete(program)
+        messages.success(
+            request,
+            'Образовательная программа и связанные с ней данные окончательно удалены.',
+        )
+        return redirect('programs_trash')
 
 
 @login_required

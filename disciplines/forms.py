@@ -31,7 +31,7 @@ class ProgramDisciplineForm(forms.ModelForm):
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).order_by('program_profile__code', 'admission_year')
+        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, selected_program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -75,7 +75,7 @@ class ProgramDisciplineManageForm(forms.Form):
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).order_by('program_profile__code', 'admission_year')
+        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, selected_program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],

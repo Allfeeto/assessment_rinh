@@ -99,6 +99,7 @@ def _filtered_items(program_id, discipline_id, filters):
         .prefetch_related('rows')
         .filter(
             program_discipline__educational_program_id=program_id,
+            program_discipline__educational_program__is_deleted=False,
             program_discipline__discipline_id=discipline_id,
         )
         .order_by('id')
@@ -608,11 +609,15 @@ def _build_document(program_discipline, prepared_items: list[dict]) -> Document:
 def generate_docx(program_id, discipline_id, filters):
     program_discipline = (
         ProgramDiscipline.objects.select_related('educational_program__program_profile', 'discipline')
-        .filter(educational_program_id=program_id, discipline_id=discipline_id)
+        .filter(
+            educational_program_id=program_id,
+            educational_program__is_deleted=False,
+            discipline_id=discipline_id,
+        )
         .first()
     )
     if not program_discipline:
-        raise WordExportNotFoundError('Связка программы и дисциплины не найдена.')
+        raise WordExportNotFoundError('Связка активной программы и дисциплины не найдена.')
 
     items_queryset = _filtered_items(program_id, discipline_id, filters)
     items_count = items_queryset.count()

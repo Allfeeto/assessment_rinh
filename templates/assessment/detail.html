@@ -6,10 +6,17 @@
 <h1 class="page-title">Задание #{{ item.id }}</h1>
 
 <div class="panel">
+    {% if trash_source %}
+        <div class="alert">
+            Источник находится в корзине. Задание доступно только для просмотра и копирования.
+        </div>
+    {% endif %}
     <div class="actions" style="margin-bottom: 12px;">
         <a class="btn secondary" href="{{ back_url }}">Назад</a>
-        <a class="btn" href="{% url 'assessment_update' item.pk %}?next={{ back_url|urlencode }}">Редактировать</a>
-        <a class="btn danger" href="{% url 'assessment_delete' item.pk %}?next={{ back_url|urlencode }}">Удалить</a>
+        {% if not read_only %}
+            <a class="btn" href="{% url 'assessment_update' item.pk %}?next={{ back_url|urlencode }}">Редактировать</a>
+            <a class="btn danger" href="{% url 'assessment_delete' item.pk %}?next={{ back_url|urlencode }}">Удалить</a>
+        {% endif %}
     </div>
 
     <table>

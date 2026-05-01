@@ -224,6 +224,7 @@ __marimo__/
 # Local database dumps / backups
 *.dump
 *.sql
+!DB_info/educational_program_trash.sql
 *.backup
 *.bak
 
