@@ -4,13 +4,14 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.utils.http import content_disposition_header
 from django.views import View
 
 from assessment.access import can_access_program_discipline
 from disciplines.models import ProgramDiscipline
 
 from .forms import WordExportForm
-from .services import WordExportError, generate_docx
+from .services import WordExportError, build_export_filename, generate_docx
 
 
 logger = logging.getLogger(__name__)
@@ -76,12 +77,10 @@ class WordExportView(LoginRequiredMixin, View):
             },
         )
 
-        filename = (
-            f'assessment_program_{educational_program.id}_discipline_{discipline.id}.docx'
-        )
+        filename = build_export_filename(educational_program, discipline)
         response = HttpResponse(
             content,
             content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         )
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Disposition'] = content_disposition_header(True, filename)
         return response

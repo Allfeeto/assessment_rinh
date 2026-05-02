@@ -5,13 +5,28 @@
 {% block content %}
 <h1 class="page-title">Восстановить программу</h1>
 
+<div class="alert">
+    После подтверждения программа снова станет активной. Все ее дисциплины, компетенции,
+    оценочные средства и назначения преподавателей вернутся в обычные списки, отчеты,
+    экспорт и рабочую область.
+</div>
+
 <div class="panel">
-    <p>Программа снова станет активной и появится в обычных списках, отчетах, экспорте и рабочем месте.</p>
     <p><strong>{{ program.display_name }}</strong></p>
-    <form method="post">
+    <div class="stats">
+        <div class="stat"><div class="muted">Образовательная программа</div><div class="stat-value">1</div></div>
+        <div class="stat"><div class="muted">Дисциплин учебного плана</div><div class="stat-value">{{ counts.program_disciplines }}</div></div>
+        <div class="stat"><div class="muted">Компетенций</div><div class="stat-value">{{ counts.competences }}</div></div>
+        <div class="stat"><div class="muted">Связей матрицы</div><div class="stat-value">{{ counts.discipline_competences }}</div></div>
+        <div class="stat"><div class="muted">Оценочных заданий</div><div class="stat-value">{{ counts.assessment_items }}</div></div>
+        <div class="stat"><div class="muted">Строк заданий</div><div class="stat-value">{{ counts.assessment_item_rows }}</div></div>
+        <div class="stat"><div class="muted">Связей задания-компетенции</div><div class="stat-value">{{ counts.assessment_item_competences }}</div></div>
+        <div class="stat"><div class="muted">Назначений преподавателей</div><div class="stat-value">{{ counts.teacher_assignments }}</div></div>
+    </div>
+    <form method="post" style="margin-top: 14px;">
         {% csrf_token %}
         <div class="actions">
-            <button class="btn" type="submit">Восстановить</button>
+            <button class="btn" type="submit">Восстановить программу</button>
             <a class="btn secondary" href="{% url 'programs_trash_detail' program.id %}">Отмена</a>
         </div>
     </form>

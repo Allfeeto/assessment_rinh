@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -31,6 +32,8 @@ TITLE_FONT_SIZE_PT = 14
 MAX_EXPORT_ITEMS = 1000
 RUS_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З', 'И', 'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С', 'Т']
 logger = logging.getLogger(__name__)
+INVALID_FILENAME_CHARS_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]')
+WHITESPACE_RE = re.compile(r'\s+')
 
 
 class WordExportError(ValueError):
@@ -121,6 +124,30 @@ def _cleanup_text(value):
     return (value or '').strip()
 
 
+def _normalize_sort_text(value) -> str:
+    return str(value or '').strip().casefold()
+
+
+def _sanitize_filename_part(value, fallback: str) -> str:
+    text = str(value or '').strip()
+    text = INVALID_FILENAME_CHARS_RE.sub(' ', text)
+    text = WHITESPACE_RE.sub(' ', text).strip(' ._')
+    return text or fallback
+
+
+def _get_program_code(program) -> str:
+    profile = getattr(program, 'program_profile', None)
+    return getattr(profile, 'code', None) or getattr(program, 'code', None) or ''
+
+
+def build_export_filename(program, discipline) -> str:
+    program_fallback = f'program_{getattr(program, "id", "unknown")}'
+    discipline_fallback = f'discipline_{getattr(discipline, "id", "unknown")}'
+    program_code = _sanitize_filename_part(_get_program_code(program), program_fallback)
+    discipline_name = _sanitize_filename_part(getattr(discipline, 'name', None), discipline_fallback)
+    return f'{program_code}_{discipline_name}.docx'
+
+
 def _set_cell_text(cell, text: str, *, bold: bool = False, align=None):
     cell.text = ''
     paragraph = cell.paragraphs[0]
@@ -141,6 +168,73 @@ def _iter_rows(item):
 def _resolve_indicators_text(item) -> str:
     # Расширяемая точка: если в модели появятся индикаторы, можно брать здесь.
     return '—'
+
+
+def _competence_sort_tuple(competence):
+    return (
+        _normalize_sort_text(getattr(competence, 'code', '')),
+        _normalize_sort_text(getattr(competence, 'name', '')),
+        getattr(competence, 'id', 0) or 0,
+    )
+
+
+def _get_export_competences(item) -> list:
+    competences = list(get_item_competences(item))
+    primary = getattr(item, 'competence', None)
+    primary_id = getattr(item, 'competence_id', None) or getattr(primary, 'id', None)
+
+    unique = {}
+    for competence in competences:
+        if not competence:
+            continue
+        competence_id = getattr(competence, 'id', None)
+        key = competence_id if competence_id is not None else id(competence)
+        unique[key] = competence
+
+    if primary:
+        primary_key = primary_id if primary_id is not None else id(primary)
+        unique.setdefault(primary_key, primary)
+    else:
+        primary_key = None
+
+    primary_competence = unique.pop(primary_key, None) if primary_key is not None else None
+    ordered = sorted(unique.values(), key=_competence_sort_tuple)
+    if primary_competence:
+        return [primary_competence, *ordered]
+    return ordered
+
+
+def _format_competences_text(competences: list) -> str:
+    return '; '.join(
+        f'{competence.code} — {competence.name}'
+        for competence in competences
+    ) or '—'
+
+
+def get_item_competence_sort_key(item):
+    competences = _get_export_competences(item)
+    if not competences:
+        return (1, '', '', 0)
+    return (0, *_competence_sort_tuple(competences[0]))
+
+
+def _get_item_type_sort_key(item):
+    item_type = getattr(item, 'assessment_item_type', None)
+    type_name = get_item_type_ui_name(item_type)
+    type_code = infer_item_type_code(item_type)
+    type_id = getattr(item, 'assessment_item_type_id', None) or getattr(item_type, 'id', 0) or 0
+    return (_normalize_sort_text(type_name), _normalize_sort_text(type_code), type_id)
+
+
+def sort_assessment_items(items):
+    return sorted(
+        items,
+        key=lambda item: (
+            get_item_competence_sort_key(item),
+            _get_item_type_sort_key(item),
+            getattr(item, 'id', 0) or 0,
+        ),
+    )
 
 
 def _prepare_matching_rows(rows, rng: random.Random):
@@ -247,6 +341,7 @@ def _prepare_export_item(item, number: int, rng: random.Random):
             'Проверьте типы заданий и повторите экспорт.'
         )
 
+    competences = _get_export_competences(item)
     prepared = {
         'number': number,
         'item': item,
@@ -259,10 +354,9 @@ def _prepare_export_item(item, number: int, rng: random.Random):
         'indicator_text': _resolve_indicators_text(item),
         'answer_key': '',
         'payload': {},
-        'competence_text': '; '.join(
-            f'{competence.code} — {competence.name}'
-            for competence in get_item_competences(item)
-        ) or '—',
+        'competence_text': _format_competences_text(competences),
+        'competence_sort_key': get_item_competence_sort_key(item),
+        'type_sort_key': _get_item_type_sort_key(item),
     }
 
     if type_code == TYPE_MATCHING:
@@ -287,6 +381,13 @@ def _prepare_export_item(item, number: int, rng: random.Random):
         prepared['answer_key'] = payload['answer_key']
 
     return prepared
+
+
+def build_numbered_items(items, rng: random.Random):
+    return [
+        _prepare_export_item(item, number=index, rng=rng)
+        for index, item in enumerate(sort_assessment_items(items), start=1)
+    ]
 
 
 def _clear_document_content(doc: Document):
@@ -500,7 +601,7 @@ def _render_task_block(doc: Document, prepared: dict):
     _add_italic_line(doc, 'Текст задания:')
     _add_text(doc, '')
     if prepared['task_intro']:
-        _add_italic_line(doc, prepared['task_intro'])
+        _add_text(doc, prepared['task_intro'])
         _add_text(doc, '')
     if prepared['prompt_text']:
         _add_text(doc, prepared['prompt_text'], align=WD_ALIGN_PARAGRAPH.JUSTIFY)
@@ -518,24 +619,75 @@ def _render_task_block(doc: Document, prepared: dict):
         _render_open(doc, prepared)
 
 
+def build_specification_groups(prepared_items: list[dict]) -> list[dict]:
+    groups = {}
+    for prepared in prepared_items:
+        key = (
+            prepared['competence_text'],
+            prepared['indicator_text'],
+            prepared['type_name'],
+        )
+        group = groups.setdefault(
+            key,
+            {
+                'competence_text': prepared['competence_text'],
+                'indicator_text': prepared['indicator_text'],
+                'type_name': prepared['type_name'],
+                'numbers': [],
+                'competence_sort_key': prepared.get(
+                    'competence_sort_key',
+                    (0, _normalize_sort_text(prepared['competence_text']), '', 0),
+                ),
+                'type_sort_key': prepared.get(
+                    'type_sort_key',
+                    (_normalize_sort_text(prepared['type_name']), '', 0),
+                ),
+            },
+        )
+        group['numbers'].append(prepared['number'])
+
+    result = []
+    for group in groups.values():
+        numbers = sorted(group['numbers'])
+        result.append(
+            {
+                **group,
+                'numbers': numbers,
+                'numbers_text': ', '.join(str(number) for number in numbers),
+                'first_number': numbers[0],
+            }
+        )
+
+    return sorted(
+        result,
+        key=lambda group: (
+            group['competence_sort_key'],
+            _normalize_sort_text(group['indicator_text']),
+            group['type_sort_key'],
+            group['first_number'],
+        ),
+    )
+
+
 def _add_specification_table(doc: Document, prepared_items: list[dict]):
-    table = doc.add_table(rows=len(prepared_items) + 1, cols=4)
+    groups = build_specification_groups(prepared_items)
+    table = doc.add_table(rows=len(groups) + 1, cols=4)
     table.style = 'Table Grid'
     _set_table_col_widths(table, [4.2, 5.4, 1.8, 4.0])
     headers = [
         'Код и наименование компетенции',
         'Код и наименование индикаторов сформированности компетенций',
-        'Номер задания',
+        'Номера заданий',
         'Тип задания',
     ]
     for idx, header in enumerate(headers):
         _set_cell_text(table.rows[0].cells[idx], header, align=WD_ALIGN_PARAGRAPH.CENTER)
 
-    for row_idx, prepared in enumerate(prepared_items, start=1):
-        _set_cell_text(table.rows[row_idx].cells[0], prepared['competence_text'])
-        _set_cell_text(table.rows[row_idx].cells[1], prepared['indicator_text'])
-        _set_cell_text(table.rows[row_idx].cells[2], str(prepared['number']))
-        _set_cell_text(table.rows[row_idx].cells[3], prepared['type_name'])
+    for row_idx, group in enumerate(groups, start=1):
+        _set_cell_text(table.rows[row_idx].cells[0], group['competence_text'])
+        _set_cell_text(table.rows[row_idx].cells[1], group['indicator_text'])
+        _set_cell_text(table.rows[row_idx].cells[2], group['numbers_text'])
+        _set_cell_text(table.rows[row_idx].cells[3], group['type_name'])
 
 
 def _add_keys_table(doc: Document, prepared_items: list[dict]):
@@ -643,10 +795,7 @@ def generate_docx(program_id, discipline_id, filters):
     seed = f'{program_id}:{discipline_id}:{len(items)}:{datetime.now().strftime("%Y%m%d%H%M%S%f")}'
     rng = random.Random(seed)
 
-    prepared_items = [
-        _prepare_export_item(item, number=index, rng=rng)
-        for index, item in enumerate(items, start=1)
-    ]
+    prepared_items = build_numbered_items(items, rng=rng)
 
     doc = _build_document(program_discipline, prepared_items)
 

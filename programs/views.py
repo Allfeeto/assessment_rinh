@@ -573,7 +573,9 @@ class ProgramTrashRestoreView(StaffRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['program'] = self.get_program()
+        program = self.get_program()
+        context['program'] = program
+        context['counts'] = ProgramTrashService().get_counts(program)
         return context
 
     def post(self, request, *args, **kwargs):
@@ -583,7 +585,11 @@ class ProgramTrashRestoreView(StaffRequiredMixin, TemplateView):
         except ProgramTrashConflictError as exc:
             messages.error(request, str(exc))
             return redirect('programs_trash_detail', pk=program.pk)
-        messages.success(request, 'Образовательная программа восстановлена из корзины.')
+        messages.success(
+            request,
+            'Образовательная программа восстановлена. Дисциплины, компетенции, '
+            'оценочные средства и назначения преподавателей снова доступны в обычной рабочей области.',
+        )
         return redirect('programs_educational_program_detail', pk=program.pk)
 
 

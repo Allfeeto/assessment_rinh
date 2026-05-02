@@ -1,7 +1,10 @@
 import pytest
 from django.contrib.auth.models import Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.sessions.models import Session
 from django.db import connection
+from django.test import Client, override_settings
+from django.urls import reverse
 
 from assessment.access import allowed_program_discipline_ids_for_user
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
@@ -25,6 +28,7 @@ def trash_schema():
         Permission,
         Group,
         User,
+        Session,
         EducationLevel,
         CompetenceType,
         AssessmentItemType,
@@ -262,3 +266,34 @@ def test_restore_without_conflict_works(trash_schema):
     data['program'].refresh_from_db()
     assert data['program'].is_deleted is False
     assert data['program'].deleted_at is None
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'])
+def test_restore_view_confirms_and_returns_program_to_active_workspace(trash_schema):
+    data = _program_bundle()
+    ProgramTrashService().move_to_trash(data['program'], user=data['teacher_user'])
+    admin = User.objects.create_superuser(
+        username='admin',
+        email='admin@example.com',
+        password='secret',
+    )
+    client = Client()
+    client.force_login(admin)
+    restore_url = reverse('programs_trash_restore', args=[data['program'].pk])
+
+    response = client.get(restore_url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'Восстановить программу' in content
+    assert 'Дисциплин учебного плана' in content
+    assert str(ProgramTrashService().get_counts(data['program']).assessment_items) in content
+
+    response = client.post(restore_url)
+
+    data['program'].refresh_from_db()
+    assert response.status_code == 302
+    assert data['program'].is_deleted is False
+    assert response['Location'].endswith(
+        reverse('programs_educational_program_detail', args=[data['program'].pk])
+    )
