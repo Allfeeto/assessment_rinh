@@ -13,6 +13,7 @@ from django.views.generic import TemplateView
 
 from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
+from core.permissions import is_domain_manager
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -153,7 +154,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
-        can_manage_disciplines = self.request.user.is_staff or self.request.user.is_superuser
+        can_manage_disciplines = is_domain_manager(self.request.user)
         program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
         # Считаем агрегаты через Subquery, чтобы избежать инфляции

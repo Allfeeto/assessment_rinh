@@ -68,14 +68,7 @@ class StaffOrModelPermissionRequiredMixin(LoginRequiredMixin, PermissionRequired
         return (f'{opts.app_label}.{self.permission_action}_{opts.model_name}',)
 
     def has_permission(self):
-        user = self.request.user
-        if is_staff_or_superuser(user):
-            return True
-
-        perms = self.get_permission_required()
-        if not perms:
-            return True
-        return user.has_perms(perms)
+        return is_staff_or_superuser(self.request.user)
 
     def can_use_action(self, action):
         model = self.get_permission_model()

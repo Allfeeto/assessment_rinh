@@ -12,10 +12,10 @@ from programs.models import EducationalProgram, ProgramProfile, TrainingDirectio
 from teachers.models import Department
 
 from .exceptions import PlxConflictError, PlxImportError, PlxValidationError
+from .curriculum_replacement_service import CurriculumReplacementService
 from .plx_dto import PlxProgramImportDTO
 from .plx_mapping import normalize_key, normalize_text, PlxMapper
 from .plx_parser import PlxParser
-from .program_trash_service import ProgramTrashService
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class PlxImportService:
     def __init__(self):
         self.parser = PlxParser()
         self.mapper = PlxMapper()
-        self.trash_service = ProgramTrashService()
+        self.replacement_service = CurriculumReplacementService()
 
     def build_dto_from_upload(self, uploaded_file) -> PlxProgramImportDTO:
         parsed = self.parser.parse_upload(uploaded_file)
@@ -84,11 +84,7 @@ class PlxImportService:
                 )
             if existing_program and replace_existing:
                 replaced_program_id = existing_program.id
-                self.trash_service.move_to_trash(
-                    existing_program,
-                    user=user,
-                    reason='Замена образовательной программы через импорт PLX',
-                )
+                self.replacement_service.replace_for_plx_import(existing_program, user=user)
 
             program = EducationalProgram.objects.create(
                 program_profile=profile,

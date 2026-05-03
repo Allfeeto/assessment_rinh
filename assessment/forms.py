@@ -14,6 +14,7 @@ from competencies.models import Competence, DisciplineCompetence
 from core.models import AssessmentItemType
 from disciplines.models import ProgramDiscipline
 
+from .access import program_discipline_queryset_for_user
 from .models import AssessmentItem, AssessmentItemRow
 from .services import (
     TYPE_MATCHING,
@@ -60,6 +61,7 @@ class AssessmentItemForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()
 
@@ -73,8 +75,8 @@ class AssessmentItemForm(forms.ModelForm):
             selected_competence_ids = list(
                 self.instance.competence_links.values_list('competence_id', flat=True)
             )
-            if not selected_competence_ids and self.instance.competence_id:
-                selected_competence_ids = [self.instance.competence_id]
+            if self.instance.competence_id:
+                selected_competence_ids.append(self.instance.competence_id)
         else:
             initial_program_discipline = self.initial.get('program_discipline')
             if hasattr(initial_program_discipline, 'id'):
@@ -89,10 +91,16 @@ class AssessmentItemForm(forms.ModelForm):
                     for competence in initial_competencies
                 ]
 
-        base_program_discipline_qs = ProgramDiscipline.objects.select_related(
+        if user is not None:
+            base_program_discipline_qs = program_discipline_queryset_for_user(user)
+        else:
+            base_program_discipline_qs = ProgramDiscipline.objects.filter(
+                educational_program__is_deleted=False
+            )
+        base_program_discipline_qs = base_program_discipline_qs.select_related(
             'educational_program__program_profile',
             'discipline',
-        ).filter(educational_program__is_deleted=False).order_by(
+        ).order_by(
             'educational_program__program_profile__code',
             'educational_program__admission_year',
             'discipline__name',
@@ -136,11 +144,11 @@ class AssessmentItemForm(forms.ModelForm):
             'Выберите одну или несколько компетенций, связанных с выбранной дисциплиной учебного плана.'
         )
         if selected_competence_ids:
-            self.fields['competencies'].initial = [
+            self.fields['competencies'].initial = list(dict.fromkeys([
                 int(comp_id)
                 for comp_id in selected_competence_ids
                 if str(comp_id).isdigit()
-            ]
+            ]))
 
     def clean(self):
         cleaned_data = super().clean()

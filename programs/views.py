@@ -9,6 +9,7 @@ from django.views.generic import TemplateView
 from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
+from core.permissions import is_domain_manager
 from core.models import EducationLevel
 from core.view_helpers import (
     PER_PAGE_CHOICES,
@@ -37,14 +38,14 @@ class StaffRequiredPostMixin(UserPassesTestMixin):
     def test_func(self):
         if self.request.method != 'POST':
             return True
-        return self.request.user.is_staff or self.request.user.is_superuser
+        return is_domain_manager(self.request.user)
 
 
 class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     raise_exception = True
 
     def test_func(self):
-        return self.request.user.is_staff or self.request.user.is_superuser
+        return is_domain_manager(self.request.user)
 
 
 def _trash_programs_for_user(user):
@@ -53,7 +54,7 @@ def _trash_programs_for_user(user):
         'department',
         'deleted_by',
     )
-    if user.is_superuser or user.is_staff:
+    if is_domain_manager(user):
         return queryset
 
     teacher = getattr(user, 'teacher_profile', None)
@@ -73,7 +74,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         per_page = get_per_page(self.request)
-        can_manage_programs = self.request.user.is_staff or self.request.user.is_superuser
+        can_manage_programs = is_domain_manager(self.request.user)
         directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
         profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
         programs_qs = EducationalProgram.objects.active().select_related(
@@ -525,7 +526,7 @@ class ProgramTrashListView(LoginRequiredMixin, TemplateView):
                 'per_page_choices': PER_PAGE_CHOICES,
                 'selected_per_page': per_page,
                 'query_params': query_params_without(self.request, 'page'),
-                'can_manage_trash': self.request.user.is_staff or self.request.user.is_superuser,
+                'can_manage_trash': is_domain_manager(self.request.user),
             }
         )
         return context
@@ -573,7 +574,7 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
                 'assessment_items_count': AssessmentItem.objects.filter(
                     program_discipline__educational_program=program
                 ).count(),
-                'can_manage_trash': self.request.user.is_staff or self.request.user.is_superuser,
+                'can_manage_trash': is_domain_manager(self.request.user),
             }
         )
         return context
@@ -634,7 +635,7 @@ class ProgramTrashHardDeleteView(StaffRequiredMixin, TemplateView):
 def profiles_by_direction(request):
     direction_id = request.GET.get('direction_id')
     queryset = ProgramProfile.objects.order_by('code')
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not is_domain_manager(request.user):
         program_ids = program_discipline_queryset_for_user(request.user).values_list(
             'educational_program_id',
             flat=True,

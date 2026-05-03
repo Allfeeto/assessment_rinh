@@ -20,6 +20,7 @@ class AssessmentItem(models.Model):
         null=True,
         blank=True,
         verbose_name='Компетенция',
+        help_text='Legacy FK: canonical links are stored in AssessmentItemCompetence.',
     )
     assessment_item_type = models.ForeignKey(
         'core.AssessmentItemType',

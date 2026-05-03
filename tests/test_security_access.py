@@ -1,13 +1,17 @@
 from types import SimpleNamespace
 
 import pytest
+from django.contrib import admin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
 
+import assessment_rinh.urls  # noqa: F401 - applies superuser-only admin policy
+from assessment.access import can_access_program_discipline
 from core.middleware import AuthRateLimitMiddleware
-from core.views import _lookup_auth_user
+from core.permissions import SENIOR_TEACHER_GROUP_NAME, is_domain_manager
+from core.views import _lookup_auth_user, _user_can_lookup_all
 from core.view_helpers import NamedCreateView
 from teachers.models import Department
 from teachers.views import TeacherAssignmentToggleView
@@ -40,24 +44,62 @@ def test_regular_teacher_cannot_self_assign_program_discipline():
         TeacherAssignmentToggleView().post(request)
 
 
-def test_named_crud_create_requires_staff_or_model_permission():
+def test_named_crud_create_requires_domain_manager_not_raw_model_permission():
     class DepartmentCreateView(NamedCreateView):
         model = Department
         fields = ('number', 'short_name', 'full_name')
         list_url_name = 'teachers_department_list'
 
     request = RequestFactory().get('/teachers/departments/create/')
-    request.user = _regular_user()
+    request.user = _regular_user(has_perm=lambda permission: True)
     view = DepartmentCreateView()
     view.request = request
 
     assert view.has_permission() is False
 
 
-def test_auth_user_lookup_is_staff_only():
+def test_auth_user_lookup_requires_domain_manager():
     request = SimpleNamespace(user=_regular_user(), GET={})
 
     assert _lookup_auth_user(request, query='', selected_id=None, limit=20) == []
+
+
+def test_lookup_all_requires_domain_manager_not_view_permission():
+    user = _regular_user(has_perm=lambda permission: True)
+
+    assert _user_can_lookup_all(user, Department) is False
+
+
+class _FakeGroups:
+    def __init__(self, names):
+        self.names = set(names)
+        self._selected_name = None
+
+    def filter(self, **kwargs):
+        self._selected_name = kwargs.get('name')
+        return self
+
+    def exists(self):
+        return self._selected_name in self.names
+
+
+def test_senior_teacher_group_is_domain_manager_without_staff_flag():
+    user = _regular_user(groups=_FakeGroups({SENIOR_TEACHER_GROUP_NAME}))
+
+    assert is_domain_manager(user) is True
+    assert can_access_program_discipline(user, program_discipline_id=999) is True
+
+
+def test_django_admin_requires_superuser_not_staff_only():
+    request = SimpleNamespace(
+        user=_regular_user(is_staff=True, is_superuser=False),
+    )
+
+    assert admin.site.has_permission(request) is False
+
+    request.user = _regular_user(is_staff=True, is_superuser=True)
+
+    assert admin.site.has_permission(request) is True
 
 
 @override_settings(

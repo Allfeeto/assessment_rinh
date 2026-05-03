@@ -3,7 +3,6 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError, transaction
-from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -12,13 +11,18 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView
 
 from competencies.models import Competence
 from core.models import AssessmentItemType, EducationLevel
+from core.permissions import is_domain_manager
 from core.view_helpers import PER_PAGE_CHOICES, get_per_page, paginate_queryset
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 
-from .access import allowed_program_discipline_ids_for_user as _allowed_program_discipline_ids_for_user
+from .access import (
+    allowed_program_discipline_ids_for_user as _allowed_program_discipline_ids_for_user,
+    program_discipline_queryset_for_user,
+)
 from .forms import AssessmentItemForm, AssessmentItemRowCreateFormSet, AssessmentItemRowUpdateFormSet
 from .models import AssessmentItem
+from .selectors import filter_items_by_competence
 from .services import (
     clone_assessment_item_to_program_discipline,
     get_clipboard_item_ids,
@@ -55,7 +59,7 @@ def _restrict_queryset_for_teacher_user(request, queryset):
 
     queryset = queryset.filter(program_discipline__educational_program__is_deleted=False)
 
-    if user.is_superuser:
+    if is_domain_manager(user):
         return queryset
 
     teacher = getattr(user, 'teacher_profile', None)
@@ -129,9 +133,7 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
 
         competence_id = self.request.GET.get('competence')
         if competence_id:
-            queryset = queryset.filter(
-                Q(competence_id=competence_id) | Q(competence_links__competence_id=competence_id)
-            ).distinct()
+            queryset = filter_items_by_competence(queryset, competence_id)
 
         search_query = self.request.GET.get('q', '').strip()
         if search_query:
@@ -148,14 +150,31 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         selected_educational_program = self.request.GET.get('educational_program', '')
         selected_discipline = self.request.GET.get('discipline', '')
 
-        directions = TrainingDirection.objects.order_by('code')
-        profiles = ProgramProfile.objects.order_by('code')
-        programs = EducationalProgram.objects.active().select_related('program_profile', 'department').order_by(
+        program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
+        education_levels = EducationLevel.objects.filter(
+            training_directions__program_profiles__educational_programs__program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('id')
+        directions = TrainingDirection.objects.filter(
+            program_profiles__educational_programs__program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('code')
+        profiles = ProgramProfile.objects.filter(
+            educational_programs__program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('code')
+        programs = EducationalProgram.objects.active().select_related(
+            'program_profile',
+            'department',
+        ).filter(
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by(
             'program_profile__code',
             'admission_year',
         )
+        disciplines = Discipline.objects.filter(
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('name')
         competences = Competence.objects.filter(
-            educational_program__is_deleted=False
+            educational_program__is_deleted=False,
+            educational_program__program_disciplines__in=program_discipline_scope,
         ).select_related('competence_type').order_by('code')
 
         if selected_education_level:
@@ -196,6 +215,8 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         # из прошлой программы, явно подмешиваем их в queryset, чтобы <option selected>
         # не пропадал из <select> и UI не «забывал» выбор.
         def _force_include(queryset, model, selected_value):
+            if not is_domain_manager(self.request.user):
+                return queryset
             if not selected_value or not str(selected_value).isdigit():
                 return queryset
             forced = model.objects.filter(pk=int(selected_value))
@@ -214,11 +235,11 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
             self.request.GET.get('competence'),
         )
 
-        context['education_levels'] = EducationLevel.objects.order_by('id')
+        context['education_levels'] = education_levels
         context['training_directions'] = directions
         context['program_profiles'] = profiles
         context['educational_programs'] = programs
-        context['disciplines'] = Discipline.objects.order_by('name')
+        context['disciplines'] = disciplines
         assessment_item_types = list(get_ui_assessment_item_types_queryset())
         for item_type in assessment_item_types:
             item_type.ui_name = get_item_type_ui_name(item_type)
@@ -341,7 +362,7 @@ class AssessmentItemFormMixin:
 
     def _validate_teacher_scope(self, form):
         user = self.request.user
-        if not user.is_authenticated or user.is_superuser:
+        if not user.is_authenticated or is_domain_manager(user):
             return True
 
         teacher = getattr(user, 'teacher_profile', None)
@@ -386,14 +407,14 @@ class AssessmentItemCreateView(LoginRequiredMixin, AssessmentItemFormMixin, View
 
     def get(self, request, *args, **kwargs):
         self.object = None
-        form = self.form_class(initial=self._get_initial())
+        form = self.form_class(initial=self._get_initial(), user=request.user)
         formset = self._get_formset()
         formset.item_type_name = self._resolve_item_type_name(form, None)
         return self._render(request, form, formset, 'Создать задание')
 
     def post(self, request, *args, **kwargs):
         self.object = None
-        form = self.form_class(request.POST)
+        form = self.form_class(request.POST, user=request.user)
         formset = self._get_formset(data=request.POST)
         formset.item_type_name = self._resolve_item_type_name(form, None)
 
@@ -422,14 +443,14 @@ class AssessmentItemUpdateView(LoginRequiredMixin, AssessmentItemFormMixin, View
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
-        form = self.form_class(instance=self.object)
+        form = self.form_class(instance=self.object, user=request.user)
         formset = self._get_formset()
         formset.item_type_name = self._resolve_item_type_name(form, self.object)
         return self._render(request, form, formset, 'Редактировать задание')
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-        form = self.form_class(request.POST, instance=self.object)
+        form = self.form_class(request.POST, instance=self.object, user=request.user)
         formset = self._get_formset(data=request.POST)
         formset.item_type_name = self._resolve_item_type_name(form, self.object)
 
@@ -474,7 +495,9 @@ class TeacherRequiredMixin(LoginRequiredMixin):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        if request.user.is_superuser:
+        self.has_global_scope = is_domain_manager(request.user)
+        if self.has_global_scope:
+            self.teacher = getattr(request.user, 'teacher_profile', None)
             return super().dispatch(request, *args, **kwargs)
 
         teacher = getattr(request.user, 'teacher_profile', None)
@@ -496,7 +519,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        if hasattr(self, 'teacher'):
+        if not getattr(self, 'has_global_scope', False):
             available_program_disciplines_all = list(
                 ProgramDiscipline.objects.filter(
                     teacher_program_disciplines__teacher=self.teacher,
@@ -606,9 +629,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 )
             )
             if selected_competence:
-                items = items.filter(
-                    Q(competence_id=selected_competence) | Q(competence_links__competence_id=selected_competence)
-                ).distinct()
+                items = filter_items_by_competence(items, selected_competence)
             if selected_item_type:
                 items = items.filter(assessment_item_type_id=selected_item_type)
 
@@ -698,7 +719,7 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        if hasattr(self, 'teacher'):
+        if not getattr(self, 'has_global_scope', False):
             available_program_disciplines_all = list(
                 ProgramDiscipline.objects.filter(
                     teacher_program_disciplines__teacher=self.teacher,
@@ -809,9 +830,7 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 )
             )
             if selected_competence:
-                items = items.filter(
-                    Q(competence_id=selected_competence) | Q(competence_links__competence_id=selected_competence)
-                ).distinct()
+                items = filter_items_by_competence(items, selected_competence)
             if selected_item_type:
                 items = items.filter(assessment_item_type_id=selected_item_type)
             if search_query:

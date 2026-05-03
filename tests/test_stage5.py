@@ -255,6 +255,20 @@ def test_build_numbered_items_assigns_numbers_after_sort(monkeypatch):
     ]
 
 
+def test_get_item_competences_merges_legacy_fk_with_m2m_links():
+    comp_a = _fake_competence(1, 'ОПК-1')
+    comp_b = _fake_competence(2, 'УК-2')
+    item = SimpleNamespace(
+        competence=comp_a,
+        competence_id=comp_a.id,
+        _prefetched_objects_cache={
+            'competence_links': [SimpleNamespace(competence=comp_b)],
+        },
+    )
+
+    assert [competence.id for competence in assessment_services.get_item_competences(item)] == [2, 1]
+
+
 def test_build_specification_groups_merges_rows_by_competence_indicator_and_type():
     comp_a = 'ОПК-1 — Способен применять базовые знания'
     comp_b = 'УК-2 — Умеет тестировать БД'

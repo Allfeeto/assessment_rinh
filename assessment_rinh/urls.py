@@ -2,7 +2,15 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
+from core.permissions import is_platform_admin
 from core.views import HomeView
+
+
+def _superuser_admin_has_permission(request):
+    return is_platform_admin(request.user)
+
+
+admin.site.has_permission = _superuser_admin_has_permission
 
 urlpatterns = [
     path('', HomeView.as_view(), name='home'),

@@ -6,10 +6,11 @@ from django.db import connection
 from django.test import Client, override_settings
 from django.urls import reverse
 
-from assessment.access import allowed_program_discipline_ids_for_user
+from assessment.access import allowed_program_discipline_ids_for_user, can_access_program_discipline
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
 from assessment.services import clone_assessment_item_to_program_discipline
 from competencies.models import Competence, DisciplineCompetence
+from core.permissions import SENIOR_TEACHER_GROUP_NAME
 from core.models import AcademicDegree, AcademicTitle, AssessmentItemType, CompetenceType, EducationLevel
 from disciplines.models import Discipline, ProgramDiscipline
 from export.services import WordExportNotFoundError, generate_docx
@@ -172,6 +173,22 @@ def test_active_querysets_and_teacher_scope_exclude_trash_by_default(trash_schem
     assert allowed_program_discipline_ids_for_user(data['teacher_user'], deleted_only=True) == [
         data['program_discipline'].id
     ]
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'])
+def test_senior_teacher_group_has_global_application_scope_without_teacher_profile(trash_schema):
+    data = _program_bundle()
+    senior = User.objects.create_user(username='senior-without-profile')
+    senior.groups.add(Group.objects.create(name=SENIOR_TEACHER_GROUP_NAME))
+
+    assert allowed_program_discipline_ids_for_user(senior) == [data['program_discipline'].id]
+    assert can_access_program_discipline(senior, data['program_discipline'].id) is True
+
+    client = Client()
+    client.force_login(senior)
+    response = client.get(reverse('assessment_workspace'))
+
+    assert response.status_code == 200
 
 
 def test_export_for_trash_program_is_blocked(trash_schema):

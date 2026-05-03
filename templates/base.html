@@ -12,27 +12,21 @@
     <div class="topbar-inner">
         <a class="brand" href="/">Assessment RINH</a>
         {% if request.user.is_authenticated %}
-            <a class="nav-link {% if request.path|slice:':21' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
-            <a class="nav-link {% if request.path|slice:':28' == '/assessment/trash-workspace/' %}active{% endif %}" href="{% url 'assessment_trash_workspace' %}">Корзина заданий</a>
-            <a class="nav-link {% if request.path|slice:':12' == '/assessment/' %}active{% endif %}" href="/assessment/">Задания</a>
-            {% if request.user.is_staff or request.user.is_superuser or perms.teachers.view_teacher %}
+            {% if can_use_teacher_workspace %}
+                <a class="nav-link {% if request.path|slice:':21' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
+                <a class="nav-link {% if request.path|slice:':28' == '/assessment/trash-workspace/' %}active{% endif %}" href="{% url 'assessment_trash_workspace' %}">Корзина заданий</a>
+                <a class="nav-link {% if request.path|slice:':12' == '/assessment/' %}active{% endif %}" href="/assessment/">Задания</a>
+                <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
+                <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
+            {% endif %}
+            {% if is_domain_manager %}
                 <a class="nav-link {% if request.path|slice:':10' == '/teachers/' %}active{% endif %}" href="/teachers/">Кафедры и преподаватели</a>
-            {% endif %}
-            {% if request.user.is_staff or request.user.is_superuser or perms.programs.view_educationalprogram %}
                 <a class="nav-link {% if request.path|slice:':10' == '/programs/' %}active{% endif %}" href="/programs/">Программы</a>
-            {% endif %}
-            {% if request.user.is_staff or request.user.is_superuser or perms.disciplines.view_discipline %}
                 <a class="nav-link {% if request.path|slice:':13' == '/disciplines/' %}active{% endif %}" href="/disciplines/">Дисциплины</a>
-            {% endif %}
-            {% if request.user.is_staff or request.user.is_superuser or perms.competencies.view_competence %}
                 <a class="nav-link {% if request.path|slice:':14' == '/competencies/' %}active{% endif %}" href="/competencies/">Компетенции</a>
-            {% endif %}
-            <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
-            <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
-            {% if request.user.is_staff or request.user.is_superuser or perms.core.view_educationlevel %}
                 <a class="nav-link {% if request.path|slice:':6' == '/core/' %}active{% endif %}" href="/core/education-levels/">Справочники</a>
             {% endif %}
-            {% if request.user.is_staff or request.user.is_superuser %}
+            {% if request.user.is_superuser %}
                 <a class="nav-link" href="/admin/">Админка</a>
             {% endif %}
         {% endif %}

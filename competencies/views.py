@@ -7,7 +7,12 @@ from django.http import JsonResponse
 from django.views.generic import TemplateView
 
 from assessment.access import program_discipline_queryset_for_user
-from assessment.models import AssessmentItem, AssessmentItemCompetence
+from assessment.models import AssessmentItem
+from assessment.selectors import (
+    count_items_by_competence,
+    count_items_by_program_discipline_competence,
+)
+from core.permissions import is_domain_manager
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -36,7 +41,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         competence_id = self.request.GET.get('competence', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
-        can_manage_competencies = self.request.user.is_staff or self.request.user.is_superuser
+        can_manage_competencies = is_domain_manager(self.request.user)
         program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
         competence_disciplines_count = (
@@ -47,16 +52,6 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             .order_by()
             .values('competence')
             .annotate(total=Count('id'))
-            .values('total')
-        )
-        competence_items_count = (
-            AssessmentItemCompetence.objects.filter(
-                competence=OuterRef('pk'),
-                assessment_item__program_discipline__educational_program__is_deleted=False,
-            )
-            .order_by()
-            .values('competence')
-            .annotate(total=Count('assessment_item_id', distinct=True))
             .values('total')
         )
 
@@ -72,10 +67,6 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         competences_qs = competences_qs.annotate(
             disciplines_count=Coalesce(
                 Subquery(competence_disciplines_count, output_field=IntegerField()),
-                0,
-            ),
-            items_count=Coalesce(
-                Subquery(competence_items_count, output_field=IntegerField()),
                 0,
             ),
         ).order_by('educational_program__program_profile__code', 'code')
@@ -99,21 +90,6 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         if search:
             competences_qs = competences_qs.filter(Q(code__icontains=search) | Q(name__icontains=search))
 
-        # Сколько заданий внутри (program_discipline, competence) реально проверяет
-        # эту компетенцию (через AssessmentItemCompetence). Считаем подзапросом, чтобы
-        # не дублировать строки множественными JOIN’ами.
-        link_items_count = (
-            AssessmentItemCompetence.objects.filter(
-                competence_id=OuterRef('competence_id'),
-                assessment_item__program_discipline_id=OuterRef('program_discipline_id'),
-                assessment_item__program_discipline__educational_program__is_deleted=False,
-            )
-            .order_by()
-            .values('competence_id')
-            .annotate(total=Count('assessment_item_id', distinct=True))
-            .values('total')
-        )
-
         discipline_competences_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'program_discipline__educational_program__program_profile',
@@ -122,11 +98,6 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         ).filter(
             program_discipline__educational_program__is_deleted=False,
             program_discipline__in=program_discipline_scope,
-        ).annotate(
-            items_count=Coalesce(
-                Subquery(link_items_count, output_field=IntegerField()),
-                0,
-            ),
         ).order_by(
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
@@ -206,11 +177,42 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         competences_paginator = Paginator(competences_qs, per_page)
         competences_page_obj = competences_paginator.get_page(self.request.GET.get('comp_page') or 1)
+        competences_page = list(competences_page_obj.object_list)
 
         discipline_competences_paginator = Paginator(discipline_competences_qs, per_page)
         discipline_competences_page_obj = discipline_competences_paginator.get_page(
             self.request.GET.get('link_page') or 1
         )
+        discipline_competences_page = list(discipline_competences_page_obj.object_list)
+
+        item_scope = AssessmentItem.objects.filter(
+            program_discipline__educational_program__is_deleted=False,
+            program_discipline__in=program_discipline_scope,
+        )
+        if educational_program_id:
+            item_scope = item_scope.filter(program_discipline__educational_program_id=educational_program_id)
+        if discipline_id:
+            item_scope = item_scope.filter(program_discipline__discipline_id=discipline_id)
+
+        competence_counts = count_items_by_competence(
+            item_scope.values('pk'),
+            [competence.id for competence in competences_page],
+        )
+        for competence in competences_page:
+            competence.items_count = competence_counts.get(competence.id, 0)
+
+        link_counts = count_items_by_program_discipline_competence(
+            item_scope.values('pk'),
+            [
+                (link.program_discipline_id, link.competence_id)
+                for link in discipline_competences_page
+            ],
+        )
+        for link in discipline_competences_page:
+            link.items_count = link_counts.get((link.program_discipline_id, link.competence_id), 0)
+
+        competences_page_obj.object_list = competences_page
+        discipline_competences_page_obj.object_list = discipline_competences_page
 
         selected_discipline_name = None
         if discipline_id:
@@ -243,8 +245,8 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         context['selected_discipline_name'] = selected_discipline_name
         context['search_query'] = search
         context['competence_options'] = competence_options
-        context['competences'] = competences_page_obj.object_list
-        context['discipline_competences'] = discipline_competences_page_obj.object_list
+        context['competences'] = competences_page
+        context['discipline_competences'] = discipline_competences_page
         context['discipline_competence_competences'] = discipline_competence_competences
         context['competences_page_obj'] = competences_page_obj
         context['discipline_competences_page_obj'] = discipline_competences_page_obj
@@ -404,7 +406,7 @@ def competences_by_program_discipline(request):
 
         if linked_only:
             queryset = queryset.filter(discipline_competences__program_discipline_id=program_discipline_id)
-    elif not (request.user.is_staff or request.user.is_superuser):
+    elif not is_domain_manager(request.user):
         queryset = queryset.filter(
             educational_program__program_disciplines__in=program_discipline_scope,
         )

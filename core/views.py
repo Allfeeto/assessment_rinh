@@ -15,7 +15,7 @@ from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 from teachers.models import Department, Teacher
 
-from .permissions import can_use_model_permission, is_staff_or_superuser
+from .permissions import is_domain_manager, is_staff_or_superuser
 from .forms import (
     AcademicDegreeForm,
     AcademicTitleForm,
@@ -83,7 +83,7 @@ def _unique_lookup_results(queryset, limit, label_factory, key_factory=None):
 
 
 def _user_can_lookup_all(user, model):
-    return can_use_model_permission(user, model, 'view')
+    return is_domain_manager(user)
 
 
 def _lookup_program_discipline_scope(user):

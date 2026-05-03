@@ -8,6 +8,6 @@ pg_restore \
   -d "$POSTGRES_DB" \
   --no-owner \
   --no-privileges \
-  /docker-entrypoint-initdb.d/assessment_DB_docker1.backup
+  /docker-entrypoint-initdb.d/assessment_DB_docker2.backup
 
 echo "Database restore completed."
