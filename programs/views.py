@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import TemplateView
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
 from core.models import EducationLevel
@@ -72,12 +73,24 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         per_page = get_per_page(self.request)
+        can_manage_programs = self.request.user.is_staff or self.request.user.is_superuser
         directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
         profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
         programs_qs = EducationalProgram.objects.active().select_related(
             'program_profile__training_direction',
             'department',
         ).order_by('program_profile__code', 'admission_year')
+        if not can_manage_programs:
+            program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
+            directions_qs = directions_qs.filter(
+                program_profiles__educational_programs__program_disciplines__in=program_discipline_scope,
+            ).distinct()
+            profiles_qs = profiles_qs.filter(
+                educational_programs__program_disciplines__in=program_discipline_scope,
+            ).distinct()
+            programs_qs = programs_qs.filter(
+                program_disciplines__in=program_discipline_scope,
+            ).distinct()
 
         directions_page_obj = paginate_queryset(
             self.request,
@@ -109,7 +122,8 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         context['programs_query_params'] = query_params_without(self.request, 'program_page')
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
-        context['can_import_plx'] = self.request.user.is_staff or self.request.user.is_superuser
+        context['can_import_plx'] = can_manage_programs
+        context['can_manage_programs'] = can_manage_programs
         context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
         context['import_error'] = kwargs.get('import_error')
         context['import_result'] = kwargs.get('import_result')
@@ -620,6 +634,14 @@ class ProgramTrashHardDeleteView(StaffRequiredMixin, TemplateView):
 def profiles_by_direction(request):
     direction_id = request.GET.get('direction_id')
     queryset = ProgramProfile.objects.order_by('code')
+    if not (request.user.is_staff or request.user.is_superuser):
+        program_ids = program_discipline_queryset_for_user(request.user).values_list(
+            'educational_program_id',
+            flat=True,
+        )
+        queryset = queryset.filter(
+            educational_programs__id__in=program_ids,
+        ).distinct()
     if direction_id:
         queryset = queryset.filter(training_direction_id=direction_id)
 

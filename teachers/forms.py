@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from core.permissions import is_staff_or_superuser
 from disciplines.models import ProgramDiscipline
 
 from .models import Department, Teacher, TeacherProgramDiscipline
@@ -43,29 +44,36 @@ class TeacherForm(forms.ModelForm):
         fields = ('user', 'department', 'full_name', 'academic_degree', 'academic_title')
 
     def __init__(self, *args, **kwargs):
+        request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
-        self.fields['user'].required = False
+        can_edit_user = request_user is None or is_staff_or_superuser(request_user)
+        if can_edit_user:
+            self.fields['user'].required = False
+        else:
+            self.fields.pop('user', None)
+
         selected_user_id = None
         selected_department_id = None
         if self.is_bound:
-            selected_user_id = self.data.get('user')
+            selected_user_id = self.data.get('user') if can_edit_user else None
             selected_department_id = self.data.get('department')
         elif self.instance and self.instance.pk:
-            selected_user_id = self.instance.user_id
+            selected_user_id = self.instance.user_id if can_edit_user else None
             selected_department_id = self.instance.department_id
 
-        user_model = get_user_model()
-        base_user_qs = user_model.objects.order_by('username')
-        self.fields['user'].queryset = autocomplete_queryset(base_user_qs, selected_user_id)
-        user_extra_params = None
-        if selected_user_id and str(selected_user_id).isdigit():
-            user_extra_params = {'selected_user_id': int(selected_user_id)}
-        apply_autocomplete_attrs(
-            self.fields['user'],
-            kind='auth_user',
-            placeholder='Введите username, имя или email пользователя',
-            extra_params=user_extra_params,
-        )
+        if can_edit_user:
+            user_model = get_user_model()
+            base_user_qs = user_model.objects.order_by('username')
+            self.fields['user'].queryset = autocomplete_queryset(base_user_qs, selected_user_id)
+            user_extra_params = None
+            if selected_user_id and str(selected_user_id).isdigit():
+                user_extra_params = {'selected_user_id': int(selected_user_id)}
+            apply_autocomplete_attrs(
+                self.fields['user'],
+                kind='auth_user',
+                placeholder='Введите username, имя или email пользователя',
+                extra_params=user_extra_params,
+            )
 
         base_department_qs = Department.objects.order_by('number')
         self.fields['department'].queryset = autocomplete_queryset(base_department_qs, selected_department_id)

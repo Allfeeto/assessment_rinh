@@ -23,7 +23,11 @@ class WordExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         has_params = bool(request.GET)
         wants_download = request.GET.get('download') == '1'
-        form = WordExportForm(request.GET if has_params else None, validate_required=wants_download)
+        form = WordExportForm(
+            request.GET if has_params else None,
+            validate_required=wants_download,
+            user=request.user,
+        )
 
         if not wants_download:
             return render(request, self.template_name, {'form': form})

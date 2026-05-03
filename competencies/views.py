@@ -6,6 +6,7 @@ from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.views.generic import TemplateView
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem, AssessmentItemCompetence
 from programs.models import EducationalProgram
 
@@ -35,6 +36,8 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         competence_id = self.request.GET.get('competence', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
+        can_manage_competencies = self.request.user.is_staff or self.request.user.is_superuser
+        program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
         competence_disciplines_count = (
             DisciplineCompetence.objects.filter(
@@ -60,7 +63,13 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         competences_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).filter(educational_program__is_deleted=False).annotate(
+        ).filter(educational_program__is_deleted=False)
+        if not can_manage_competencies:
+            competences_qs = competences_qs.filter(
+                educational_program__program_disciplines__in=program_discipline_scope,
+            ).distinct()
+
+        competences_qs = competences_qs.annotate(
             disciplines_count=Coalesce(
                 Subquery(competence_disciplines_count, output_field=IntegerField()),
                 0,
@@ -110,7 +119,10 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
             'competence',
-        ).filter(program_discipline__educational_program__is_deleted=False).annotate(
+        ).filter(
+            program_discipline__educational_program__is_deleted=False,
+            program_discipline__in=program_discipline_scope,
+        ).annotate(
             items_count=Coalesce(
                 Subquery(link_items_count, output_field=IntegerField()),
                 0,
@@ -128,9 +140,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         if competence_id:
             discipline_competences_qs = discipline_competences_qs.filter(competence_id=competence_id)
         discipline_options = []
-        discipline_options_qs = ProgramDiscipline.objects.filter(
-            educational_program__is_deleted=False
-        ).select_related('discipline')
+        discipline_options_qs = program_discipline_scope.select_related('discipline')
         if educational_program_id:
             discipline_options_qs = discipline_options_qs.filter(
                 educational_program_id=educational_program_id
@@ -149,7 +159,12 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         # не стираем её, а добавляем в options отдельной записью, чтобы UI
         # сохранял выбор. Фильтр всё равно применяется ниже.
         valid_discipline_ids = {str(item['discipline_id']) for item in discipline_options}
-        if discipline_id and discipline_id not in valid_discipline_ids and discipline_id.isdigit():
+        if (
+            can_manage_competencies
+            and discipline_id
+            and discipline_id not in valid_discipline_ids
+            and discipline_id.isdigit()
+        ):
             from disciplines.models import Discipline as _Discipline
             extra_name = (
                 _Discipline.objects.filter(pk=int(discipline_id))
@@ -168,7 +183,12 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
-            .filter(pk=educational_program_id, is_deleted=False)
+            .filter(
+                pk=educational_program_id,
+                is_deleted=False,
+                program_disciplines__in=program_discipline_scope,
+            )
+            .distinct()
             .first()
             if educational_program_id
             else None
@@ -232,6 +252,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         context['discipline_competences_query_params'] = links_params.urlencode()
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
+        context['can_manage_competencies'] = can_manage_competencies
         return context
 
 
@@ -368,11 +389,11 @@ def competences_by_program_discipline(request):
     program_discipline_id = request.GET.get('program_discipline_id')
     linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
 
+    program_discipline_scope = program_discipline_queryset_for_user(request.user)
     queryset = Competence.objects.filter(educational_program__is_deleted=False).order_by('code')
     if program_discipline_id:
         educational_program_id = (
-            ProgramDiscipline.objects.filter(pk=program_discipline_id)
-            .filter(educational_program__is_deleted=False)
+            program_discipline_scope.filter(pk=program_discipline_id)
             .values_list('educational_program_id', flat=True)
             .first()
         )
@@ -383,6 +404,10 @@ def competences_by_program_discipline(request):
 
         if linked_only:
             queryset = queryset.filter(discipline_competences__program_discipline_id=program_discipline_id)
+    elif not (request.user.is_staff or request.user.is_superuser):
+        queryset = queryset.filter(
+            educational_program__program_disciplines__in=program_discipline_scope,
+        )
 
     data = [{'id': obj.id, 'label': f'{obj.code} — {obj.name}'} for obj in queryset.distinct()]
     return JsonResponse({'results': data})

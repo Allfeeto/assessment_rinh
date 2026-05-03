@@ -8,12 +8,14 @@ from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
 import re
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 from teachers.models import Department, Teacher
 
+from .permissions import can_use_model_permission, is_staff_or_superuser
 from .forms import (
     AcademicDegreeForm,
     AcademicTitleForm,
@@ -78,6 +80,22 @@ def _unique_lookup_results(queryset, limit, label_factory, key_factory=None):
         if len(results) >= limit:
             break
     return results
+
+
+def _user_can_lookup_all(user, model):
+    return can_use_model_permission(user, model, 'view')
+
+
+def _lookup_program_discipline_scope(user):
+    return program_discipline_queryset_for_user(user)
+
+
+def _lookup_program_discipline_ids(user):
+    return _lookup_program_discipline_scope(user).values_list('id', flat=True)
+
+
+def _lookup_program_ids(user):
+    return _lookup_program_discipline_scope(user).values_list('educational_program_id', flat=True)
 
 
 HOME_STATS_CACHE_KEY = 'core:home_stats'
@@ -315,6 +333,9 @@ class AcademicTitleDeleteView(NamedDeleteView):
 
 def _lookup_department(request, query, selected_id, limit):
     queryset = Department.objects.order_by('number')
+    if not _user_can_lookup_all(request.user, Department):
+        teacher = getattr(request.user, 'teacher_profile', None)
+        queryset = queryset.filter(pk=teacher.department_id) if teacher else queryset.none()
     if query:
         queryset = _apply_lookup_tokens(queryset, query, ('number', 'short_name', 'full_name'))
     queryset = _filter_selected_id(queryset, selected_id)
@@ -327,6 +348,9 @@ def _lookup_department(request, query, selected_id, limit):
 
 def _lookup_teacher(request, query, selected_id, limit):
     queryset = Teacher.objects.select_related('department').order_by('full_name')
+    if not _user_can_lookup_all(request.user, Teacher):
+        teacher = getattr(request.user, 'teacher_profile', None)
+        queryset = queryset.filter(pk=teacher.pk) if teacher else queryset.none()
     department_id = request.GET.get('department_id')
     if department_id:
         queryset = queryset.filter(department_id=department_id)
@@ -345,6 +369,9 @@ def _lookup_teacher(request, query, selected_id, limit):
 
 
 def _lookup_auth_user(request, query, selected_id, limit):
+    if not is_staff_or_superuser(request.user):
+        return []
+
     user_model = get_user_model()
     queryset = user_model.objects.order_by('username')
     selected_user_id = request.GET.get('selected_user_id')
@@ -371,6 +398,10 @@ def _lookup_auth_user(request, query, selected_id, limit):
 
 def _lookup_training_direction(request, query, selected_id, limit):
     queryset = TrainingDirection.objects.order_by('code')
+    if not _user_can_lookup_all(request.user, TrainingDirection):
+        queryset = queryset.filter(
+            program_profiles__educational_programs__program_disciplines__id__in=_lookup_program_discipline_ids(request.user),
+        ).distinct()
     education_level_id = request.GET.get('education_level_id')
     if education_level_id:
         queryset = queryset.filter(education_level_id=education_level_id)
@@ -386,6 +417,10 @@ def _lookup_training_direction(request, query, selected_id, limit):
 
 def _lookup_program_profile(request, query, selected_id, limit):
     queryset = ProgramProfile.objects.select_related('training_direction').order_by('code')
+    if not _user_can_lookup_all(request.user, ProgramProfile):
+        queryset = queryset.filter(
+            educational_programs__program_disciplines__id__in=_lookup_program_discipline_ids(request.user),
+        ).distinct()
     direction_id = request.GET.get('training_direction_id')
     education_level_id = request.GET.get('education_level_id')
     if education_level_id:
@@ -411,6 +446,10 @@ def _lookup_educational_program(request, query, selected_id, limit):
         'program_profile__training_direction',
         'department',
     ).order_by('program_profile__code', 'admission_year')
+    if not _user_can_lookup_all(request.user, EducationalProgram):
+        queryset = queryset.filter(
+            program_disciplines__id__in=_lookup_program_discipline_ids(request.user),
+        ).distinct()
     education_level_id = request.GET.get('education_level_id')
     training_direction_id = request.GET.get('training_direction_id')
     program_profile_id = request.GET.get('program_profile_id')
@@ -449,6 +488,9 @@ def _lookup_educational_program(request, query, selected_id, limit):
 
 def _lookup_discipline(request, query, selected_id, limit):
     queryset = Discipline.objects.order_by('name')
+    scoped_program_disciplines = _lookup_program_discipline_scope(request.user)
+    if not _user_can_lookup_all(request.user, Discipline):
+        queryset = queryset.filter(program_disciplines__in=scoped_program_disciplines).distinct()
     exclude_program_id = request.GET.get('exclude_program_id')
     education_level_id = request.GET.get('education_level_id')
     training_direction_id = request.GET.get('training_direction_id')
@@ -468,9 +510,11 @@ def _lookup_discipline(request, query, selected_id, limit):
         or educational_program_id
         or competence_id
     ):
-        linked_program_disciplines = ProgramDiscipline.objects.filter(
-            educational_program__is_deleted=False
-        )
+        linked_program_disciplines = scoped_program_disciplines
+        if _user_can_lookup_all(request.user, Discipline):
+            linked_program_disciplines = ProgramDiscipline.objects.filter(
+                educational_program__is_deleted=False
+            )
         if education_level_id:
             linked_program_disciplines = linked_program_disciplines.filter(
                 educational_program__program_profile__training_direction__education_level_id=education_level_id
@@ -509,6 +553,8 @@ def _lookup_program_discipline(request, query, selected_id, limit):
         'educational_program__admission_year',
         'discipline__name',
     )
+    if not _user_can_lookup_all(request.user, ProgramDiscipline):
+        queryset = queryset.filter(pk__in=_lookup_program_discipline_ids(request.user))
     educational_program_id = request.GET.get('educational_program_id')
     if educational_program_id:
         queryset = queryset.filter(educational_program_id=educational_program_id)
@@ -538,6 +584,11 @@ def _lookup_competence(request, query, selected_id, limit):
         'educational_program__program_profile',
         'competence_type',
     ).filter(educational_program__is_deleted=False).order_by('code')
+    scoped_program_disciplines = _lookup_program_discipline_scope(request.user)
+    if not _user_can_lookup_all(request.user, Competence):
+        queryset = queryset.filter(
+            educational_program__program_disciplines__in=scoped_program_disciplines,
+        ).distinct()
 
     educational_program_id = request.GET.get('educational_program_id')
     program_discipline_id = request.GET.get('program_discipline_id')
@@ -560,7 +611,7 @@ def _lookup_competence(request, query, selected_id, limit):
 
     if program_discipline_id:
         program_id = (
-            ProgramDiscipline.objects.filter(pk=program_discipline_id)
+            scoped_program_disciplines.filter(pk=program_discipline_id)
             .filter(educational_program__is_deleted=False)
             .values_list('educational_program_id', flat=True)
             .first()

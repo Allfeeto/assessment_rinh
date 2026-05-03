@@ -88,6 +88,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'core.middleware.AuthRateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -182,6 +183,14 @@ CACHES = {
 }
 
 HOME_STATS_CACHE_TTL = env_int('DJANGO_HOME_STATS_CACHE_TTL', default=60)
+
+AUTH_RATE_LIMIT_ENABLED = env_bool('DJANGO_AUTH_RATE_LIMIT_ENABLED', default=True)
+AUTH_RATE_LIMIT_ATTEMPTS = env_int('DJANGO_AUTH_RATE_LIMIT_ATTEMPTS', default=5)
+AUTH_RATE_LIMIT_WINDOW_SECONDS = env_int('DJANGO_AUTH_RATE_LIMIT_WINDOW_SECONDS', default=300)
+AUTH_RATE_LIMIT_PATHS = env_list(
+    'DJANGO_AUTH_RATE_LIMIT_PATHS',
+    default='/login/,/accounts/login/,/admin/login/',
+)
 
 LOGGING = {
     'version': 1,

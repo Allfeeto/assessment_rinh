@@ -16,14 +16,16 @@
             </select>
         </div>
     </form>
-    <div class="actions">
-        <a class="btn" href="{% url 'teachers_department_create' %}">Создать кафедру</a>
-        <a class="btn" href="{% url 'teachers_teacher_create' %}">Создать преподавателя</a>
-        <a class="btn" href="{% url 'teachers_teacher_program_discipline_create' %}">Назначить дисциплину преподавателю</a>
-        <a class="btn secondary" href="{% url 'teachers_department_list' %}">Все кафедры</a>
-        <a class="btn secondary" href="{% url 'teachers_teacher_list' %}">Все преподаватели</a>
-        <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_list' %}">Все назначения</a>
-    </div>
+    {% if can_manage_teacher_directory %}
+        <div class="actions">
+            <a class="btn" href="{% url 'teachers_department_create' %}">Создать кафедру</a>
+            <a class="btn" href="{% url 'teachers_teacher_create' %}">Создать преподавателя</a>
+            <a class="btn" href="{% url 'teachers_teacher_program_discipline_create' %}">Назначить дисциплину преподавателю</a>
+            <a class="btn secondary" href="{% url 'teachers_department_list' %}">Все кафедры</a>
+            <a class="btn secondary" href="{% url 'teachers_teacher_list' %}">Все преподаватели</a>
+            <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_list' %}">Все назначения</a>
+        </div>
+    {% endif %}
 </div>
 
 <div class="panel" id="assignment-panel"
@@ -37,8 +39,10 @@
             <strong style="color: var(--accent);">{{ assignment_active_teacher.full_name }}</strong>
             {% if assignment_can_change_teacher %}
                 (можно сменить ниже)
+            {% elif assignment_can_edit %}
+                (вы можете менять назначения)
             {% else %}
-                (вы редактируете назначения только для себя)
+                (назначения доступны только для просмотра)
             {% endif %}
         </div>
     {% else %}
@@ -224,8 +228,10 @@
                 <td>{{ department.head_teacher.full_name|default:"—" }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'teachers_department_delete' department.id %}">Удалить</a>
+                        {% if can_manage_teacher_directory %}
+                            <a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'teachers_department_delete' department.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
@@ -269,8 +275,10 @@
                 <td>{{ teacher.department.short_name }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
+                        {% if can_manage_teacher_directory %}
+                            <a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
@@ -316,8 +324,10 @@
                 <td>{{ link.program_discipline.discipline.name }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_update' link.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'teachers_teacher_program_discipline_delete' link.id %}">Удалить</a>
+                        {% if can_manage_teacher_directory %}
+                            <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_update' link.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'teachers_teacher_program_discipline_delete' link.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

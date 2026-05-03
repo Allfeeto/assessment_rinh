@@ -121,9 +121,11 @@
         </div>
     </form>
     <div class="actions">
-        <a class="btn" href="{% url 'programs_direction_create' %}">Создать направление</a>
-        <a class="btn" href="{% url 'programs_profile_create' %}">Создать профиль</a>
-        <a class="btn" href="{% url 'programs_educational_program_create' %}">Создать образовательную программу</a>
+        {% if can_manage_programs %}
+            <a class="btn" href="{% url 'programs_direction_create' %}">Создать направление</a>
+            <a class="btn" href="{% url 'programs_profile_create' %}">Создать профиль</a>
+            <a class="btn" href="{% url 'programs_educational_program_create' %}">Создать образовательную программу</a>
+        {% endif %}
         <a class="btn secondary" href="{% url 'programs_trash' %}">Корзина программ</a>
     </div>
 </div>
@@ -147,8 +149,10 @@
                 <td>{{ direction.education_level.name }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'programs_direction_update' direction.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'programs_direction_delete' direction.id %}">Удалить</a>
+                        {% if can_manage_programs %}
+                            <a class="btn secondary" href="{% url 'programs_direction_update' direction.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'programs_direction_delete' direction.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
@@ -192,8 +196,10 @@
                 <td>{{ profile.training_direction.code }} — {{ profile.training_direction.name }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'programs_profile_update' profile.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'programs_profile_delete' profile.id %}">Удалить</a>
+                        {% if can_manage_programs %}
+                            <a class="btn secondary" href="{% url 'programs_profile_update' profile.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'programs_profile_delete' profile.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
@@ -239,8 +245,10 @@
                 <td>{{ program.admission_year }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'programs_educational_program_update' program.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'programs_educational_program_delete' program.id %}">Удалить</a>
+                        {% if can_manage_programs %}
+                            <a class="btn secondary" href="{% url 'programs_educational_program_update' program.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'programs_educational_program_delete' program.id %}">Удалить</a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

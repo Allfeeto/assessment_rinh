@@ -1,8 +1,10 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+
+from .permissions import can_use_model_permission, is_staff_or_superuser
 
 
 PER_PAGE_CHOICES = (50, 100, 200)
@@ -40,8 +42,51 @@ def resolve_attr(obj, path):
     return value
 
 
-class NamedListView(LoginRequiredMixin, ListView):
+class StaffOrModelPermissionRequiredMixin(LoginRequiredMixin, PermissionRequiredMixin):
     login_url = reverse_lazy('login')
+    raise_exception = True
+    permission_action = None
+
+    def get_permission_model(self):
+        model = getattr(self, 'model', None)
+        if model is not None:
+            return model
+        queryset = getattr(self, 'queryset', None)
+        if queryset is not None:
+            return queryset.model
+        return None
+
+    def get_permission_required(self):
+        if self.permission_required:
+            return super().get_permission_required()
+
+        model = self.get_permission_model()
+        if model is None or not self.permission_action:
+            return ()
+
+        opts = model._meta
+        return (f'{opts.app_label}.{self.permission_action}_{opts.model_name}',)
+
+    def has_permission(self):
+        user = self.request.user
+        if is_staff_or_superuser(user):
+            return True
+
+        perms = self.get_permission_required()
+        if not perms:
+            return True
+        return user.has_perms(perms)
+
+    def can_use_action(self, action):
+        model = self.get_permission_model()
+        if model is None:
+            return True
+        return can_use_model_permission(self.request.user, model, action)
+
+
+class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
+    login_url = reverse_lazy('login')
+    permission_action = 'view'
     template_name = 'common/list.html'
     context_object_name = 'objects'
     paginate_by = DEFAULT_PER_PAGE
@@ -77,10 +122,10 @@ class NamedListView(LoginRequiredMixin, ListView):
         context['title'] = self.title
         context['search_query'] = self.request.GET.get('q', '')
         context['list_columns'] = self.list_columns
-        context['create_url_name'] = self.create_url_name
+        context['create_url_name'] = self.create_url_name if self.can_use_action('add') else ''
         context['detail_url_name'] = self.detail_url_name
-        context['update_url_name'] = self.update_url_name
-        context['delete_url_name'] = self.delete_url_name
+        context['update_url_name'] = self.update_url_name if self.can_use_action('change') else ''
+        context['delete_url_name'] = self.delete_url_name if self.can_use_action('delete') else ''
         context['per_page_choices'] = self.per_page_choices
         context['selected_per_page'] = self.get_paginate_by(context.get('object_list'))
 
@@ -98,8 +143,9 @@ class NamedListView(LoginRequiredMixin, ListView):
         return context
 
 
-class NamedDetailView(LoginRequiredMixin, DetailView):
+class NamedDetailView(StaffOrModelPermissionRequiredMixin, DetailView):
     login_url = reverse_lazy('login')
+    permission_action = 'view'
     template_name = 'common/detail.html'
     title = ''
     list_url_name = ''
@@ -111,16 +157,17 @@ class NamedDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context['title'] = self.title
         context['list_url_name'] = self.list_url_name
-        context['update_url_name'] = self.update_url_name
-        context['delete_url_name'] = self.delete_url_name
+        context['update_url_name'] = self.update_url_name if self.can_use_action('change') else ''
+        context['delete_url_name'] = self.delete_url_name if self.can_use_action('delete') else ''
         context['display_fields'] = [
             (label, resolve_attr(self.object, attr_path)) for label, attr_path in self.detail_fields
         ]
         return context
 
 
-class NamedCreateView(LoginRequiredMixin, CreateView):
+class NamedCreateView(StaffOrModelPermissionRequiredMixin, CreateView):
     login_url = reverse_lazy('login')
+    permission_action = 'add'
     template_name = 'common/form.html'
     title = ''
     list_url_name = ''
@@ -136,8 +183,9 @@ class NamedCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class NamedUpdateView(LoginRequiredMixin, UpdateView):
+class NamedUpdateView(StaffOrModelPermissionRequiredMixin, UpdateView):
     login_url = reverse_lazy('login')
+    permission_action = 'change'
     template_name = 'common/form.html'
     title = ''
     list_url_name = ''
@@ -153,8 +201,9 @@ class NamedUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class NamedDeleteView(LoginRequiredMixin, DeleteView):
+class NamedDeleteView(StaffOrModelPermissionRequiredMixin, DeleteView):
     login_url = reverse_lazy('login')
+    permission_action = 'delete'
     template_name = 'common/confirm_delete.html'
     title = ''
     list_url_name = ''

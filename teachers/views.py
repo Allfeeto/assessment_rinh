@@ -9,6 +9,8 @@ from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
+from assessment.access import allowed_program_discipline_ids_for_user
+from core.permissions import can_manage_teacher_assignments, is_staff_or_superuser
 from core.view_helpers import (
     PER_PAGE_CHOICES,
     NamedCreateView,
@@ -36,7 +38,7 @@ def _resolve_active_teacher(request):
     """
     user = request.user
     profile = getattr(user, 'teacher_profile', None)
-    can_change = bool(user.is_superuser or user.is_staff)
+    can_change = can_manage_teacher_assignments(user)
 
     requested_id = request.GET.get('teacher') or request.POST.get('teacher')
     if can_change and requested_id and str(requested_id).isdigit():
@@ -58,13 +60,32 @@ def _user_can_assign(user, teacher):
     """Может ли пользователь назначать/снимать активного преподавателя."""
     if not user.is_authenticated or teacher is None:
         return False
-    if user.is_superuser or user.is_staff:
-        return True
-    profile = getattr(user, 'teacher_profile', None)
-    return profile is not None and profile.id == teacher.id
+    return can_manage_teacher_assignments(user)
 
 
-def _build_assignment_rows(teacher, educational_program, query):
+def _assignment_program_discipline_ids_for_user(user):
+    if can_manage_teacher_assignments(user):
+        return None
+    return set(allowed_program_discipline_ids_for_user(user))
+
+
+def _program_is_visible_for_assignments(user, program_id):
+    if not program_id:
+        return False
+    if can_manage_teacher_assignments(user):
+        return EducationalProgram.objects.filter(pk=program_id, is_deleted=False).exists()
+
+    visible_ids = _assignment_program_discipline_ids_for_user(user)
+    if not visible_ids:
+        return False
+    return ProgramDiscipline.objects.filter(
+        pk__in=visible_ids,
+        educational_program_id=program_id,
+        educational_program__is_deleted=False,
+    ).exists()
+
+
+def _build_assignment_rows(teacher, educational_program, query, user):
     """
     Список ProgramDiscipline для активного преподавателя и выбранной программы.
     Возвращает список словарей: id, discipline_name, is_assigned (для активного teacher),
@@ -82,6 +103,9 @@ def _build_assignment_rows(teacher, educational_program, query):
         .select_related('discipline')
         .order_by('discipline__name')
     )
+    visible_ids = _assignment_program_discipline_ids_for_user(user)
+    if visible_ids is not None:
+        program_disciplines = program_disciplines.filter(pk__in=visible_ids)
 
     if query:
         program_disciplines = program_disciplines.filter(
@@ -97,6 +121,8 @@ def _build_assignment_rows(teacher, educational_program, query):
     assignments = TeacherProgramDiscipline.objects.filter(
         program_discipline_id__in=pd_ids,
     ).select_related('teacher')
+    if not can_manage_teacher_assignments(user):
+        assignments = assignments.filter(teacher=teacher)
 
     by_pd: dict[int, dict] = {pd_id: {'is_assigned': False, 'others': []} for pd_id in pd_ids}
     for link in assignments:
@@ -127,6 +153,9 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         per_page = get_per_page(self.request)
+        active_teacher, can_change_active = _resolve_active_teacher(self.request)
+        can_manage_directory = is_staff_or_superuser(self.request.user)
+
         departments_qs = Department.objects.select_related('head_teacher').order_by('number')
         teachers_qs = Teacher.objects.select_related('department').order_by('full_name')
         teacher_program_disciplines_qs = TeacherProgramDiscipline.objects.select_related(
@@ -139,6 +168,17 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
         )
+        if not can_manage_directory:
+            if active_teacher is None:
+                departments_qs = departments_qs.none()
+                teachers_qs = teachers_qs.none()
+                teacher_program_disciplines_qs = teacher_program_disciplines_qs.none()
+            else:
+                departments_qs = departments_qs.filter(pk=active_teacher.department_id)
+                teachers_qs = teachers_qs.filter(pk=active_teacher.pk)
+                teacher_program_disciplines_qs = teacher_program_disciplines_qs.filter(
+                    teacher=active_teacher,
+                )
 
         departments_page_obj = paginate_queryset(
             self.request,
@@ -171,20 +211,24 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
 
-        # Панель «Назначение преподавателей на дисциплины» — встроенная в dashboard.
-        active_teacher, can_change_active = _resolve_active_teacher(self.request)
-
         program_id_raw = self.request.GET.get('assignment_program', '').strip()
         active_program = None
         if program_id_raw and program_id_raw.isdigit():
-            active_program = (
-                EducationalProgram.objects.select_related(
-                    'program_profile', 'department'
-                ).filter(pk=int(program_id_raw), is_deleted=False).first()
-            )
+            program_id = int(program_id_raw)
+            if _program_is_visible_for_assignments(self.request.user, program_id):
+                active_program = (
+                    EducationalProgram.objects.select_related(
+                        'program_profile', 'department'
+                    ).filter(pk=program_id, is_deleted=False).first()
+                )
 
         assignment_query = self.request.GET.get('assignment_q', '').strip()
-        assignment_rows = _build_assignment_rows(active_teacher, active_program, assignment_query)
+        assignment_rows = _build_assignment_rows(
+            active_teacher,
+            active_program,
+            assignment_query,
+            self.request.user,
+        )
 
         teachers_picker_qs = Teacher.objects.select_related('department').order_by('full_name')
         if not can_change_active and active_teacher is not None:
@@ -193,6 +237,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         context['assignment_active_teacher'] = active_teacher
         context['assignment_can_change_teacher'] = can_change_active
         context['assignment_can_edit'] = _user_can_assign(self.request.user, active_teacher)
+        context['can_manage_teacher_directory'] = can_manage_directory
         context['assignment_teachers'] = teachers_picker_qs
         context['assignment_active_program'] = active_program
         context['assignment_active_program_id'] = active_program.id if active_program else ''
@@ -292,12 +337,22 @@ class TeacherCreateView(NamedCreateView):
     title = 'Создать преподавателя'
     list_url_name = 'teachers_teacher_list'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
 
 class TeacherUpdateView(NamedUpdateView):
     model = Teacher
     form_class = TeacherForm
     title = 'Редактировать преподавателя'
     list_url_name = 'teachers_teacher_list'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class TeacherDeleteView(NamedDeleteView):
@@ -387,13 +442,15 @@ class TeacherAssignmentPanelView(LoginRequiredMixin, View):
         program_id_raw = request.GET.get('assignment_program', '').strip()
         active_program = None
         if program_id_raw and program_id_raw.isdigit():
-            active_program = (
-                EducationalProgram.objects.select_related('program_profile', 'department')
-                .filter(pk=int(program_id_raw), is_deleted=False)
-                .first()
-            )
+            program_id = int(program_id_raw)
+            if _program_is_visible_for_assignments(request.user, program_id):
+                active_program = (
+                    EducationalProgram.objects.select_related('program_profile', 'department')
+                    .filter(pk=program_id, is_deleted=False)
+                    .first()
+                )
         query = request.GET.get('assignment_q', '').strip()
-        rows = _build_assignment_rows(active_teacher, active_program, query)
+        rows = _build_assignment_rows(active_teacher, active_program, query, request.user)
         return render(
             request,
             self.template_name,
@@ -432,12 +489,18 @@ class TeacherAssignmentToggleView(LoginRequiredMixin, View):
         except (TypeError, ValueError, json.JSONDecodeError):
             return HttpResponseBadRequest('Некорректные параметры запроса.')
 
+        if not can_manage_teacher_assignments(request.user):
+            raise PermissionDenied(
+                'Назначения может менять только администратор или пользователь '
+                'с правом управления назначениями.'
+            )
+
         teacher = Teacher.objects.filter(pk=teacher_id).first()
         if teacher is None:
             return HttpResponseBadRequest('Преподаватель не найден.')
 
         if not _user_can_assign(request.user, teacher):
-            raise PermissionDenied('Назначения может менять только сам преподаватель или администратор.')
+            raise PermissionDenied('Недостаточно прав для управления назначениями преподавателей.')
 
         if not ProgramDiscipline.objects.filter(
             pk=program_discipline_id,

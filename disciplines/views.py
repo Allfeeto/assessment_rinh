@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from programs.models import EducationalProgram
 
@@ -21,6 +22,7 @@ from core.view_helpers import (
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    StaffOrModelPermissionRequiredMixin,
     get_per_page,
 )
 
@@ -29,7 +31,9 @@ from .models import Discipline, ProgramDiscipline
 from competencies.models import DisciplineCompetence
 
 
-class ProgramDisciplineManagerView(LoginRequiredMixin, View):
+class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
+    model = ProgramDiscipline
+    permission_action = 'change'
     template_name = 'disciplines/manage_program_disciplines.html'
 
     @staticmethod
@@ -149,11 +153,13 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
+        can_manage_disciplines = self.request.user.is_staff or self.request.user.is_superuser
+        program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
         # Считаем агрегаты через Subquery, чтобы избежать инфляции
         # из-за пересекающихся JOIN’ов при нескольких Count(distinct=True).
         discipline_programs_count = (
-            ProgramDiscipline.objects.filter(
+            program_discipline_scope.filter(
                 discipline=OuterRef('pk'),
                 educational_program__is_deleted=False,
             )
@@ -165,6 +171,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         discipline_items_count = (
             AssessmentItem.objects.filter(
                 program_discipline__discipline=OuterRef('pk'),
+                program_discipline__in=program_discipline_scope,
                 program_discipline__educational_program__is_deleted=False,
             )
             .order_by()
@@ -173,7 +180,13 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             .values('total')
         )
 
-        disciplines_qs = Discipline.objects.annotate(
+        disciplines_base_qs = Discipline.objects.all()
+        if not can_manage_disciplines:
+            disciplines_base_qs = disciplines_base_qs.filter(
+                program_disciplines__in=program_discipline_scope,
+            ).distinct()
+
+        disciplines_qs = disciplines_base_qs.annotate(
             programs_count=Coalesce(
                 Subquery(discipline_programs_count, output_field=IntegerField()),
                 0,
@@ -208,11 +221,11 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             .values('total')
         )
 
-        program_disciplines_qs = ProgramDiscipline.objects.select_related(
+        program_disciplines_qs = program_discipline_scope.select_related(
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
-        ).filter(educational_program__is_deleted=False).annotate(
+        ).annotate(
             competences_count=Coalesce(
                 Subquery(program_discipline_competences_count, output_field=IntegerField()),
                 0,
@@ -238,7 +251,12 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
-            .filter(pk=educational_program_id, is_deleted=False)
+            .filter(
+                pk=educational_program_id,
+                is_deleted=False,
+                program_disciplines__in=program_discipline_scope,
+            )
+            .distinct()
             .first()
             if educational_program_id
             else None
@@ -266,6 +284,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         context['pd_query_params'] = pd_params.urlencode()
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
+        context['can_manage_disciplines'] = can_manage_disciplines
         return context
 
 
@@ -376,10 +395,10 @@ class ProgramDisciplineDeleteView(NamedDeleteView):
 @login_required
 def program_discipline_by_program(request):
     educational_program_id = request.GET.get('educational_program_id')
-    queryset = ProgramDiscipline.objects.select_related(
+    queryset = program_discipline_queryset_for_user(request.user).select_related(
         'educational_program__program_profile',
         'discipline',
-    ).filter(educational_program__is_deleted=False).order_by(
+    ).order_by(
         'educational_program__program_profile__code',
         'educational_program__admission_year',
         'discipline__name',

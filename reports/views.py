@@ -2,6 +2,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q
 from django.views.generic import TemplateView
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from assessment.services import get_item_type_ui_name
 from competencies.models import Competence, DisciplineCompetence
@@ -87,7 +88,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        form = ReportFilterForm(self.request.GET or None)
+        form = ReportFilterForm(self.request.GET or None, user=self.request.user)
         cleaned = form.cleaned_data if form.is_valid() else {}
         per_page = get_per_page(self.request)
 
@@ -96,7 +97,15 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         competence = cleaned.get('competence')
         assessment_item_type = cleaned.get('assessment_item_type')
 
-        item_filters = Q(program_discipline__educational_program__is_deleted=False)
+        program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
+        program_discipline_ids = program_discipline_scope.values_list('id', flat=True)
+        program_ids = program_discipline_scope.values_list('educational_program_id', flat=True)
+        discipline_ids = program_discipline_scope.values_list('discipline_id', flat=True)
+
+        item_filters = Q(
+            program_discipline__educational_program__is_deleted=False,
+            program_discipline_id__in=program_discipline_ids,
+        )
         if educational_program:
             item_filters &= Q(program_discipline__educational_program=educational_program)
         if discipline:
@@ -134,6 +143,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
 
         report_by_program_qs = (
             EducationalProgram.objects.active().select_related('program_profile', 'department')
+            .filter(id__in=program_ids)
             .annotate(
                 total=Count(
                     'program_disciplines__assessment_items',
@@ -160,7 +170,7 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         report_by_program = list(report_by_program_page_obj.object_list)
 
         report_by_discipline_qs = (
-            Discipline.objects.annotate(
+            Discipline.objects.filter(id__in=discipline_ids).annotate(
                 total=Count(
                     'program_disciplines__assessment_items',
                     filter=Q(
@@ -184,7 +194,10 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         competence_coverage_qs = Competence.objects.select_related(
             'educational_program__program_profile',
             'competence_type',
-        ).filter(educational_program__is_deleted=False)
+        ).filter(
+            educational_program__is_deleted=False,
+            educational_program_id__in=program_ids,
+        )
         if educational_program:
             competence_coverage_qs = competence_coverage_qs.filter(educational_program=educational_program)
         if competence:
@@ -217,7 +230,10 @@ class ReportsDashboardView(LoginRequiredMixin, TemplateView):
         discipline_competence_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
             'competence',
-        ).filter(program_discipline__educational_program__is_deleted=False)
+        ).filter(
+            program_discipline__educational_program__is_deleted=False,
+            program_discipline_id__in=program_discipline_ids,
+        )
         if educational_program:
             discipline_competence_qs = discipline_competence_qs.filter(
                 program_discipline__educational_program=educational_program

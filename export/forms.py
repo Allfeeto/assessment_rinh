@@ -1,5 +1,6 @@
 from django import forms
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.services import get_ui_assessment_item_types_queryset
 from competencies.models import Competence, DisciplineCompetence
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
@@ -32,6 +33,7 @@ class WordExportForm(forms.Form):
     )
 
     def __init__(self, *args, validate_required=True, **kwargs):
+        user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
         program_id = None
@@ -49,10 +51,19 @@ class WordExportForm(forms.Form):
             discipline_id = discipline.id if hasattr(discipline, 'id') else discipline
             selected_competence_id = competence.id if hasattr(competence, 'id') else competence
 
+        program_discipline_scope = (
+            program_discipline_queryset_for_user(user)
+            if user is not None
+            else ProgramDiscipline.objects.filter(educational_program__is_deleted=False)
+        )
+
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
+        ).filter(
+            is_deleted=False,
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -64,8 +75,10 @@ class WordExportForm(forms.Form):
             self.fields['educational_program'].required = False
             self.fields['discipline'].required = False
 
-        base_discipline_qs = Discipline.objects.order_by('name')
-        linked_disciplines_qs = ProgramDiscipline.objects.filter(educational_program__is_deleted=False)
+        base_discipline_qs = Discipline.objects.filter(
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('name')
+        linked_disciplines_qs = program_discipline_scope
         if program_id:
             linked_disciplines_qs = linked_disciplines_qs.filter(educational_program_id=program_id)
         if selected_competence_id:
@@ -91,13 +104,16 @@ class WordExportForm(forms.Form):
         competence_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).filter(educational_program__is_deleted=False).order_by('code')
+        ).filter(
+            educational_program__is_deleted=False,
+            educational_program__program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('code')
 
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
 
         if discipline_id:
-            program_disciplines = ProgramDiscipline.objects.filter(
+            program_disciplines = program_discipline_scope.filter(
                 discipline_id=discipline_id,
                 educational_program__is_deleted=False,
             )

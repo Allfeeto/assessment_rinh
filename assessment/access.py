@@ -1,32 +1,38 @@
 from disciplines.models import ProgramDiscipline
-from teachers.models import TeacherProgramDiscipline
 
 
-def allowed_program_discipline_ids_for_user(user, *, include_deleted=False, deleted_only=False):
-    if not user.is_authenticated:
-        return []
-
+def program_discipline_queryset_for_user(user, *, include_deleted=False, deleted_only=False):
     queryset = ProgramDiscipline.objects.all()
     if deleted_only:
         queryset = queryset.filter(educational_program__is_deleted=True)
     elif not include_deleted:
         queryset = queryset.filter(educational_program__is_deleted=False)
 
-    if user.is_superuser:
-        return list(queryset.values_list('id', flat=True))
+    if not user.is_authenticated:
+        return queryset.none()
+
+    if user.is_superuser or user.is_staff:
+        return queryset
 
     teacher = getattr(user, 'teacher_profile', None)
     if not teacher:
+        return queryset.none()
+
+    return queryset.filter(
+        teacher_program_disciplines__teacher=teacher,
+    ).distinct()
+
+
+def allowed_program_discipline_ids_for_user(user, *, include_deleted=False, deleted_only=False):
+    if not user.is_authenticated:
         return []
 
     return list(
-        TeacherProgramDiscipline.objects.filter(
-            teacher=teacher,
-            program_discipline_id__in=queryset.values_list('id', flat=True),
-        ).values_list(
-            'program_discipline_id',
-            flat=True,
-        )
+        program_discipline_queryset_for_user(
+            user,
+            include_deleted=include_deleted,
+            deleted_only=deleted_only,
+        ).values_list('id', flat=True)
     )
 
 

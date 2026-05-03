@@ -1,5 +1,6 @@
 from django import forms
 
+from assessment.access import program_discipline_queryset_for_user
 from assessment.services import get_ui_assessment_item_types_queryset
 from competencies.models import Competence, DisciplineCompetence
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
@@ -32,6 +33,7 @@ class ReportFilterForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
         program_id = None
@@ -49,10 +51,19 @@ class ReportFilterForm(forms.Form):
             discipline_id = discipline.id if hasattr(discipline, 'id') else discipline
             selected_competence_id = competence.id if hasattr(competence, 'id') else competence
 
+        program_discipline_scope = (
+            program_discipline_queryset_for_user(user)
+            if user is not None
+            else ProgramDiscipline.objects.filter(educational_program__is_deleted=False)
+        )
+
         base_program_qs = EducationalProgram.objects.select_related(
             'program_profile',
             'department',
-        ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
+        ).filter(
+            is_deleted=False,
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('program_profile__code', 'admission_year')
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -61,7 +72,9 @@ class ReportFilterForm(forms.Form):
             dynamic_params=(('id_discipline', 'discipline_id'), ('id_competence', 'competence_id')),
         )
 
-        base_discipline_qs = Discipline.objects.order_by('name')
+        base_discipline_qs = Discipline.objects.filter(
+            program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('name')
         self.fields['discipline'].queryset = autocomplete_queryset(base_discipline_qs, discipline_id)
         apply_autocomplete_attrs(
             self.fields['discipline'],
@@ -78,13 +91,16 @@ class ReportFilterForm(forms.Form):
         competence_qs = Competence.objects.select_related(
             'competence_type',
             'educational_program__program_profile',
-        ).filter(educational_program__is_deleted=False).order_by('code')
+        ).filter(
+            educational_program__is_deleted=False,
+            educational_program__program_disciplines__in=program_discipline_scope,
+        ).distinct().order_by('code')
 
         if program_id:
             competence_qs = competence_qs.filter(educational_program_id=program_id)
 
         if program_id and discipline_id:
-            program_discipline = ProgramDiscipline.objects.filter(
+            program_discipline = program_discipline_scope.filter(
                 educational_program_id=program_id,
                 discipline_id=discipline_id,
                 educational_program__is_deleted=False,
@@ -99,6 +115,7 @@ class ReportFilterForm(forms.Form):
         elif discipline_id:
             linked_ids = DisciplineCompetence.objects.filter(
                 program_discipline__discipline_id=discipline_id,
+                program_discipline__in=program_discipline_scope,
                 program_discipline__educational_program__is_deleted=False,
             ).values_list('competence_id', flat=True)
             competence_qs = competence_qs.filter(id__in=linked_ids)
@@ -107,6 +124,7 @@ class ReportFilterForm(forms.Form):
             competence_qs = Competence.objects.filter(
                 pk=selected_competence_id,
                 educational_program__is_deleted=False,
+                educational_program__program_disciplines__in=program_discipline_scope,
             ) | competence_qs
 
         self.fields['competence'].queryset = competence_qs
