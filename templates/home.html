@@ -8,40 +8,42 @@
 <div class="panel">
     <h2>Обзор данных</h2>
     <div class="stats">
+        {% if can_manage_catalogs %}
+            <div class="stat">
+                <div class="muted">Уровни образования</div>
+                <div class="stat-value">{{ stats.education_levels }}</div>
+            </div>
+            <div class="stat">
+                <div class="muted">Кафедры</div>
+                <div class="stat-value">{{ stats.departments }}</div>
+            </div>
+            <div class="stat">
+                <div class="muted">Преподаватели</div>
+                <div class="stat-value">{{ stats.teachers }}</div>
+            </div>
+            <div class="stat">
+                <div class="muted">Направления</div>
+                <div class="stat-value">{{ stats.training_directions }}</div>
+            </div>
+            <div class="stat">
+                <div class="muted">Профили</div>
+                <div class="stat-value">{{ stats.program_profiles }}</div>
+            </div>
+        {% endif %}
         <div class="stat">
-            <div class="muted">Уровни образования</div>
-            <div class="stat-value">{{ stats.education_levels }}</div>
-        </div>
-        <div class="stat">
-            <div class="muted">Кафедры</div>
-            <div class="stat-value">{{ stats.departments }}</div>
-        </div>
-        <div class="stat">
-            <div class="muted">Преподаватели</div>
-            <div class="stat-value">{{ stats.teachers }}</div>
-        </div>
-        <div class="stat">
-            <div class="muted">Направления</div>
-            <div class="stat-value">{{ stats.training_directions }}</div>
-        </div>
-        <div class="stat">
-            <div class="muted">Профили</div>
-            <div class="stat-value">{{ stats.program_profiles }}</div>
-        </div>
-        <div class="stat">
-            <div class="muted">Образовательные программы</div>
+            <div class="muted">{% if can_manage_catalogs %}Образовательные программы{% else %}Доступные программы{% endif %}</div>
             <div class="stat-value">{{ stats.educational_programs }}</div>
         </div>
         <div class="stat">
-            <div class="muted">Дисциплины</div>
+            <div class="muted">{% if can_manage_catalogs %}Дисциплины{% else %}Доступные дисциплины{% endif %}</div>
             <div class="stat-value">{{ stats.disciplines }}</div>
         </div>
         <div class="stat">
-            <div class="muted">Компетенции</div>
+            <div class="muted">{% if can_manage_catalogs %}Компетенции{% else %}Компетенции в доступных программах{% endif %}</div>
             <div class="stat-value">{{ stats.competences }}</div>
         </div>
         <div class="stat">
-            <div class="muted">Задания</div>
+            <div class="muted">{% if can_manage_catalogs %}Задания{% else %}Доступные задания{% endif %}</div>
             <div class="stat-value">{{ stats.assessment_items }}</div>
         </div>
     </div>
@@ -56,22 +58,24 @@
         <h3>Задания</h3>
         <div class="muted">Создание, редактирование, фильтрация, компетенции и строки заданий.</div>
     </a>
-    <a class="card" href="/teachers/">
-        <h3>Кафедры и преподаватели</h3>
-        <div class="muted">Работа с кафедрами, заведующими и карточками преподавателей.</div>
-    </a>
-    <a class="card" href="/programs/">
-        <h3>Направления, профили, программы</h3>
-        <div class="muted">Иерархия учебных планов и данные по годам набора.</div>
-    </a>
-    <a class="card" href="/disciplines/">
-        <h3>Дисциплины</h3>
-        <div class="muted">Справочник дисциплин и привязка к образовательным программам.</div>
-    </a>
-    <a class="card" href="/competencies/">
-        <h3>Компетенции</h3>
-        <div class="muted">Компетенции программ и матрица дисциплина → компетенция.</div>
-    </a>
+    {% if can_manage_catalogs %}
+        <a class="card" href="/teachers/">
+            <h3>Кафедры и преподаватели</h3>
+            <div class="muted">Работа с кафедрами, заведующими и карточками преподавателей.</div>
+        </a>
+        <a class="card" href="/programs/">
+            <h3>Направления, профили, программы</h3>
+            <div class="muted">Иерархия учебных планов и данные по годам набора.</div>
+        </a>
+        <a class="card" href="/disciplines/">
+            <h3>Дисциплины</h3>
+            <div class="muted">Справочник дисциплин и привязка к образовательным программам.</div>
+        </a>
+        <a class="card" href="/competencies/">
+            <h3>Компетенции</h3>
+            <div class="muted">Компетенции программ и матрица дисциплина → компетенция.</div>
+        </a>
+    {% endif %}
     <a class="card" href="/reports/">
         <h3>Отчёты</h3>
         <div class="muted">Покрытие компетенций, сводка по типам, программам и дисциплинам.</div>
@@ -80,9 +84,11 @@
         <h3>Экспорт Word</h3>
         <div class="muted">Скачивание оценочных материалов с учётом фильтров.</div>
     </a>
-    <a class="card" href="/core/education-levels/">
-        <h3>Справочники</h3>
-        <div class="muted">Уровни, типы компетенций и заданий, степени и звания.</div>
-    </a>
+    {% if can_manage_catalogs %}
+        <a class="card" href="/core/education-levels/">
+            <h3>Справочники</h3>
+            <div class="muted">Уровни, типы компетенций и заданий, степени и звания.</div>
+        </a>
+    {% endif %}
 </div>
 {% endblock %}

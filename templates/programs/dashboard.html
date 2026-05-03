@@ -138,7 +138,7 @@
             <th>Код</th>
             <th>Наименование</th>
             <th>Уровень</th>
-            <th>Действия</th>
+            {% if can_manage_programs %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -147,17 +147,17 @@
                 <td>{{ direction.code }}</td>
                 <td>{{ direction.name }}</td>
                 <td>{{ direction.education_level.name }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_programs %}
+                {% if can_manage_programs %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'programs_direction_update' direction.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'programs_direction_delete' direction.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="4" class="muted">Направления пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_programs %}4{% else %}3{% endif %}" class="muted">Направления пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -185,7 +185,7 @@
             <th>Код</th>
             <th>Наименование</th>
             <th>Направление</th>
-            <th>Действия</th>
+            {% if can_manage_programs %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -194,17 +194,17 @@
                 <td>{{ profile.code }}</td>
                 <td>{{ profile.name }}</td>
                 <td>{{ profile.training_direction.code }} — {{ profile.training_direction.name }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_programs %}
+                {% if can_manage_programs %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'programs_profile_update' profile.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'programs_profile_delete' profile.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="4" class="muted">Профили пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_programs %}4{% else %}3{% endif %}" class="muted">Профили пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -233,7 +233,7 @@
             <th>Направление</th>
             <th>Кафедра</th>
             <th>Год набора</th>
-            <th>Действия</th>
+            {% if can_manage_programs %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -243,17 +243,17 @@
                 <td>{{ program.program_profile.training_direction.code }}</td>
                 <td>{{ program.department.short_name }}</td>
                 <td>{{ program.admission_year }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_programs %}
+                {% if can_manage_programs %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'programs_educational_program_update' program.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'programs_educational_program_delete' program.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="5" class="muted">Образовательные программы пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_programs %}5{% else %}4{% endif %}" class="muted">Образовательные программы пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>

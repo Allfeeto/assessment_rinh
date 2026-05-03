@@ -104,16 +104,16 @@
     </table>
 </div>
 
-<div class="panel">
-    {% if can_manage_competencies %}
+{% if can_manage_competencies %}
+    <div class="panel">
         <div class="actions">
             <a class="btn" href="{% url 'competencies_competence_create' %}">Создать компетенцию</a>
             <a class="btn" href="{% url 'competencies_discipline_competence_create' %}">Связать дисциплину и компетенцию</a>
             <a class="btn secondary" href="{% url 'competencies_competence_list' %}">Все компетенции</a>
             <a class="btn secondary" href="{% url 'competencies_discipline_competence_list' %}">Все связи матрицы</a>
         </div>
-    {% endif %}
-</div>
+    </div>
+{% endif %}
 
 <div class="panel table-wrap">
     <h2>Компетенции программ</h2>
@@ -127,7 +127,7 @@
             <th>Программа</th>
             <th>Связей с дисциплинами</th>
             <th>Заданий</th>
-            <th>Действия</th>
+            {% if can_manage_competencies %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -140,17 +140,17 @@
                 <td>{{ competence.educational_program }}</td>
                 <td>{{ competence.disciplines_count }}</td>
                 <td>{{ competence.items_count }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_competencies %}
+                {% if can_manage_competencies %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="8" class="muted">Компетенции не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_competencies %}8{% else %}7{% endif %}" class="muted">Компетенции не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -180,7 +180,7 @@
             <th>Дисциплина учебного плана</th>
             <th>Компетенция</th>
             <th>Количество заданий</th>
-            <th>Действия</th>
+            {% if can_manage_competencies %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -191,17 +191,17 @@
                 <td>{{ link.program_discipline.discipline.name }}</td>
                 <td>{{ link.competence.code }} — {{ link.competence.name }}</td>
                 <td>{{ link.items_count }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_competencies %}
+                {% if can_manage_competencies %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'competencies_discipline_competence_update' link.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'competencies_discipline_competence_delete' link.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="6" class="muted">Связи дисциплина-компетенция не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_competencies %}6{% else %}5{% endif %}" class="muted">Связи дисциплина-компетенция не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>

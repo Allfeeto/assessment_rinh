@@ -117,17 +117,45 @@ def _build_home_stats():
     }
 
 
+def _build_scoped_home_stats(user):
+    program_discipline_scope = program_discipline_queryset_for_user(user)
+    program_ids = program_discipline_scope.values_list('educational_program_id', flat=True)
+    discipline_ids = program_discipline_scope.values_list('discipline_id', flat=True)
+    program_discipline_ids = program_discipline_scope.values_list('id', flat=True)
+
+    return {
+        'educational_programs': EducationalProgram.objects.active()
+        .filter(id__in=program_ids)
+        .distinct()
+        .count(),
+        'disciplines': Discipline.objects.filter(id__in=discipline_ids).distinct().count(),
+        'competences': Competence.objects.filter(
+            educational_program__is_deleted=False,
+            educational_program_id__in=program_ids,
+        ).distinct().count(),
+        'assessment_items': AssessmentItem.objects.filter(
+            program_discipline__educational_program__is_deleted=False,
+            program_discipline_id__in=program_discipline_ids,
+        ).count(),
+    }
+
+
 class HomeView(LoginRequiredMixin, TemplateView):
     template_name = 'home.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        ttl = getattr(settings, 'HOME_STATS_CACHE_TTL', 60)
-        stats = cache.get(HOME_STATS_CACHE_KEY)
-        if stats is None:
-            stats = _build_home_stats()
-            cache.set(HOME_STATS_CACHE_KEY, stats, ttl)
+        can_manage_catalogs = is_staff_or_superuser(self.request.user)
+        if can_manage_catalogs:
+            ttl = getattr(settings, 'HOME_STATS_CACHE_TTL', 60)
+            stats = cache.get(HOME_STATS_CACHE_KEY)
+            if stats is None:
+                stats = _build_home_stats()
+                cache.set(HOME_STATS_CACHE_KEY, stats, ttl)
+        else:
+            stats = _build_scoped_home_stats(self.request.user)
         context['stats'] = stats
+        context['can_manage_catalogs'] = can_manage_catalogs
         return context
 
 

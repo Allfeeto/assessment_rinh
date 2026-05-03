@@ -38,7 +38,9 @@
             {% for column_name, _ in list_columns %}
                 <th>{{ column_name }}</th>
             {% endfor %}
-            <th>Действия</th>
+            {% if has_row_actions %}
+                <th>Действия</th>
+            {% endif %}
         </tr>
         </thead>
         <tbody>
@@ -47,23 +49,25 @@
                 {% for value in row.values %}
                     <td>{{ value|default:"" }}</td>
                 {% endfor %}
-                <td>
-                    <div class="actions">
-                        {% if detail_url_name %}
-                            <a class="btn secondary" href="{% url detail_url_name row.object.pk %}">Открыть</a>
-                        {% endif %}
-                        {% if update_url_name %}
-                            <a class="btn secondary" href="{% url update_url_name row.object.pk %}">Изменить</a>
-                        {% endif %}
-                        {% if delete_url_name %}
-                            <a class="btn danger" href="{% url delete_url_name row.object.pk %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                {% if has_row_actions %}
+                    <td>
+                        <div class="actions">
+                            {% if detail_url_name %}
+                                <a class="btn secondary" href="{% url detail_url_name row.object.pk %}">Открыть</a>
+                            {% endif %}
+                            {% if update_url_name %}
+                                <a class="btn secondary" href="{% url update_url_name row.object.pk %}">Изменить</a>
+                            {% endif %}
+                            {% if delete_url_name %}
+                                <a class="btn danger" href="{% url delete_url_name row.object.pk %}">Удалить</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
             <tr>
-                <td colspan="{{ list_columns|length|add:1 }}" class="muted">Записи не найдены.</td>
+                <td colspan="{% if has_row_actions %}{{ list_columns|length|add:1 }}{% else %}{{ list_columns|length }}{% endif %}" class="muted">Записи не найдены.</td>
             </tr>
         {% endfor %}
         </tbody>

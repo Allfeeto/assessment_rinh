@@ -216,7 +216,7 @@
             <th>Номер</th>
             <th>Краткое название</th>
             <th>Заведующий</th>
-            <th>Действия</th>
+            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -226,17 +226,17 @@
                 <td>{{ department.number }}</td>
                 <td>{{ department.short_name }}</td>
                 <td>{{ department.head_teacher.full_name|default:"—" }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_teacher_directory %}
+                {% if can_manage_teacher_directory %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'teachers_department_delete' department.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="5" class="muted">Кафедры пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_teacher_directory %}5{% else %}4{% endif %}" class="muted">Кафедры пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -264,7 +264,7 @@
             <th>ID</th>
             <th>ФИО</th>
             <th>Кафедра</th>
-            <th>Действия</th>
+            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -273,17 +273,17 @@
                 <td>{{ teacher.id }}</td>
                 <td>{{ teacher.full_name }}</td>
                 <td>{{ teacher.department.short_name }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_teacher_directory %}
+                {% if can_manage_teacher_directory %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="4" class="muted">Преподаватели пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_teacher_directory %}4{% else %}3{% endif %}" class="muted">Преподаватели пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -312,7 +312,7 @@
             <th>Преподаватель</th>
             <th>Программа</th>
             <th>Дисциплина</th>
-            <th>Действия</th>
+            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -322,17 +322,17 @@
                 <td>{{ link.teacher.full_name }}</td>
                 <td>{{ link.program_discipline.educational_program }}</td>
                 <td>{{ link.program_discipline.discipline.name }}</td>
-                <td>
-                    <div class="actions">
-                        {% if can_manage_teacher_directory %}
+                {% if can_manage_teacher_directory %}
+                    <td>
+                        <div class="actions">
                             <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_update' link.id %}">Изменить</a>
                             <a class="btn danger" href="{% url 'teachers_teacher_program_discipline_delete' link.id %}">Удалить</a>
-                        {% endif %}
-                    </div>
-                </td>
+                        </div>
+                    </td>
+                {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="5" class="muted">Назначений пока нет.</td></tr>
+            <tr><td colspan="{% if can_manage_teacher_directory %}5{% else %}4{% endif %}" class="muted">Назначений пока нет.</td></tr>
         {% endfor %}
         </tbody>
     </table>

@@ -122,10 +122,14 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
         context['title'] = self.title
         context['search_query'] = self.request.GET.get('q', '')
         context['list_columns'] = self.list_columns
+        can_view_detail = bool(self.detail_url_name)
+        can_change = self.can_use_action('change')
+        can_delete = self.can_use_action('delete')
         context['create_url_name'] = self.create_url_name if self.can_use_action('add') else ''
         context['detail_url_name'] = self.detail_url_name
-        context['update_url_name'] = self.update_url_name if self.can_use_action('change') else ''
-        context['delete_url_name'] = self.delete_url_name if self.can_use_action('delete') else ''
+        context['update_url_name'] = self.update_url_name if can_change else ''
+        context['delete_url_name'] = self.delete_url_name if can_delete else ''
+        context['has_row_actions'] = can_view_detail or can_change or can_delete
         context['per_page_choices'] = self.per_page_choices
         context['selected_per_page'] = self.get_paginate_by(context.get('object_list'))
 
