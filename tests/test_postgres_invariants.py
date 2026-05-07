@@ -20,11 +20,21 @@ def test_assessment_item_integrity_trigger_is_installed():
         'check_assessment_item_relation_integrity',
         'check_assessment_item_competence_relation_integrity',
         'check_assessment_item_row_by_type',
+        'check_discipline_competence_same_program',
+        'check_program_profile_code_prefix',
     }
     required_triggers = {
         'trg_check_assessment_item_relation_integrity',
         'trg_check_assessment_item_competence_relation_integrity',
         'trg_check_assessment_item_row_by_type',
+        'trg_check_discipline_competence_same_program',
+        'trg_check_program_profile_code_prefix',
+    }
+    required_constraints_or_indexes = {
+        'educational_program_admission_year_check',
+        'educational_program_active_unique_idx',
+        'uq_assessment_item_row_correct_order',
+        'uq_assessment_item_row_sort',
     }
 
     with connection.cursor() as cursor:
@@ -49,5 +59,21 @@ def test_assessment_item_integrity_trigger_is_installed():
         )
         triggers = {row[0] for row in cursor.fetchall()}
 
+        cursor.execute(
+            """
+            SELECT conname
+            FROM pg_constraint
+            WHERE conname = ANY(%s)
+            UNION
+            SELECT indexname
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+              AND indexname = ANY(%s)
+            """,
+            [list(required_constraints_or_indexes), list(required_constraints_or_indexes)],
+        )
+        constraints_or_indexes = {row[0] for row in cursor.fetchall()}
+
     assert functions == required_functions
     assert triggers == required_triggers
+    assert constraints_or_indexes == required_constraints_or_indexes

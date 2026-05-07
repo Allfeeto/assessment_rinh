@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -24,6 +25,21 @@ class Department(models.Model):
 
     def __str__(self):
         return f'Кафедра {self.number} — {self.short_name}'
+
+    def clean(self):
+        super().clean()
+        if not self.head_teacher_id:
+            return
+
+        teacher_department_id = (
+            Teacher.objects.filter(pk=self.head_teacher_id)
+            .values_list('department_id', flat=True)
+            .first()
+        )
+        if teacher_department_id is not None and self.pk and teacher_department_id != self.pk:
+            raise ValidationError({
+                'head_teacher': 'Заведующий кафедрой должен быть преподавателем этой же кафедры.'
+            })
 
 
 class Teacher(models.Model):

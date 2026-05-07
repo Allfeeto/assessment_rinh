@@ -202,6 +202,7 @@ def sync_assessment_item_competences(
     *,
     allow_empty: bool = False,
 ):
+    from competencies.models import DisciplineCompetence
     from .models import AssessmentItemCompetence
 
     unique_by_id = {}
@@ -212,6 +213,44 @@ def sync_assessment_item_competences(
 
     if not selected and not allow_empty:
         raise ValueError('Для задания требуется минимум одна компетенция.')
+
+    if selected and item.program_discipline_id:
+        program_id = getattr(
+            getattr(item, 'program_discipline', None),
+            'educational_program_id',
+            None,
+        )
+        if program_id is None:
+            program_id = item.program_discipline.educational_program_id
+
+        wrong_program_codes = [
+            competence.code
+            for competence in selected
+            if competence.educational_program_id != program_id
+        ]
+        if wrong_program_codes:
+            raise ValueError(
+                'Компетенции должны относиться к той же образовательной программе: '
+                + ', '.join(wrong_program_codes)
+            )
+
+        selected_ids = [competence.id for competence in selected]
+        linked_ids = set(
+            DisciplineCompetence.objects.filter(
+                program_discipline_id=item.program_discipline_id,
+                competence_id__in=selected_ids,
+            ).values_list('competence_id', flat=True)
+        )
+        missing_codes = [
+            competence.code
+            for competence in selected
+            if competence.id not in linked_ids
+        ]
+        if missing_codes:
+            raise ValueError(
+                'Компетенции должны быть связаны с выбранной дисциплиной учебного плана: '
+                + ', '.join(missing_codes)
+            )
 
     item.competence = selected[0] if selected else None
     item.save(update_fields=['competence'])

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -67,3 +68,43 @@ class DisciplineCompetence(models.Model):
 
     def __str__(self):
         return f'{self.program_discipline} -> {self.competence.code}'
+
+    def clean(self):
+        super().clean()
+        if not self.program_discipline_id or not self.competence_id:
+            return
+
+        from disciplines.models import ProgramDiscipline
+
+        program_discipline_program_id = getattr(
+            getattr(self, 'program_discipline', None),
+            'educational_program_id',
+            None,
+        )
+        if program_discipline_program_id is None:
+            program_discipline_program_id = (
+                ProgramDiscipline.objects.filter(pk=self.program_discipline_id)
+                .values_list('educational_program_id', flat=True)
+                .first()
+            )
+
+        competence_program_id = getattr(
+            getattr(self, 'competence', None),
+            'educational_program_id',
+            None,
+        )
+        if competence_program_id is None:
+            competence_program_id = (
+                Competence.objects.filter(pk=self.competence_id)
+                .values_list('educational_program_id', flat=True)
+                .first()
+            )
+
+        if (
+            program_discipline_program_id is not None
+            and competence_program_id is not None
+            and program_discipline_program_id != competence_program_id
+        ):
+            raise ValidationError({
+                'competence': 'Дисциплина учебного плана и компетенция должны относиться к одной программе.'
+            })

@@ -8,7 +8,13 @@ from django.db import IntegrityError, transaction
 from competencies.models import Competence, DisciplineCompetence
 from core.models import CompetenceType, EducationLevel
 from disciplines.models import Discipline, ProgramDiscipline
-from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
+from programs.models import (
+    MAX_ADMISSION_YEAR,
+    MIN_ADMISSION_YEAR,
+    EducationalProgram,
+    ProgramProfile,
+    TrainingDirection,
+)
 from teachers.models import Department
 
 from .exceptions import PlxConflictError, PlxImportError, PlxValidationError
@@ -55,6 +61,11 @@ class PlxImportService:
         ).first()
 
     def import_program(self, dto: PlxProgramImportDTO, *, replace_existing: bool, user=None) -> ImportResult:
+        if not (MIN_ADMISSION_YEAR <= dto.program.admission_year <= MAX_ADMISSION_YEAR):
+            raise PlxValidationError(
+                f'Год набора должен быть в диапазоне {MIN_ADMISSION_YEAR}-{MAX_ADMISSION_YEAR}.'
+            )
+
         with transaction.atomic():
             education_level = self._resolve_education_level(dto.program.education_level_name)
             direction = self._resolve_training_direction(
@@ -178,6 +189,11 @@ class PlxImportService:
         name = normalize_text(name)
         if not code or not name:
             raise PlxValidationError('Некорректные данные профиля программы в PLX.')
+        direction_code = (training_direction.code or '').strip()
+        if direction_code and not code.startswith(f'{direction_code}.'):
+            raise PlxValidationError(
+                f'Код профиля "{code}" должен начинаться с кода направления "{direction_code}.".'
+            )
 
         profile = ProgramProfile.objects.filter(code__iexact=code).first()
         if profile is None:

@@ -85,6 +85,25 @@ INSTALLED_APPS = [
     'export.apps.ExportConfig',
 ]
 
+LOCAL_APPS_WITH_EXTERNAL_SCHEMA = (
+    'core',
+    'teachers',
+    'programs',
+    'competencies',
+    'disciplines',
+    'assessment',
+    'reports',
+    'export',
+)
+
+# Предметная схема управляется вне Django migrations. Это не дает случайному
+# migrate применить устаревший DDL к уже развернутой PostgreSQL-базе.
+MIGRATION_MODULES = {
+    app_label: None
+    for app_label in LOCAL_APPS_WITH_EXTERNAL_SCHEMA
+}
+DB_SCHEMA_SQL_PATH = env_value('DB_SCHEMA_SQL_PATH')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

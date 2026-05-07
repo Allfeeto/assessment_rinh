@@ -2,7 +2,13 @@ from django import forms
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 
-from .models import EducationalProgram, ProgramProfile, TrainingDirection
+from .models import (
+    MAX_ADMISSION_YEAR,
+    MIN_ADMISSION_YEAR,
+    EducationalProgram,
+    ProgramProfile,
+    TrainingDirection,
+)
 
 
 class TrainingDirectionForm(forms.ModelForm):
@@ -35,6 +41,18 @@ class ProgramProfileForm(forms.ModelForm):
             kind='training_direction',
             placeholder='Введите код или наименование направления',
         )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        training_direction = cleaned_data.get('training_direction')
+        code = (cleaned_data.get('code') or '').strip()
+        direction_code = (getattr(training_direction, 'code', '') or '').strip()
+        if direction_code and code and not code.startswith(f'{direction_code}.'):
+            self.add_error(
+                'code',
+                f'Код профиля должен начинаться с кода направления "{direction_code}.".',
+            )
+        return cleaned_data
 
 
 class EducationalProgramForm(forms.ModelForm):
@@ -75,7 +93,34 @@ class EducationalProgramForm(forms.ModelForm):
         )
 
     def clean(self):
-        return super().clean()
+        cleaned_data = super().clean()
+        program_profile = cleaned_data.get('program_profile')
+        department = cleaned_data.get('department')
+        admission_year = cleaned_data.get('admission_year')
+
+        if admission_year is not None and not (
+            MIN_ADMISSION_YEAR <= admission_year <= MAX_ADMISSION_YEAR
+        ):
+            self.add_error(
+                'admission_year',
+                f'Год набора должен быть в диапазоне {MIN_ADMISSION_YEAR}-{MAX_ADMISSION_YEAR}.',
+            )
+
+        if program_profile and department and admission_year is not None:
+            duplicate = EducationalProgram.objects.active().filter(
+                program_profile=program_profile,
+                department=department,
+                admission_year=admission_year,
+            )
+            if self.instance and self.instance.pk:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                self.add_error(
+                    None,
+                    'Активная образовательная программа с таким профилем, кафедрой и годом набора уже существует.',
+                )
+
+        return cleaned_data
 
 
 class PlxImportUploadForm(forms.Form):

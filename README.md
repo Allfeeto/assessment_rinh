@@ -51,7 +51,8 @@ assessment_rinh/
 ├─ reports/             # отчеты
 ├─ export/              # экспорт Word
 ├─ templates/           # HTML-шаблоны
-├─ DB_info/             # SQL/backup/пример PLX, не запускаются автоматически
+├─ DB_info/             # несекретные вспомогательные SQL-скрипты и локальные приватные артефакты
+├─ db_init/             # Docker init-скрипт для первичного bootstrap пустого PostgreSQL volume
 ├─ manage.py
 └─ requirements.txt
 ```
@@ -343,11 +344,17 @@ python manage.py setup_teacher_group
 - port: `5432`;
 - password: пустая строка, если не задан `DB_PASSWORD`.
 
-В `DB_info/` есть:
+В `DB_info/` в репозитории хранится только несекретный вспомогательный SQL:
 
 - `educational_program_trash.sql`;
-- `asssessment_DB3.backup`;
-- `09.03.02.01_1.plx`.
+
+Полные дампы, backup-файлы и SQL-схемы с фактической базой не коммитятся. `.gitignore` игнорирует
+`*.sql`, `*.backup`, `*.dump`, `*.bak`; исключение сделано только для `DB_info/educational_program_trash.sql`.
+
+Фактическая предметная схема управляется вне Django migrations и вне Git: через production backup или
+приватный SQL-артефакт развертывания. Предметные модели Django остаются `managed = False`, а локальные
+migration-модули приложений отключены в настройках через `MIGRATION_MODULES`, чтобы случайный `migrate`
+не пытался применить устаревший DDL.
 
 `educational_program_trash.sql` добавляет поля корзины в `educational_program`, FK на `auth_user` для `deleted_by_id` и заменяет обычную уникальность программы на частичный уникальный индекс только для активных программ. Скрипт не использует `DO $$` блоки и не обращается к старому constraint по длинному имени, чтобы не получать PostgreSQL NOTICE об усечении идентификатора.
 
@@ -357,9 +364,21 @@ CREATE UNIQUE INDEX educational_program_active_unique_idx
     WHERE is_deleted = false;
 ```
 
-SQL-файл содержит `CREATE TABLE IF NOT EXISTS` для предметных и служебных таблиц. Код проекта не восстанавливает базу автоматически: базу нужно создать и наполнить вручную перед полноценным запуском.
+Так как предметные модели `managed = False`, команда `migrate` не создаст таблицы `department`,
+`educational_program`, `assessment_item` и другие предметные таблицы. Для fresh-развертывания сначала
+применяется приватный SQL/backup, затем `migrate --fake` используется только для регистрации стандартных
+Django migrations в уже созданной схеме.
 
-Так как предметные модели `managed = False`, команда `migrate` не создаст таблицы `department`, `educational_program`, `assessment_item` и другие предметные таблицы. Она применима только к управляемым Django-таблицам стандартных приложений, если они не были созданы другим способом.
+Проверка совместимости моделей и SQL-схемы:
+
+```powershell
+python manage.py check_db_schema --live
+python manage.py check_db_schema --sql C:\secure\private_schema.sql
+```
+
+`--live` проверяет подключенную PostgreSQL-базу: наличие таблиц, колонок, ключевых constraints/indexes,
+функций и триггеров. `--sql` можно использовать только с локальным приватным SQL-файлом, который не
+попадает в Git. Путь также можно передать через переменную окружения `DB_SCHEMA_SQL_PATH`.
 
 ## Установка и запуск
 
@@ -371,7 +390,25 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Перед запуском нужна PostgreSQL-база со схемой, совместимой с моделями проекта. Если используется SQL-файл из `DB_info/`, восстановление выполняется отдельно средствами PostgreSQL.
+Перед запуском нужна PostgreSQL-база со схемой, совместимой с моделями проекта. Восстановление выполняется
+из приватного backup/SQL-артефакта до запуска приложения.
+
+Порядок fresh-развертывания в Docker:
+
+```powershell
+docker compose up -d db
+docker compose run --rm web python manage.py check_db_schema --live
+docker compose run --rm web python manage.py migrate --fake
+docker compose run --rm web python manage.py seed_initial_data
+docker compose run --rm web python manage.py setup_teacher_group
+docker compose up -d web
+```
+
+`db_init/01_restore.sh` запускается официальным entrypoint PostgreSQL только при пустом volume
+`postgres_data`. Если в `db_init/` есть поддерживаемый `.backup`, он восстанавливается через `pg_restore`.
+Если нужно поднять базу из SQL, положите приватный `*.sql` в `db_init/`: официальный entrypoint PostgreSQL
+выполнит его после shell-скрипта. При обычном `docker compose restart` или пересборке web-контейнера база
+не обнуляется. Не используйте `docker compose down -v`, если не хотите удалить volume с production-данными.
 
 Проверка проекта:
 
@@ -403,6 +440,7 @@ python manage.py runserver
 
 | Команда | Что делает |
 | --- | --- |
+| `check_db_schema` | Проверяет совместимость unmanaged-моделей с подключенной БД через `--live` или с явно переданным приватным SQL через `--sql`. |
 | `seed_initial_data` | Создает базовые значения для уровней образования, типов компетенций, типов заданий, ученых степеней и званий. Также переименовывает старые технические имена типов заданий, если они есть. |
 | `setup_teacher_group` | Создает/обновляет группу `Преподаватель` и назначает permissions для рабочего сценария преподавателя. |
 
@@ -414,6 +452,7 @@ python manage.py runserver
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py check
+.\.venv\Scripts\python.exe manage.py check_db_schema --live
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
@@ -455,7 +494,6 @@ PostgreSQL-базы.
 
 По текущему коду не обнаружены:
 
-- Dockerfile или docker-compose;
 - REST API;
 - frontend framework;
 - CI-конфигурация;

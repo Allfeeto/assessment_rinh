@@ -1,6 +1,12 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
+
+
+MIN_ADMISSION_YEAR = 2000
+MAX_ADMISSION_YEAR = 2100
 
 
 class TrainingDirection(models.Model):
@@ -52,6 +58,24 @@ class ProgramProfile(models.Model):
     def __str__(self):
         return f'{self.code} — {self.name}'
 
+    def clean(self):
+        super().clean()
+        code = (self.code or '').strip()
+        direction = getattr(self, 'training_direction', None)
+        direction_code = (getattr(direction, 'code', '') or '').strip()
+        if not direction_code and self.training_direction_id:
+            direction_code = (
+                TrainingDirection.objects.filter(pk=self.training_direction_id)
+                .values_list('code', flat=True)
+                .first()
+                or ''
+            ).strip()
+
+        if direction_code and code and not code.startswith(f'{direction_code}.'):
+            raise ValidationError({
+                'code': f'Код профиля должен начинаться с кода направления "{direction_code}.".'
+            })
+
 
 class EducationalProgramQuerySet(models.QuerySet):
     def active(self):
@@ -84,7 +108,13 @@ class EducationalProgram(models.Model):
         related_name='educational_programs',
         verbose_name='Кафедра',
     )
-    admission_year = models.SmallIntegerField(verbose_name='Год набора')
+    admission_year = models.SmallIntegerField(
+        validators=[
+            MinValueValidator(MIN_ADMISSION_YEAR),
+            MaxValueValidator(MAX_ADMISSION_YEAR),
+        ],
+        verbose_name='Год набора',
+    )
     is_deleted = models.BooleanField(default=False, verbose_name='В корзине')
     deleted_at = models.DateTimeField(blank=True, null=True, verbose_name='Дата перемещения в корзину')
     deleted_by = models.ForeignKey(
@@ -106,12 +136,49 @@ class EducationalProgram(models.Model):
         verbose_name = 'Образовательная программа'
         verbose_name_plural = 'Образовательные программы'
         constraints = [
+            models.CheckConstraint(
+                condition=Q(admission_year__gte=MIN_ADMISSION_YEAR)
+                & Q(admission_year__lte=MAX_ADMISSION_YEAR),
+                name='educational_program_admission_year_check',
+            ),
             models.UniqueConstraint(
                 fields=('program_profile', 'department', 'admission_year'),
                 condition=Q(is_deleted=False),
                 name='educational_program_active_unique_idx',
             )
         ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.admission_year is not None and not (
+            MIN_ADMISSION_YEAR <= self.admission_year <= MAX_ADMISSION_YEAR
+        ):
+            errors['admission_year'] = (
+                f'Год набора должен быть в диапазоне {MIN_ADMISSION_YEAR}-{MAX_ADMISSION_YEAR}.'
+            )
+
+        if (
+            self.program_profile_id
+            and self.department_id
+            and self.admission_year is not None
+            and not self.is_deleted
+        ):
+            duplicate = self.__class__.objects.active().filter(
+                program_profile_id=self.program_profile_id,
+                department_id=self.department_id,
+                admission_year=self.admission_year,
+            )
+            if self.pk:
+                duplicate = duplicate.exclude(pk=self.pk)
+            if duplicate.exists():
+                errors['admission_year'] = (
+                    'Активная образовательная программа с таким профилем, кафедрой '
+                    'и годом набора уже существует.'
+                )
+
+        if errors:
+            raise ValidationError(errors)
 
     @property
     def base_name(self):
