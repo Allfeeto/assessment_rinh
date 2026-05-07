@@ -19,6 +19,10 @@ services:
     container_name: assessment_rinh_db
     env_file:
       - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-${DB_NAME:-assessment_rinh}}
+      POSTGRES_USER: ${POSTGRES_USER:-${DB_USER:-postgres}}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${DB_PASSWORD:?DB_PASSWORD or POSTGRES_PASSWORD is required}}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db_init:/docker-entrypoint-initdb.d
@@ -27,6 +31,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  db-backup:
+    image: postgres:17
+    container_name: assessment_rinh_db_backup
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-${DB_NAME:-assessment_rinh}}
+      POSTGRES_USER: ${POSTGRES_USER:-${DB_USER:-postgres}}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${DB_PASSWORD:?DB_PASSWORD or POSTGRES_PASSWORD is required}}
+      BACKUP_DIR: /backups
+      BACKUP_DB_HOST: db
+      BACKUP_DB_PORT: 5432
+      BACKUP_RUN_HOUR: ${BACKUP_RUN_HOUR:-3}
+      BACKUP_RUN_MINUTE: ${BACKUP_RUN_MINUTE:-0}
+      BACKUP_WEEKLY_DAY: ${BACKUP_WEEKLY_DAY:-0}
+      BACKUP_MONTHLY_DAY: ${BACKUP_MONTHLY_DAY:-1}
+      TZ: ${TZ:-Europe/Moscow}
+    command: ["/bin/sh", "/usr/local/bin/db-backup-scheduler.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+      - ./scripts/db-backup.sh:/usr/local/bin/db-backup.sh:ro
+      - ./scripts/db-backup-scheduler.sh:/usr/local/bin/db-backup-scheduler.sh:ro
+      - ./scripts/db-restore.sh:/usr/local/bin/db-restore.sh:ro
+    restart: unless-stopped
 
 volumes:
   postgres_data:

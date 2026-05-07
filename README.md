@@ -479,6 +479,128 @@ CSS и JS базового шаблона лежат в `static/css/base.css` и
 В `STATICFILES_DIRS` подключена корневая директория `static/`. На проде стоит запускать
 `python manage.py collectstatic`.
 
+## Автоматические backup PostgreSQL
+
+В Docker Compose добавлен отдельный сервис `db-backup`. Он использует образ
+`postgres:17`, поэтому для backup/restore применяются штатные `pg_dump` и
+`pg_restore` той же major-версии, что и база. Сервис не меняет web-контейнер и
+не требует cron на хосте.
+
+Backup-файлы лежат в persist-директории проекта:
+
+```text
+backups/
+  weekly/
+    weekly.dump
+  monthly/
+    monthly.dump
+```
+
+Retention policy намеренно короткая: хранится максимум один недельный и один
+месячный backup. При успешном создании нового дампа файл того же типа атомарно
+заменяется. История вида `weekly_1.dump`, `weekly_old.dump` или бесконечные
+timestamp-файлы не создается.
+
+Директорию `./backups` нужно сохранять между перезапусками контейнеров и сервера.
+В репозиторий попадает только `backups/.gitkeep`; сами `.dump` файлы игнорируются
+через `.gitignore`.
+
+### Переменные окружения backup
+
+Основные DB-переменные уже используются проектом и PostgreSQL-контейнером:
+
+| Переменная | Назначение |
+| --- | --- |
+| `POSTGRES_DB` | Имя базы для `pg_dump`/`pg_restore`. |
+| `POSTGRES_USER` | Пользователь PostgreSQL. |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL; передается через `PGPASSWORD`, не через аргументы командной строки. |
+| `BACKUP_RUN_HOUR` | Час автоматического запуска, 0-23. По умолчанию `3`. |
+| `BACKUP_RUN_MINUTE` | Минута автоматического запуска, 0-59. По умолчанию `0`. |
+| `BACKUP_WEEKLY_DAY` | День недельного backup: `0` воскресенье, `1` понедельник, ..., `6` суббота. |
+| `BACKUP_MONTHLY_DAY` | День месяца для monthly backup. По умолчанию `1`. |
+| `TZ` | Таймзона scheduler. По умолчанию `Europe/Moscow`. |
+
+### Запуск scheduler
+
+Обычный запуск вместе с проектом:
+
+```bash
+docker compose up -d
+```
+
+Проверить, что scheduler работает:
+
+```bash
+docker compose ps db-backup
+docker compose logs --tail=100 db-backup
+```
+
+В логах должны быть строки вида `Backup scheduler started`. При наступлении
+расписания будут видны `Starting weekly PostgreSQL backup` или
+`Starting monthly PostgreSQL backup`.
+
+### Ручной запуск backup
+
+Недельный backup:
+
+```bash
+docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
+```
+
+Месячный backup:
+
+```bash
+docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh monthly
+```
+
+После ручного запуска проверить файл:
+
+```bash
+docker compose run --rm db-backup sh -c 'ls -l /backups/weekly/weekly.dump && test -s /backups/weekly/weekly.dump'
+docker compose run --rm db-backup sh -c 'ls -l /backups/monthly/monthly.dump && test -s /backups/monthly/monthly.dump'
+```
+
+Проверить, что backup пригоден для чтения:
+
+```bash
+docker compose run --rm db-backup pg_restore --list /backups/weekly/weekly.dump
+```
+
+### Восстановление из backup
+
+Восстановление перезаписывает объекты в целевой базе через `pg_restore --clean
+--if-exists`. Перед восстановлением остановите web-контейнер, чтобы приложение
+не писало в базу во время операции:
+
+```bash
+docker compose stop web
+docker compose run --rm db-backup sh /usr/local/bin/db-restore.sh /backups/weekly/weekly.dump
+docker compose start web
+```
+
+Для monthly backup путь будет `/backups/monthly/monthly.dump`.
+
+После восстановления проверить приложение и схему:
+
+```bash
+docker compose exec web python manage.py check
+docker compose exec web python manage.py check_db_schema --live
+```
+
+### Проверка удаления старого backup
+
+Скрипт всегда пишет в фиксированный путь `weekly/weekly.dump` или
+`monthly/monthly.dump`. Для проверки retention можно запустить один и тот же
+backup два раза и убедиться, что файл один:
+
+```bash
+docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
+docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
+docker compose run --rm db-backup find /backups/weekly -maxdepth 1 -type f -name '*.dump' -print
+```
+
+Ожидаемый результат: только `/backups/weekly/weekly.dump`.
+
 ## Тесты
 
 В корне проекта лежит `pytest.ini` и `conftest.py`. Запуск:

@@ -244,6 +244,10 @@ tmp/
 temp/
 generated/
 
+# Database backups are generated runtime artifacts.
+backups/*
+!backups/.gitkeep
+
 # Office temporary files
 ~$*.docx
 ~$*.xlsx
