@@ -27,6 +27,7 @@ from core.view_helpers import (
 from disciplines.models import ProgramDiscipline
 
 from .forms import CompetenceForm, DisciplineCompetenceForm
+from .lookups import lookup_competence
 from .models import Competence, DisciplineCompetence
 
 
@@ -394,28 +395,7 @@ class DisciplineCompetenceDeleteView(NamedDeleteView):
 
 @login_required
 def competences_by_program_discipline(request):
-    program_discipline_id = request.GET.get('program_discipline_id')
-    linked_only = request.GET.get('linked_only') in {'1', 'true', 'True'}
-
-    program_discipline_scope = program_discipline_queryset_for_user(request.user)
-    queryset = Competence.objects.filter(educational_program__is_deleted=False).order_by('code')
-    if program_discipline_id:
-        educational_program_id = (
-            program_discipline_scope.filter(pk=program_discipline_id)
-            .values_list('educational_program_id', flat=True)
-            .first()
-        )
-        if educational_program_id:
-            queryset = queryset.filter(educational_program_id=educational_program_id)
-        else:
-            queryset = queryset.none()
-
-        if linked_only:
-            queryset = queryset.filter(discipline_competences__program_discipline_id=program_discipline_id)
-    elif not is_domain_manager(request.user):
-        queryset = queryset.filter(
-            educational_program__program_disciplines__in=program_discipline_scope,
-        )
-
-    data = [{'id': obj.id, 'label': f'{obj.code} — {obj.name}'} for obj in queryset.distinct()]
-    return JsonResponse({'results': data})
+    # Deprecated compatibility endpoint for assessment/form.html.
+    # Replacement: /core/lookup/?kind=competence&program_discipline_id=<id>&linked_only=1.
+    # Remove after the assessment form checkbox refresh is migrated to the generic lookup client.
+    return JsonResponse({'results': lookup_competence(request, query='', selected_id=None, limit=None)})

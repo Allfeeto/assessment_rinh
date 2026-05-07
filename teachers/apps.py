@@ -5,3 +5,8 @@ class TeachersConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'teachers'
     verbose_name = 'Кафедры и преподаватели'
+
+    def ready(self):
+        from .lookups import register_teacher_lookups
+
+        register_teacher_lookups()

@@ -11,7 +11,8 @@ import assessment_rinh.urls  # noqa: F401 - applies superuser-only admin policy
 from assessment.access import can_access_program_discipline
 from core.middleware import AuthRateLimitMiddleware
 from core.permissions import SENIOR_TEACHER_GROUP_NAME, is_domain_manager
-from core.views import _lookup_auth_user, _user_can_lookup_all
+from core.default_lookups import lookup_auth_user
+from core.lookups import user_can_lookup_all
 from core.view_helpers import NamedCreateView
 from teachers.models import Department
 from teachers.views import TeacherAssignmentToggleView
@@ -61,13 +62,13 @@ def test_named_crud_create_requires_domain_manager_not_raw_model_permission():
 def test_auth_user_lookup_requires_domain_manager():
     request = SimpleNamespace(user=_regular_user(), GET={})
 
-    assert _lookup_auth_user(request, query='', selected_id=None, limit=20) == []
+    assert lookup_auth_user(request, query='', selected_id=None, limit=20) == []
 
 
 def test_lookup_all_requires_domain_manager_not_view_permission():
     user = _regular_user(has_perm=lambda permission: True)
 
-    assert _user_can_lookup_all(user, Department) is False
+    assert user_can_lookup_all(user) is False
 
 
 class _FakeGroups:

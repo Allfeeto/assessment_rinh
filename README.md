@@ -1,82 +1,90 @@
 # Assessment RINH
 
-Assessment RINH - Django-проект для ведения оценочных материалов в связке с образовательными программами, дисциплинами учебных планов и компетенциями.
+Assessment RINH - Django-приложение для ведения банка оценочных материалов в связке с образовательными программами, дисциплинами учебных планов, компетенциями, кафедрами и преподавателями.
 
-Документ описывает текущее состояние кода в репозитории. Здесь нет обещаний о функциональности, которой в проекте не видно по настройкам, `urls.py`, моделям, формам, views, сервисам и шаблонам.
+Проект не является системой прохождения тестов студентами. В коде нет студенческих попыток, сессий тестирования, журнала оценок или публичного REST API для прохождения тестов. Основной сценарий - подготовка, хранение, проверка связей и экспорт оценочных материалов.
 
-## Что это за проект
+## Возможности
 
-Проект решает задачу хранения и подготовки оценочных материалов:
-
-- ведение справочников уровней образования, типов компетенций, типов заданий, ученых степеней и званий;
-- ведение кафедр, преподавателей и назначений преподавателей на дисциплины учебных планов;
-- ведение направлений, профилей и образовательных программ;
-- привязка дисциплин к конкретным образовательным программам;
-- ведение компетенций образовательных программ;
-- ведение матрицы `дисциплина учебного плана -> компетенция`;
-- создание и редактирование оценочных заданий с вариантами/строками;
-- рабочее место преподавателя для работы с назначенными дисциплинами;
-- корзина образовательных программ для просмотра и копирования старых оценочных материалов;
-- отчеты по заданиям, программам, дисциплинам и компетенциям;
-- экспорт оценочных материалов в Word;
-- импорт образовательной программы из `.plx`.
-
-Это не система прохождения тестов студентами. В коде нет студенческих попыток, сессий тестирования, автоматического выставления оценок пользователям или REST API для прохождения тестов. Проект управляет банком оценочных материалов и готовит печатный документ.
+- справочники уровней образования, типов компетенций, типов заданий, ученых степеней и званий;
+- кафедры, преподаватели и назначения преподавателей на дисциплины учебных планов;
+- направления подготовки, профили и образовательные программы;
+- импорт образовательных программ из `.plx`;
+- корзина образовательных программ с восстановлением, просмотром состава и окончательным удалением;
+- дисциплины учебных планов и матрица `дисциплина учебного плана -> компетенция`;
+- создание и редактирование оценочных заданий с несколькими компетенциями;
+- строки заданий для выбора ответа, соответствия, последовательности и открытого ответа;
+- рабочее место преподавателя с session clipboard для копирования и вставки заданий;
+- read-only рабочая область для заданий из корзины;
+- отчеты по покрытию компетенций и распределению заданий;
+- экспорт оценочных материалов в `.docx`;
+- общий autocomplete lookup для форм и фильтров;
+- PostgreSQL backup/restore через Docker-сервис.
 
 ## Технологии
 
-Фактические зависимости указаны в `requirements.txt`:
+Источник истины по Python-зависимостям - `requirements.txt`.
 
-```text
-Django==5.1.4
-psycopg2-binary>=2.9.9
-python-docx>=1.1.0
-```
+Ключевые runtime-компоненты:
 
-В текущем окружении проект запускался на Python 3.12. База данных настроена как PostgreSQL.
+- Python 3.12;
+- Django 5.1.4;
+- PostgreSQL 17 в `docker-compose.yml`;
+- `psycopg2-binary` для PostgreSQL;
+- `gunicorn` для WSGI-запуска в контейнере;
+- `whitenoise` для отдачи собранной статики;
+- `python-docx` для генерации Word-документов;
+- shell-скрипты `pg_dump`/`pg_restore` для backup/restore.
 
-Экспорт Word реализован через `python-docx` в `export/services.py`.
+В репозитории нет `pyproject.toml`, `Pipfile`, nginx-конфига, systemd unit-файлов, CI/CD-конфигурации, Celery, Redis или отдельного frontend framework.
 
-## Структура проекта
+## Структура репозитория
 
 ```text
 assessment_rinh/
-├─ assessment_rinh/     # пакет проекта, настройки и корневые urls
-├─ core/                # справочники, главная страница, lookup API, CRUD-хелперы
-├─ teachers/            # кафедры, преподаватели, назначения преподавателей
-├─ programs/            # направления, профили, программы, импорт PLX
-├─ disciplines/         # дисциплины и дисциплины учебных планов
-├─ competencies/        # компетенции и матрица дисциплина-компетенция
-├─ assessment/          # оценочные задания, строки заданий, рабочее место
-├─ reports/             # отчеты
-├─ export/              # экспорт Word
-├─ templates/           # HTML-шаблоны
-├─ DB_info/             # несекретные вспомогательные SQL-скрипты и локальные приватные артефакты
-├─ db_init/             # Docker init-скрипт для первичного bootstrap пустого PostgreSQL volume
+├─ assessment_rinh/       # настройки, ASGI/WSGI, корневые urls
+├─ core/                  # справочники, home stats, lookup registry, middleware, CRUD helpers
+├─ teachers/              # кафедры, преподаватели, назначения
+├─ programs/              # направления, профили, программы, PLX import, корзина программ
+├─ disciplines/           # дисциплины и дисциплины учебных планов
+├─ competencies/          # компетенции и матрица дисциплина-компетенция
+├─ assessment/            # задания, строки, clipboard, cloning, рабочие области
+│  └─ services/           # item types, competence sync, clipboard, cloning, DB error formatting
+├─ reports/               # отчеты
+├─ export/                # Word export
+├─ templates/             # HTML-шаблоны
+├─ static/                # исходные CSS/JS
+├─ DB_info/               # только несекретные SQL-артефакты, разрешенные к коммиту
+├─ db_init/               # init-скрипты PostgreSQL для пустого Docker volume
+├─ scripts/               # backup/restore scheduler scripts
+├─ backups/               # runtime backups; в Git только .gitkeep
+├─ tests/                 # pytest tests
+├─ Dockerfile
+├─ docker-compose.yml
 ├─ manage.py
 └─ requirements.txt
 ```
 
-В репозитории также присутствуют `.idea` и `__pycache__`. Это служебные артефакты, они не являются частью бизнес-логики.
+Секреты, полные SQL-схемы, дампы, backup-файлы, `.plx` и `.env` не должны попадать в Git. `.gitignore` игнорирует `*.sql`, `*.dump`, `*.backup`, `*.bak`, `*.plx`, `.env*`; исключения сделаны только для `.env.example`, `backups/.gitkeep` и `DB_info/educational_program_trash.sql`.
 
-## Приложения Django
+## Django-приложения
 
-| Приложение | Что содержит |
+| Приложение | Назначение |
 | --- | --- |
-| `core` | Справочники: `EducationLevel`, `CompetenceType`, `AssessmentItemType`, `AcademicDegree`, `AcademicTitle`; главная страница; общий lookup `/core/lookup/`; базовые CRUD-классы в `core/view_helpers.py`. |
-| `teachers` | `Department`, `Teacher`, `TeacherProgramDiscipline`; dashboard кафедр/преподавателей; CRUD; команда настройки группы преподавателей. |
-| `programs` | `TrainingDirection`, `ProgramProfile`, `EducationalProgram`; dashboard; CRUD; импорт `.plx`; сервисы парсинга, маппинга и замены программы. |
-| `disciplines` | `Discipline`, `ProgramDiscipline`; управление дисциплинами выбранной программы; обзор дисциплин; CRUD; JSON endpoint по программе. |
-| `competencies` | `Competence`, `DisciplineCompetence`; dashboard компетенций и матрицы; CRUD; JSON endpoint по дисциплине учебного плана. |
-| `assessment` | `AssessmentItem`, `AssessmentItemRow`, `AssessmentItemCompetence`; список заданий, форма, карточка, удаление; рабочее место преподавателя; копирование/вставка заданий через session clipboard. |
-| `reports` | Собственных предметных моделей нет; есть форма фильтрации и `ReportsDashboardView`. |
-| `export` | Собственных предметных моделей нет; есть форма экспорта, view и сервис генерации `.docx`. |
+| `core` | Справочники `EducationLevel`, `CompetenceType`, `AssessmentItemType`, `AcademicDegree`, `AcademicTitle`; главная страница; lookup registry; auth rate limit middleware; shared CRUD classes. |
+| `teachers` | `Department`, `Teacher`, `TeacherProgramDiscipline`; dashboard кафедр и преподавателей; управление назначениями; lookup builders преподавателей и кафедр. |
+| `programs` | `TrainingDirection`, `ProgramProfile`, `EducationalProgram`; dashboard программ; PLX import; корзина программ; lookup builders направлений, профилей и программ. |
+| `disciplines` | `Discipline`, `ProgramDiscipline`; управление дисциплинами учебного плана; lookup builders дисциплин и дисциплин учебных планов. |
+| `competencies` | `Competence`, `DisciplineCompetence`; dashboard компетенций и матрицы; deprecated compatibility endpoint для формы задания; lookup builder компетенций. |
+| `assessment` | `AssessmentItem`, `AssessmentItemRow`, `AssessmentItemCompetence`; формы заданий; рабочее место; trash workspace; clipboard; cloning; sync компетенций. |
+| `reports` | Фильтры и selectors для отчетов, без собственных предметных моделей. |
+| `export` | Форма, selectors, preparers и renderer для `.docx`, без собственных предметных моделей. |
 
-## Модель данных
+## Модель данных и схема БД
 
-Все предметные модели объявлены с `managed = False`. Django не создает и не изменяет эти таблицы через миграции приложения.
+Предметные модели объявлены с `managed = False`. Django не создает и не изменяет предметные таблицы через migrations.
 
-Основная цепочка данных:
+Основная цепочка:
 
 ```text
 EducationLevel
@@ -88,332 +96,148 @@ EducationLevel
           -> AssessmentItem
 ```
 
-Ключевые связи:
+Ключевые правила:
 
-- `EducationalProgram` связан с `ProgramProfile`, `Department` и годом набора.
+- `EducationalProgram` привязан к профилю, кафедре и году набора.
 - `ProgramDiscipline` задает дисциплину в контексте конкретной образовательной программы.
-- `Competence` принадлежит конкретной `EducationalProgram`.
-- `DisciplineCompetence` связывает `ProgramDiscipline` и `Competence`.
-- `AssessmentItem` связан с `ProgramDiscipline`, типом задания и может иметь основную `competence`.
-- `AssessmentItemCompetence` хранит дополнительные/фактические связи задания с компетенциями.
-- `AssessmentItemRow` хранит строки задания. Смысл полей зависит от типа задания.
-
-Важно: форма задания работает с несколькими компетенциями через `AssessmentItemCompetence`. Поле `AssessmentItem.competence` остается в модели и синхронизируется с первой выбранной компетенцией для совместимости с существующей схемой.
-
-## Основные URL
-
-| URL | Назначение |
-| --- | --- |
-| `/` | Главная страница со статистикой и ссылками на разделы. |
-| `/login/`, `/accounts/login/` | Страница входа. |
-| `/logout/`, `/accounts/logout/` | Выход. |
-| `/admin/` | Django admin. |
-| `/core/education-levels/` | Справочник уровней образования. |
-| `/core/competence-types/` | Справочник типов компетенций. |
-| `/core/assessment-item-types/` | Справочник типов заданий. |
-| `/core/academic-degrees/` | Справочник ученых степеней. |
-| `/core/academic-titles/` | Справочник ученых званий. |
-| `/core/lookup/` | JSON lookup для autocomplete. |
-| `/teachers/` | Dashboard кафедр, преподавателей и назначений. |
-| `/programs/` | Dashboard программ и импорт `.plx`. |
-| `/programs/trash/` | Корзина образовательных программ. |
-| `/disciplines/` | Управление дисциплинами учебного плана выбранной программы. |
-| `/disciplines/overview/` | Обзор дисциплин и дисциплин учебных планов. |
-| `/competencies/` | Dashboard компетенций и матрицы дисциплина-компетенция. |
-| `/assessment/` | Список оценочных заданий. |
-| `/assessment/workspace/` | Рабочее место преподавателя. |
-| `/assessment/trash-workspace/` | Рабочая область корзины для просмотра и копирования старых заданий. |
-| `/reports/` | Отчеты. |
-| `/export/word/` | Экспорт оценочных материалов в Word. |
-
-CRUD-страницы для сущностей находятся внутри соответствующих разделов. Точные маршруты перечислены в `*/urls.py`.
-
-## Интерфейс и поведение
-
-Верхняя навигация находится в `templates/base.html`. Там же расположен общий JavaScript для:
-
-- autocomplete через `/core/lookup/`;
-- зависимых select-полей;
-- автоматического submit GET-форм по `change` для полей с `data-auto-submit-change="1"`.
-
-Списки и dashboard-таблицы используют постраничный вывод. Базовый размер страницы: 50 строк. Доступные значения `per_page`: 50, 100, 200.
-
-Этот механизм используется в:
-
-- generic CRUD-списках через `NamedListView`;
-- списке заданий;
-- рабочем месте преподавателя;
-- отчетах;
-- dashboard программ;
-- dashboard кафедр и преподавателей;
-- dashboard дисциплин и компетенций.
-
-Фильтры и выбранный лимит передаются через GET-параметры и сохраняются при переходе по страницам.
-
-## Рабочее место преподавателя
-
-URL: `/assessment/workspace/`.
-
-Доступ:
-
-- view требует авторизации;
-- superuser проходит без профиля преподавателя;
-- обычному пользователю нужен связанный `Teacher` через `Teacher.user`;
-- если профиля преподавателя нет, пользователь перенаправляется на главную с сообщением.
-
-Поведение:
-
-- преподаватель видит только `ProgramDiscipline`, назначенные ему через `TeacherProgramDiscipline`;
-- superuser видит все дисциплины учебных планов;
-- выбор программы, дисциплины, компетенции, типа задания и размера страницы сразу применяет фильтр;
-- список заданий пагинируется;
-- можно добавить задание в текущем контексте;
-- можно копировать задания в session clipboard;
-- вставка задания переносит строки и совместимые компетенции в целевую дисциплину учебного плана.
-
-Если компетенции исходного задания не связаны с целевой дисциплиной через `DisciplineCompetence`, они не переносятся и пользователь получает предупреждение.
-
-## Корзина образовательных программ
-
-Образовательная программа при удалении из обычного интерфейса не удаляется физически, а помечается как находящаяся в корзине:
-
-- `EducationalProgram.is_deleted = true`;
-- заполняются `deleted_at`, `deleted_by`, `delete_reason`;
-- `ProgramDiscipline`, `Competence`, `DisciplineCompetence`, `AssessmentItem`, `AssessmentItemRow`, `AssessmentItemCompetence` и `TeacherProgramDiscipline` сохраняются.
-
-Программы из корзины исключаются из обычных списков, lookup, рабочего места, отчетов и экспорта Word. В интерфейсе они отображаются с пометкой `(в корзине)` только в специальных trash-разделах.
-
-URL корзины: `/programs/trash/`. В разделе доступны просмотр программы, read-only статистика, восстановление и окончательное удаление. Восстановление и окончательное удаление доступны staff/superuser. Окончательное удаление работает только для программы, уже находящейся в корзине, и удаляет только данные, принадлежащие этой программе; общие справочники не затрагиваются.
-
-URL рабочей области корзины: `/assessment/trash-workspace/`. Superuser видит все удаленные программы, преподаватель видит только дисциплины, где у него сохранено назначение через `TeacherProgramDiscipline`. Из корзины можно скопировать задание в session clipboard, а вставка выполняется только в активную дисциплину учебного плана. При вставке компетенции сопоставляются с целевой программой по коду и типу; несовместимые компетенции пропускаются с предупреждением.
-
-## Оценочные задания
-
-URL списка: `/assessment/`.
-
-Список поддерживает фильтры:
-
-- уровень образования;
-- направление;
-- профиль;
-- образовательная программа;
-- дисциплина;
-- тип задания;
-- компетенция;
-- поиск по тексту задания;
-- размер страницы.
-
-Создание и редактирование используют:
-
-- `AssessmentItemForm`;
-- inline formset `AssessmentItemRowCreateFormSet` или `AssessmentItemRowUpdateFormSet`;
-- серверную валидацию строк в `BaseAssessmentItemRowFormSet`.
-
-Поддерживаемые типы задания определяются эвристикой в `assessment/services.py`:
-
-- выбор одного ответа;
-- выбор нескольких ответов;
-- установление соответствия;
-- установление последовательности;
-- открытый ответ.
-
-Валидация по типам:
-
-- выбор одного ответа: минимум два варианта, ровно один верный;
-- выбор нескольких ответов: минимум два варианта, минимум один верный;
-- соответствие: минимум одна пара, возможны правые дистракторы;
-- последовательность: минимум два шага, порядок назначается автоматически;
-- открытый ответ: минимум один допустимый ответ.
-
-Выбор компетенций ограничивается связями `DisciplineCompetence` для выбранной дисциплины учебного плана.
-
-## Компетенции и дисциплины
-
-`Discipline` - общий справочник дисциплин.
-
-`ProgramDiscipline` - дисциплина в конкретной образовательной программе. Это ключевой контекст для компетенций и заданий.
-
-`Competence` принадлежит образовательной программе.
-
-`DisciplineCompetence` задает допустимые компетенции для конкретной дисциплины учебного плана.
-
-Эта связка используется:
-
-- в форме создания задания;
-- в рабочем месте преподавателя;
-- в отчетах;
-- при переносе задания между дисциплинами учебных планов;
-- в экспорте Word.
-
-## Импорт PLX
-
-URL: `/programs/`.
-
-Форма принимает `.plx` файл. Обработка находится в `programs/services/`:
-
-- `plx_parser.py` - парсинг загруженного файла;
-- `plx_mapping.py` - преобразование разобранных данных в DTO;
-- `plx_dto.py` - DTO-структуры;
-- `plx_import_service.py` - создание/обновление справочников и программы;
-- `program_replace_service.py` - удаление данных конкретной заменяемой программы;
-- `validators.py` и `exceptions.py` - вспомогательная валидация и ошибки.
-
-Если программа с тем же профилем, кафедрой и годом набора уже существует, view показывает конфликт и ждет подтверждения замены.
-
-При подтвержденной замене старая образовательная программа перемещается в корзину через `ProgramTrashService`, а новая версия создается активной. Старые дисциплины, компетенции, матрица, задания, строки заданий и назначения преподавателей остаются доступными в `/programs/trash/` и `/assessment/trash-workspace/`.
-
-## Отчеты
-
-URL: `/reports/`.
-
-Форма фильтрации: `ReportFilterForm`.
-
-Отчеты строятся по фильтрам:
-
-- образовательная программа;
-- дисциплина;
-- компетенция;
-- тип задания;
-- размер страницы.
-
-На странице есть таблицы:
-
-- покрытие компетенций заданиями;
-- `дисциплина -> компетенция -> количество заданий`;
-- количество заданий по типам;
-- количество заданий по программам;
-- количество заданий по дисциплинам.
-
-Каждая крупная таблица пагинируется отдельно. Подсчет покрытий учитывает как `AssessmentItem.competence`, так и связи `AssessmentItemCompetence`.
-
-## Экспорт Word
-
-URL: `/export/word/`.
-
-Форма требует:
-
-- образовательную программу;
-- дисциплину.
-
-Дополнительные фильтры:
-
-- тип задания;
-- компетенция.
-
-Сервис: `export/services.py`, функция `generate_docx(program_id, discipline_id, filters)`.
-
-Экспорт:
-
-- ищет `ProgramDiscipline` по выбранным программе и дисциплине;
-- выбирает задания по фильтрам;
-- ограничивает один экспорт максимум 1000 заданиями;
-- использует шаблон `templates/export/maket.docx`;
-- очищает содержимое шаблона и формирует документ заново;
-- добавляет спецификацию, задания, ключи и критерии;
-- для типов выбора, последовательности и соответствия перемешивает варианты/элементы внутри задания;
-- возвращает `.docx` как HTTP-ответ.
-
-При изменении программы, дисциплины, типа задания или компетенции форма обновляется через GET и не запускает скачивание. Word-файл формируется только при нажатии кнопки скачивания.
-
-Если связка программы и дисциплины не найдена, по фильтрам нет заданий или превышен лимит экспорта, view возвращает форму с ошибкой.
-
-## Авторизация и права
-
-В проекте подключены стандартные приложения Django `auth`, `admin`, `sessions`.
-
-Команда:
-
-```bash
-python manage.py setup_teacher_group
-```
-
-создает или обновляет группу `Преподаватель` и назначает набор permissions для работы с заданиями и просмотра связанного контекста.
-
-Пользовательские CRUD-view и dashboard-разделы требуют авторизации. Текущее ограничение: большинство view не используют `PermissionRequiredMixin`, поэтому детальная проверка permissions для всех разделов в коде не реализована.
-
-## База данных
-
-Настройки находятся в пакете `assessment_rinh/settings/`.
-
-Текущая конфигурация разработки берется из переменных окружения или из `.env`; если значения не заданы, используются локальные значения по умолчанию:
-
-- engine: `django.db.backends.postgresql`;
-- database: `assessment_rinh`;
-- user: `postgres`;
-- host: `localhost`;
-- port: `5432`;
-- password: пустая строка, если не задан `DB_PASSWORD`.
-
-В `DB_info/` в репозитории хранится только несекретный вспомогательный SQL:
-
-- `educational_program_trash.sql`;
-
-Полные дампы, backup-файлы и SQL-схемы с фактической базой не коммитятся. `.gitignore` игнорирует
-`*.sql`, `*.backup`, `*.dump`, `*.bak`; исключение сделано только для `DB_info/educational_program_trash.sql`.
-
-Фактическая предметная схема управляется вне Django migrations и вне Git: через production backup или
-приватный SQL-артефакт развертывания. Предметные модели Django остаются `managed = False`, а локальные
-migration-модули приложений отключены в настройках через `MIGRATION_MODULES`, чтобы случайный `migrate`
-не пытался применить устаревший DDL.
-
-`educational_program_trash.sql` добавляет поля корзины в `educational_program`, FK на `auth_user` для `deleted_by_id` и заменяет обычную уникальность программы на частичный уникальный индекс только для активных программ. Скрипт не использует `DO $$` блоки и не обращается к старому constraint по длинному имени, чтобы не получать PostgreSQL NOTICE об усечении идентификатора.
-
-```sql
-CREATE UNIQUE INDEX educational_program_active_unique_idx
-    ON public.educational_program (program_profile_id, department_id, admission_year)
-    WHERE is_deleted = false;
-```
-
-Так как предметные модели `managed = False`, команда `migrate` не создаст таблицы `department`,
-`educational_program`, `assessment_item` и другие предметные таблицы. Для fresh-развертывания сначала
-применяется приватный SQL/backup, затем `migrate --fake` используется только для регистрации стандартных
-Django migrations в уже созданной схеме.
-
-Проверка совместимости моделей и SQL-схемы:
+- `Competence` принадлежит одной образовательной программе.
+- `DisciplineCompetence` задает допустимые компетенции для дисциплины учебного плана.
+- `AssessmentItem` связан с `ProgramDiscipline`, типом задания и legacy-полем `competence`.
+- Фактический набор компетенций задания хранится в `AssessmentItemCompetence`.
+- `AssessmentItem.competence` синхронизируется с первой выбранной компетенцией для совместимости с существующей схемой.
+- `AssessmentItemRow` хранит строки задания; валидные поля зависят от типа задания.
+
+В `core/schema_contract.py` зафиксированы обязательные DB-объекты, которые должны существовать в PostgreSQL: constraints/indexes, функции и триггеры проверки связей, типа строк задания, префикса профиля и года набора.
+
+Проверка подключенной базы:
 
 ```powershell
 python manage.py check_db_schema --live
+```
+
+Проверка приватного SQL-файла без добавления его в Git:
+
+```powershell
 python manage.py check_db_schema --sql C:\secure\private_schema.sql
 ```
 
-`--live` проверяет подключенную PostgreSQL-базу: наличие таблиц, колонок, ключевых constraints/indexes,
-функций и триггеров. `--sql` можно использовать только с локальным приватным SQL-файлом, который не
-попадает в Git. Путь также можно передать через переменную окружения `DB_SCHEMA_SQL_PATH`.
+Путь также можно передать через `DB_SCHEMA_SQL_PATH`.
 
-## Установка и запуск
+## Migrations
+
+Для локальных приложений отключены migration-модули через `MIGRATION_MODULES` в `assessment_rinh/settings/base.py`:
+
+- `core`;
+- `teachers`;
+- `programs`;
+- `competencies`;
+- `disciplines`;
+- `assessment`;
+- `reports`;
+- `export`.
+
+В каталогах `migrations/` оставлены только `__init__.py`.
+
+`python manage.py migrate` не поднимет предметную схему проекта. Он может применить только стандартные Django migrations для `auth`, `admin`, `contenttypes`, `sessions` и других managed-приложений. Предметная схема должна быть восстановлена из production backup или применена из приватного SQL-артефакта развертывания.
+
+Для уже существующей production-базы не выполняйте команды, которые пересоздают volume или очищают данные. В Docker особенно важно не запускать `docker compose down -v`, если цель не состоит в полном удалении базы.
+
+## Переменные окружения
+
+Настройки читают `.env` из корня проекта через собственный loader в `assessment_rinh/settings/__init__.py` и `base.py`. Файл `.env` не коммитится. `.env.example` содержит только демонстрационные значения, которые нужно заменить перед реальным развертыванием.
+
+### Основные Django-переменные
+
+| Переменная | Назначение |
+| --- | --- |
+| `DJANGO_ENV` | `dev` или `prod`. По умолчанию используется `dev`. |
+| `DJANGO_SECRET_KEY` | Секретный ключ Django. В `prod` обязателен. |
+| `DJANGO_DEBUG` | В `dev` по умолчанию `True`, в `base` `False`; в production не включать. |
+| `DJANGO_ALLOWED_HOSTS` | Список host-ов через запятую. В `prod` обязателен. |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Origin-ы для CSRF через запятую, если приложение работает за HTTPS-доменом/proxy. |
+| `DJANGO_LOG_LEVEL` | Уровень root-логгера, по умолчанию `INFO`. |
+| `DB_SCHEMA_SQL_PATH` | Локальный путь к приватному SQL-файлу для `check_db_schema --sql`. |
+
+### База данных
+
+| Переменная | Назначение |
+| --- | --- |
+| `DB_ENGINE` | Django database backend, по умолчанию `django.db.backends.postgresql`. |
+| `DB_NAME` | Имя БД приложения. |
+| `DB_USER` | Пользователь БД для Django. |
+| `DB_PASSWORD` | Пароль БД. Не оставлять пустым в production. |
+| `DB_HOST` | Host PostgreSQL. В Docker обычно `db`. |
+| `DB_PORT` | Порт PostgreSQL, обычно `5432`. |
+| `POSTGRES_DB` | Имя БД для контейнера PostgreSQL и backup scripts. |
+| `POSTGRES_USER` | Пользователь PostgreSQL для контейнера и backup scripts. |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL для контейнера и backup scripts. |
+
+### Cache, sessions и rate limit
+
+| Переменная | Назначение |
+| --- | --- |
+| `DJANGO_CACHE_BACKEND` | Django cache backend, по умолчанию `django.core.cache.backends.locmem.LocMemCache`. |
+| `DJANGO_CACHE_LOCATION` | Cache location, по умолчанию `assessment-rinh-default`. |
+| `DJANGO_HOME_STATS_CACHE_TTL` | TTL статистики главной страницы в секундах, по умолчанию `60`. |
+| `DJANGO_AUTH_RATE_LIMIT_ENABLED` | Включает rate limit неудачных POST-логинов, по умолчанию `True`. |
+| `DJANGO_AUTH_RATE_LIMIT_ATTEMPTS` | Количество неудачных попыток, по умолчанию `5`. |
+| `DJANGO_AUTH_RATE_LIMIT_WINDOW_SECONDS` | Окно rate limit в секундах, по умолчанию `300`. |
+| `DJANGO_AUTH_RATE_LIMIT_PATHS` | Пути логина через запятую, по умолчанию `/login/,/accounts/login/,/admin/login/`. |
+
+### Production security
+
+Эти переменные используются только в `assessment_rinh/settings/prod.py`:
+
+| Переменная | Назначение |
+| --- | --- |
+| `DJANGO_SECURE_SSL_REDIRECT` | HTTPS redirect, по умолчанию `True`. |
+| `DJANGO_SESSION_COOKIE_SECURE` | Secure session cookie, по умолчанию `True`. |
+| `DJANGO_CSRF_COOKIE_SECURE` | Secure CSRF cookie, по умолчанию `True`. |
+| `DJANGO_SECURE_HSTS_SECONDS` | HSTS max-age, по умолчанию `31536000`. |
+| `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | HSTS includeSubDomains, по умолчанию `True`. |
+| `DJANGO_SECURE_HSTS_PRELOAD` | HSTS preload, по умолчанию `True`. |
+
+`prod.py` также включает `SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')`, `SESSION_COOKIE_HTTPONLY = True`, `CSRF_COOKIE_HTTPONLY = True`, `X_FRAME_OPTIONS = 'DENY'`, `SECURE_CONTENT_TYPE_NOSNIFF = True` и `SECURE_REFERRER_POLICY = 'same-origin'`.
+
+### Backup scheduler
+
+| Переменная | Назначение |
+| --- | --- |
+| `BACKUP_DIR` | Корень backup-директории внутри контейнера. В compose задано `/backups`. |
+| `BACKUP_DB_HOST` | Host БД для backup/restore. В compose задано `db`. |
+| `BACKUP_DB_PORT` | Порт БД для backup/restore. В compose задано `5432`. |
+| `BACKUP_RUN_HOUR` | Час запуска scheduler, по умолчанию `3`. |
+| `BACKUP_RUN_MINUTE` | Минута запуска scheduler, по умолчанию `0`. |
+| `BACKUP_WEEKLY_DAY` | День недели для weekly backup: `0` воскресенье, `1` понедельник, ..., `6` суббота. |
+| `BACKUP_MONTHLY_DAY` | День месяца для monthly backup, по умолчанию `1`. |
+| `TZ` | Таймзона scheduler, по умолчанию `Europe/Moscow`. |
+
+## Локальная установка
 
 Пример для Windows PowerShell из корня проекта:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-Перед запуском нужна PostgreSQL-база со схемой, совместимой с моделями проекта. Восстановление выполняется
-из приватного backup/SQL-артефакта до запуска приложения.
+После копирования `.env` замените демонстрационные значения секретов и паролей.
 
-Порядок fresh-развертывания в Docker:
+Перед запуском приложения нужна PostgreSQL-база с предметной схемой проекта. `migrate` не создает таблицы `educational_program`, `assessment_item`, `discipline_competence` и другие предметные таблицы.
 
-```powershell
-docker compose up -d db
-docker compose run --rm web python manage.py check_db_schema --live
-docker compose run --rm web python manage.py migrate --fake
-docker compose run --rm web python manage.py seed_initial_data
-docker compose run --rm web python manage.py setup_teacher_group
-docker compose up -d web
-```
-
-`db_init/01_restore.sh` запускается официальным entrypoint PostgreSQL только при пустом volume
-`postgres_data`. Если в `db_init/` есть поддерживаемый `.backup`, он восстанавливается через `pg_restore`.
-Если нужно поднять базу из SQL, положите приватный `*.sql` в `db_init/`: официальный entrypoint PostgreSQL
-выполнит его после shell-скрипта. При обычном `docker compose restart` или пересборке web-контейнера база
-не обнуляется. Не используйте `docker compose down -v`, если не хотите удалить volume с production-данными.
-
-Проверка проекта:
+Базовая проверка Django:
 
 ```powershell
 python manage.py check
+```
+
+Проверка схемы подключенной PostgreSQL-базы:
+
+```powershell
+python manage.py check_db_schema --live
 ```
 
 Заполнение базовых справочников:
@@ -422,10 +246,16 @@ python manage.py check
 python manage.py seed_initial_data
 ```
 
-Настройка группы преподавателей:
+Создание групп преподавателей:
 
 ```powershell
 python manage.py setup_teacher_group
+```
+
+Создание администратора:
+
+```powershell
+python manage.py createsuperuser
 ```
 
 Запуск dev-сервера:
@@ -434,59 +264,94 @@ python manage.py setup_teacher_group
 python manage.py runserver
 ```
 
-После запуска основные разделы доступны с `/`.
+## Запуск через Docker Compose
 
-## Management-команды
+`docker-compose.yml` содержит три сервиса:
 
-| Команда | Что делает |
+| Сервис | Назначение |
 | --- | --- |
-| `check_db_schema` | Проверяет совместимость unmanaged-моделей с подключенной БД через `--live` или с явно переданным приватным SQL через `--sql`. |
-| `seed_initial_data` | Создает базовые значения для уровней образования, типов компетенций, типов заданий, ученых степеней и званий. Также переименовывает старые технические имена типов заданий, если они есть. |
-| `setup_teacher_group` | Создает/обновляет группу `Преподаватель` и назначает permissions для рабочего сценария преподавателя. |
+| `web` | Django + gunicorn, перед запуском выполняет `collectstatic --noinput`; порт опубликован как `127.0.0.1:8000:8000`. |
+| `db` | PostgreSQL 17 с volume `postgres_data` и healthcheck `pg_isready`. |
+| `db-backup` | Scheduler для weekly/monthly backup через `pg_dump`; зависит от healthy `db`. |
 
-Обе команды требуют доступной базы данных.
+Persistent volumes:
 
-## Проверка качества
+- `postgres_data` - данные PostgreSQL;
+- `media_volume` - `/app/media`;
+- `static_volume` - `/app/staticfiles`;
+- `./backups` - backup-файлы на host filesystem.
 
-На момент обновления README выполняются команды:
+Первичный запуск:
 
 ```powershell
-.\.venv\Scripts\python.exe manage.py check
-.\.venv\Scripts\python.exe manage.py check_db_schema --live
-.\.venv\Scripts\python.exe -m pytest -q
+Copy-Item .env.example .env
+docker compose up -d db
+docker compose run --rm web python manage.py check_db_schema --live
+docker compose run --rm web python manage.py seed_initial_data
+docker compose run --rm web python manage.py setup_teacher_group
+docker compose up -d web db-backup
 ```
 
-Результат:
+Если база восстановлена из полного backup и уже содержит нужные данные, команды `seed_initial_data` и `setup_teacher_group` можно запускать повторно: они используют idempotent-логику создания/обновления.
 
-- `check` проходит без ошибок;
-- pytest исполняет тесты из `tests/test_stage5.py` (типы заданий, scope преподавателя, лимит экспорта).
+Обычный перезапуск контейнеров не обнуляет базу:
 
-## Кэширование и переменные окружения
+```powershell
+docker compose restart web
+docker compose restart db-backup
+```
 
-В `assessment_rinh/settings/base.py` настроен кэш по умолчанию (`LocMemCache`).
-Это используется как минимум `core.views.HomeView`, чтобы не дёргать
-агрегаты `count()` на каждый запрос главной страницы.
+Не удаляйте `postgres_data`, если нужно сохранить данные.
 
-| Переменная | Назначение |
-| --- | --- |
-| `DJANGO_CACHE_BACKEND` | Можно переопределить кэш-бэкенд (Redis/Memcached на проде). |
-| `DJANGO_CACHE_LOCATION` | LOCATION для кэша. По умолчанию имя процесса. |
-| `DJANGO_HOME_STATS_CACHE_TTL` | TTL для агрегатов главной страницы, секунды (по умолчанию 60). |
+## PostgreSQL bootstrap
 
-## Статика
+`db_init/01_restore.sh` выполняется официальным entrypoint PostgreSQL только при первом создании пустого `postgres_data`.
 
-CSS и JS базового шаблона лежат в `static/css/base.css` и `static/js/base.js`.
-В `STATICFILES_DIRS` подключена корневая директория `static/`. На проде стоит запускать
-`python manage.py collectstatic`.
+Поведение:
 
-## Автоматические backup PostgreSQL
+- если в `db_init/` лежит один из поддерживаемых `.backup` файлов, скрипт восстановит его через `pg_restore`;
+- если backup не найден, скрипт завершится успешно и выведет сообщение, что для SQL bootstrap нужно положить приватный `*.sql` в `db_init/`;
+- приватные `.sql` файлы выполняются официальным entrypoint PostgreSQL как часть стандартной обработки `/docker-entrypoint-initdb.d`;
+- при `docker compose restart` init-скрипты не запускаются повторно.
 
-В Docker Compose добавлен отдельный сервис `db-backup`. Он использует образ
-`postgres:17`, поэтому для backup/restore применяются штатные `pg_dump` и
-`pg_restore` той же major-версии, что и база. Сервис не меняет web-контейнер и
-не требует cron на хосте.
+Поддерживаемые backup-имена в `01_restore.sh`:
 
-Backup-файлы лежат в persist-директории проекта:
+- `assessment_DB_docker2.backup`;
+- `asssessment_DB_docker2.backup`;
+- `assessment_DB_docker1.backup`.
+
+Полные SQL-схемы и backup-файлы не должны коммититься. В Git отслеживается только `DB_info/educational_program_trash.sql`.
+
+## Static и media
+
+Настройки:
+
+- `STATIC_URL = '/static/'`;
+- `STATIC_ROOT = BASE_DIR / 'staticfiles'`;
+- `STATICFILES_DIRS = [BASE_DIR / 'static']`;
+- `MEDIA_URL = '/media/'`;
+- `MEDIA_ROOT = BASE_DIR / 'media'`;
+- staticfiles storage - `whitenoise.storage.CompressedStaticFilesStorage`.
+
+Сборка статики вручную:
+
+```powershell
+python manage.py collectstatic --noinput
+```
+
+В Docker `web` выполняет `collectstatic --noinput` перед запуском gunicorn.
+
+## Backup system
+
+Backup реализован Docker-сервисом `db-backup`. Host cron и systemd в репозитории не используются.
+
+Скрипты:
+
+- `scripts/db-backup.sh` - ручной weekly/monthly backup;
+- `scripts/db-backup-scheduler.sh` - бесконечный scheduler с daily polling по времени;
+- `scripts/db-restore.sh` - restore из `.dump`.
+
+Формат backup - custom dump PostgreSQL (`pg_dump --format=custom`). Файлы:
 
 ```text
 backups/
@@ -496,151 +361,443 @@ backups/
     monthly.dump
 ```
 
-Retention policy намеренно короткая: хранится максимум один недельный и один
-месячный backup. При успешном создании нового дампа файл того же типа атомарно
-заменяется. История вида `weekly_1.dump`, `weekly_old.dump` или бесконечные
-timestamp-файлы не создается.
+Retention фиксированный: один weekly и один monthly файл. Новый успешный backup атомарно заменяет файл того же типа.
 
-Директорию `./backups` нужно сохранять между перезапусками контейнеров и сервера.
-В репозиторий попадает только `backups/.gitkeep`; сами `.dump` файлы игнорируются
-через `.gitignore`.
+Запуск всего стека вместе с scheduler:
 
-### Переменные окружения backup
-
-Основные DB-переменные уже используются проектом и PostgreSQL-контейнером:
-
-| Переменная | Назначение |
-| --- | --- |
-| `POSTGRES_DB` | Имя базы для `pg_dump`/`pg_restore`. |
-| `POSTGRES_USER` | Пользователь PostgreSQL. |
-| `POSTGRES_PASSWORD` | Пароль PostgreSQL; передается через `PGPASSWORD`, не через аргументы командной строки. |
-| `BACKUP_RUN_HOUR` | Час автоматического запуска, 0-23. По умолчанию `3`. |
-| `BACKUP_RUN_MINUTE` | Минута автоматического запуска, 0-59. По умолчанию `0`. |
-| `BACKUP_WEEKLY_DAY` | День недельного backup: `0` воскресенье, `1` понедельник, ..., `6` суббота. |
-| `BACKUP_MONTHLY_DAY` | День месяца для monthly backup. По умолчанию `1`. |
-| `TZ` | Таймзона scheduler. По умолчанию `Europe/Moscow`. |
-
-### Запуск scheduler
-
-Обычный запуск вместе с проектом:
-
-```bash
+```powershell
 docker compose up -d
 ```
 
-Проверить, что scheduler работает:
+Проверка scheduler:
 
-```bash
+```powershell
 docker compose ps db-backup
 docker compose logs --tail=100 db-backup
 ```
 
-В логах должны быть строки вида `Backup scheduler started`. При наступлении
-расписания будут видны `Starting weekly PostgreSQL backup` или
-`Starting monthly PostgreSQL backup`.
+Ручной weekly backup:
 
-### Ручной запуск backup
-
-Недельный backup:
-
-```bash
+```powershell
 docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
 ```
 
-Месячный backup:
+Ручной monthly backup:
 
-```bash
+```powershell
 docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh monthly
 ```
 
-После ручного запуска проверить файл:
+Проверка файла:
 
-```bash
-docker compose run --rm db-backup sh -c 'ls -l /backups/weekly/weekly.dump && test -s /backups/weekly/weekly.dump'
-docker compose run --rm db-backup sh -c 'ls -l /backups/monthly/monthly.dump && test -s /backups/monthly/monthly.dump'
+```powershell
+docker compose run --rm db-backup sh -c "ls -l /backups/weekly/weekly.dump && test -s /backups/weekly/weekly.dump"
 ```
 
-Проверить, что backup пригоден для чтения:
+Проверка читаемости backup:
 
-```bash
+```powershell
 docker compose run --rm db-backup pg_restore --list /backups/weekly/weekly.dump
 ```
 
-### Восстановление из backup
+## Restore backup
 
-Восстановление перезаписывает объекты в целевой базе через `pg_restore --clean
---if-exists`. Перед восстановлением остановите web-контейнер, чтобы приложение
-не писало в базу во время операции:
+Restore перезаписывает объекты в целевой базе через `pg_restore --clean --if-exists --no-owner --no-privileges`.
 
-```bash
+Перед restore остановите web, чтобы приложение не писало в БД:
+
+```powershell
 docker compose stop web
 docker compose run --rm db-backup sh /usr/local/bin/db-restore.sh /backups/weekly/weekly.dump
 docker compose start web
 ```
 
-Для monthly backup путь будет `/backups/monthly/monthly.dump`.
+Для monthly backup:
 
-После восстановления проверить приложение и схему:
+```powershell
+docker compose stop web
+docker compose run --rm db-backup sh /usr/local/bin/db-restore.sh /backups/monthly/monthly.dump
+docker compose start web
+```
 
-```bash
+После restore:
+
+```powershell
 docker compose exec web python manage.py check
 docker compose exec web python manage.py check_db_schema --live
 ```
 
-### Проверка удаления старого backup
+## Авторизация и permissions
 
-Скрипт всегда пишет в фиксированный путь `weekly/weekly.dump` или
-`monthly/monthly.dump`. Для проверки retention можно запустить один и тот же
-backup два раза и убедиться, что файл один:
+Используются стандартные `django.contrib.auth`, `sessions`, `admin`.
 
-```bash
-docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
-docker compose run --rm db-backup sh /usr/local/bin/db-backup.sh weekly
-docker compose run --rm db-backup find /backups/weekly -maxdepth 1 -type f -name '*.dump' -print
-```
+Admin site дополнительно ограничен в `assessment_rinh/urls.py`: доступ к `/admin/` получает только активный superuser через `is_platform_admin`.
 
-Ожидаемый результат: только `/backups/weekly/weekly.dump`.
+Ролевые helpers находятся в `core/permissions.py`:
 
-## Тесты
+- `is_platform_admin` - active superuser;
+- `is_domain_manager` - active superuser, staff, группа `Старший преподаватель` или пользователь с набором доменных permissions;
+- `can_use_teacher_workspace` - domain manager или пользователь со связанным `Teacher`;
+- `can_manage_teacher_assignments` - domain manager или пользователь с permissions на `TeacherProgramDiscipline`.
 
-В корне проекта лежит `pytest.ini` и `conftest.py`. Запуск:
+Команда настройки групп:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+python manage.py setup_teacher_group
 ```
 
-Тесты используют `DJANGO_ENV=dev` и SQLite в памяти, поэтому не требуют поднятой
-PostgreSQL-базы.
+Она создает/обновляет:
 
-## Что в проекте не реализовано
+- `Преподаватель` - ограниченный набор permissions для работы с заданиями;
+- `Старший преподаватель` - permissions по доменным приложениям, кроме admin logentry.
 
-По текущему коду не обнаружены:
+Большинство пользовательских разделов защищены `LoginRequiredMixin` и ручным scope-фильтром по назначенным дисциплинам. CRUD-доступ для domain manager определяется через `is_domain_manager`, а не только через raw model permissions.
 
-- REST API;
-- frontend framework;
-- CI-конфигурация;
-- пользовательский сценарий прохождения тестов студентами;
-- учет попыток, результатов прохождения или журнала оценок.
+## Security notes
 
-## Известные ограничения текущего состояния
+- Не коммитьте `.env`, SQL-схемы, dumps, `.backup`, `.plx` и файлы из `backups/`.
+- В production используйте `DJANGO_ENV=prod`, уникальный `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, корректный `DJANGO_ALLOWED_HOSTS` и HTTPS.
+- `docker-compose.yml` публикует web только на `127.0.0.1:8000`; внешний TLS/reverse proxy настраивается вне репозитория.
+- `prod.py` включает HTTPS redirect, secure cookies, HSTS и базовые security headers.
+- Если приложение стоит за reverse proxy, proxy должен передавать `X-Forwarded-Proto: https`, иначе возможны HTTPS redirect loop или неверная оценка secure request.
+- `CSRF_TRUSTED_ORIGINS` должен содержать реальные HTTPS origin-ы, если домен отличается от host/port запроса.
+- Backup-директория содержит чувствительные данные. Храните ее на persistent storage с ограниченными правами доступа.
+- Не запускайте `docker compose down -v` на сервере с нужными данными.
 
-- Production-режим настроек есть в `assessment_rinh/settings/prod.py`, но реальные `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DB_PASSWORD` и другие значения нужно задавать через окружение.
-- Предметная схема БД находится вне Django migrations.
-- Permissions для группы преподавателей создаются, но большинство пользовательских views не проверяют их явно — используются `LoginRequiredMixin` + ручные scope-проверки.
-- `reports/models.py` и `export/models.py` намеренно пустые (только комментарий) — у этих приложений нет своих сущностей.
-- Покрытие тестами минимальное и сосредоточено в `tests/test_stage5.py`.
+## Lookup/autocomplete architecture
 
-## Краткий рабочий сценарий
+Публичный endpoint:
 
-1. Подготовить PostgreSQL-базу со схемой проекта.
-2. Установить зависимости.
-3. Запустить `seed_initial_data`.
-4. Создать кафедры, преподавателей и пользователей.
-5. При необходимости запустить `setup_teacher_group`.
-6. Создать или импортировать образовательную программу.
-7. Добавить дисциплины учебного плана.
-8. Создать компетенции и связать их с дисциплинами через матрицу.
-9. Назначить преподавателей на дисциплины учебных планов.
-10. Создавать задания в `/assessment/` или `/assessment/workspace/`.
-11. Смотреть отчеты в `/reports/`.
-12. Выгружать Word-документ через `/export/word/`.
+```text
+/core/lookup/
+```
+
+Формат ответа:
+
+```json
+{"results": [{"id": 1, "label": "..." }]}
+```
+
+Основные query-параметры:
+
+- `kind` - тип lookup;
+- `q` - строка поиска;
+- `limit` - лимит, нормализуется в диапазон `1..50`;
+- `selected_id` - вернуть текущий выбранный объект;
+- дополнительные параметры фильтрации зависят от `kind`.
+
+Registry находится в `core/lookups.py`. `core.views.lookup_options` не знает о доменных моделях и получает builder через registry.
+
+Регистрация builders выполняется в `AppConfig.ready()` со стороны приложений:
+
+- `core/default_lookups.py` - `auth_user`, `assessment_item_type`;
+- `teachers/lookups.py` - `department`, `teacher`;
+- `programs/lookups.py` - `training_direction`, `program_profile`, `educational_program`;
+- `disciplines/lookups.py` - `discipline`, `program_discipline`;
+- `competencies/lookups.py` - `competence`.
+
+Поддерживаемые `kind`:
+
+- `assessment_item_type`;
+- `auth_user`;
+- `competence`;
+- `department`;
+- `discipline`;
+- `educational_program`;
+- `program_discipline`;
+- `program_profile`;
+- `teacher`;
+- `training_direction`.
+
+Frontend-обвязка находится в `static/js/base.js`. Поля получают атрибуты через `core.forms.apply_autocomplete_attrs` или напрямую в шаблонах: `data-autocomplete-kind`, `data-autocomplete-url`, `data-autocomplete-parent`, `data-autocomplete-dynamic-params`, `data-autocomplete-extra`.
+
+Deprecated compatibility endpoint:
+
+```text
+/competencies/by-program-discipline/
+```
+
+Он оставлен для `templates/assessment/form.html` и делегирует в generic competence lookup. Замена:
+
+```text
+/core/lookup/?kind=competence&program_discipline_id=<id>&linked_only=1
+```
+
+## Frontend integration
+
+Frontend построен на Django templates, CSS и vanilla JavaScript:
+
+- `templates/base.html` - общая навигация, flash messages, подключение `static/js/base.js`;
+- `static/js/base.js` - autocomplete, dependent selects, auto-submit GET-фильтров;
+- `templates/assessment/form.html` - динамическая видимость строк задания по типу и обновление чекбоксов компетенций;
+- `templates/teachers/dashboard.html` - AJAX panel/toggle назначений преподавателей;
+- `static/css/base.css` - общий стиль.
+
+Отдельного build step, npm, webpack/vite или frontend package manager в репозитории нет.
+
+## Основные URL
+
+| URL | Назначение |
+| --- | --- |
+| `/` | Главная страница. |
+| `/login/`, `/accounts/login/` | Вход. |
+| `/logout/`, `/accounts/logout/` | Выход. |
+| `/admin/` | Django admin, только superuser. |
+| `/core/lookup/` | Generic JSON lookup/autocomplete. |
+| `/core/education-levels/` | Справочник уровней образования. |
+| `/core/competence-types/` | Справочник типов компетенций. |
+| `/core/assessment-item-types/` | Справочник типов заданий. |
+| `/core/academic-degrees/` | Справочник ученых степеней. |
+| `/core/academic-titles/` | Справочник ученых званий. |
+| `/teachers/` | Dashboard кафедр, преподавателей и назначений. |
+| `/teachers/assignments/panel/` | AJAX panel назначений преподавателей. |
+| `/teachers/assignments/toggle/` | JSON toggle назначения преподавателя. |
+| `/programs/` | Dashboard программ и PLX import. |
+| `/programs/trash/` | Корзина образовательных программ. |
+| `/disciplines/` | Управление дисциплинами выбранной программы. |
+| `/disciplines/overview/` | Обзор дисциплин и дисциплин учебных планов. |
+| `/competencies/` | Dashboard компетенций и матрицы. |
+| `/competencies/by-program-discipline/` | Deprecated JSON endpoint для формы задания. |
+| `/assessment/` | Список оценочных заданий. |
+| `/assessment/workspace/` | Рабочее место преподавателя. |
+| `/assessment/trash-workspace/` | Просмотр и копирование заданий из корзины. |
+| `/reports/` | Отчеты. |
+| `/export/` | Redirect на `/export/word/`. |
+| `/export/word/` | Экспорт Word. |
+
+CRUD-маршруты сущностей находятся в соответствующих `urls.py`.
+
+## Оценочные задания
+
+Форма задания:
+
+- `AssessmentItemForm`;
+- `AssessmentItemRowCreateFormSet`;
+- `AssessmentItemRowUpdateFormSet`;
+- `BaseAssessmentItemRowFormSet`.
+
+Сервисная логика разделена в `assessment/services/`:
+
+- `item_types.py` - коды типов, UI labels, разбор строк для detail/export;
+- `competence_sync.py` - получение и синхронизация компетенций задания;
+- `clipboard.py` - session clipboard;
+- `cloning.py` - перенос задания в другую дисциплину учебного плана;
+- `db_errors.py` - преобразование DB errors в пользовательские сообщения;
+- `__init__.py` - compatibility exports для старых импортов `assessment.services`.
+
+Поддерживаемые типы:
+
+- `single` - выбор одного ответа;
+- `multiple` - выбор нескольких ответов;
+- `matching` - установление соответствия;
+- `sequence` - установление последовательности;
+- `open` - открытый ответ.
+
+Серверная валидация строк:
+
+- выбор одного ответа: минимум два варианта и ровно один верный;
+- выбор нескольких ответов: минимум два варианта и минимум один верный;
+- соответствие: минимум одна пара, правые дистракторы допустимы;
+- последовательность: минимум два шага, порядок назначается формой;
+- открытый ответ: минимум один допустимый ответ.
+
+## Рабочее место и корзина
+
+`/assessment/workspace/`:
+
+- domain manager видит все активные дисциплины учебных планов;
+- обычный преподаватель видит только назначенные ему `ProgramDiscipline`;
+- пользователь без профиля преподавателя не получает рабочий контекст;
+- clipboard хранится в session под ключом `assessment_clipboard_item_ids`;
+- вставка задания копирует строки и переносит только совместимые компетенции.
+
+`/programs/trash/`:
+
+- удаление программы из обычного UI переводит ее в корзину через `ProgramTrashService`;
+- заполняются `is_deleted`, `deleted_at`, `deleted_by`, `delete_reason`;
+- связанные дисциплины, компетенции, матрица, задания, строки и назначения сохраняются;
+- restore проверяет конфликт с активной программой того же профиля, кафедры и года;
+- hard delete разрешен только для программы в корзине и удаляет только данные этой программы.
+
+`/assessment/trash-workspace/`:
+
+- используется для просмотра и копирования старых заданий из программ в корзине;
+- вставка выполняется только в активный целевой контекст.
+
+## PLX import
+
+URL: `/programs/`.
+
+Файлы сервиса:
+
+- `programs/services/plx_parser.py`;
+- `programs/services/plx_mapping.py`;
+- `programs/services/plx_dto.py`;
+- `programs/services/plx_import_service.py`;
+- `programs/services/curriculum_replacement_service.py`;
+- `programs/services/program_trash_service.py`;
+- `programs/services/program_replace_service.py`;
+- `programs/services/validators.py`;
+- `programs/services/exceptions.py`.
+
+Если активная программа с тем же профилем, кафедрой и годом набора уже существует, UI показывает конфликт и требует подтверждение замены. При подтверждении старая программа переносится в корзину, новая создается активной.
+
+Валидация PLX включает диапазон года набора и соответствие кода профиля коду направления.
+
+## Reports и Word export
+
+`/reports/` строит таблицы по фильтрам:
+
+- образовательная программа;
+- дисциплина;
+- компетенция;
+- тип задания;
+- размер страницы.
+
+Selectors учитывают как legacy `AssessmentItem.competence`, так и `AssessmentItemCompetence`.
+
+`/export/word/` генерирует `.docx` через `export/services.py` и `export/docx_renderer.py`.
+
+Ограничения export:
+
+- обязательны образовательная программа и дисциплина;
+- связка программы и дисциплины должна быть активной;
+- максимум `1000` заданий за один экспорт;
+- шаблон документа - `templates/export/maket.docx`;
+- при отсутствии заданий или превышении лимита view возвращает форму с ошибкой.
+
+## Management commands
+
+| Команда | Назначение |
+| --- | --- |
+| `python manage.py check_db_schema --live` | Проверяет подключенную БД на соответствие unmanaged-моделям и обязательным DB objects. |
+| `python manage.py check_db_schema --sql <path>` | Проверяет приватный SQL-файл схемы без подключения к БД. |
+| `python manage.py seed_initial_data` | Создает/обновляет базовые уровни образования, типы компетенций, типы заданий, ученые степени и звания. |
+| `python manage.py setup_teacher_group` | Создает/обновляет группы `Преподаватель` и `Старший преподаватель` с permissions. |
+| `python manage.py createsuperuser` | Стандартная команда Django для superuser. |
+| `python manage.py collectstatic --noinput` | Сбор static в `staticfiles`. |
+| `python manage.py check` | Django system checks. |
+
+## Logging, sessions и cache
+
+Logging:
+
+- настроен root logger с console handler;
+- уровень задается через `DJANGO_LOG_LEVEL`;
+- логи пишут `assessment.views`, `export.*`, `programs.services.*` и другие модули.
+
+Sessions:
+
+- стандартный Django session middleware;
+- clipboard заданий хранится в session;
+- в production cookies защищаются настройками из `prod.py`.
+
+Cache:
+
+- по умолчанию `LocMemCache`;
+- используется для home stats и auth rate limit;
+- home stats cache key: `core:home_stats`;
+- при переносе/восстановлении/окончательном удалении программы cache статистики очищается.
+
+## Tests
+
+В репозитории есть `pytest.ini`, `conftest.py` и тесты в `tests/`.
+
+`pytest` не входит в `requirements.txt`, поэтому для локального запуска тестов его нужно установить в dev-окружение отдельно:
+
+```powershell
+python -m pip install pytest
+pytest -q
+```
+
+Обычные тесты используют `DJANGO_ENV=dev`, SQLite in-memory и не требуют PostgreSQL.
+
+PostgreSQL invariant tests помечены `postgres_integration` и запускаются только при:
+
+```powershell
+$env:RUN_POSTGRES_INTEGRATION_TESTS='1'
+pytest -q -m postgres_integration
+```
+
+Для них нужна реальная PostgreSQL-база, совместимая со схемой проекта.
+
+## Production deployment notes
+
+Минимальный production flow:
+
+1. Подготовить `.env` с `DJANGO_ENV=prod`, секретами, host-ами, DB credentials и HTTPS/CSRF настройками.
+2. Подготовить PostgreSQL: восстановить production backup или применить приватный SQL bootstrap вне Git.
+3. Запустить `python manage.py check_db_schema --live`.
+4. Запустить `python manage.py check`.
+5. Запустить `python manage.py seed_initial_data`.
+6. Запустить `python manage.py setup_teacher_group`.
+7. Создать superuser через `python manage.py createsuperuser`, если его нет.
+8. Запустить `collectstatic`.
+9. Запустить gunicorn или `docker compose up -d`.
+10. Проверить backup scheduler и выполнить тестовый backup/restore на отдельной базе или стенде.
+
+Для Docker:
+
+```powershell
+docker compose up -d
+docker compose exec web python manage.py check
+docker compose exec web python manage.py check_db_schema --live
+```
+
+В репозитории нет nginx/systemd-конфигурации. Если приложение публикуется наружу, TLS termination и reverse proxy настраиваются отдельно.
+
+## Troubleshooting
+
+### `relation does not exist`
+
+Предметная схема не восстановлена или подключение указывает не на ту БД. Проверьте `DB_HOST`, `DB_NAME`, `DB_USER`, затем:
+
+```powershell
+python manage.py check_db_schema --live
+```
+
+### `check_db_schema` сообщает об отсутствующих trigger/function/index
+
+Подключенная база не соответствует контракту моделей. Нужно применить актуальный приватный SQL/backup для этой среды. Не добавляйте приватный SQL в Git.
+
+### Docker init-скрипт не запускается повторно
+
+`db_init/` выполняется только при пустом `postgres_data`. Если volume уже создан, обычный restart не запускает bootstrap. Удаление volume удалит данные.
+
+### `Invalid HTTP_HOST header`
+
+Добавьте нужный host в `DJANGO_ALLOWED_HOSTS`.
+
+### CSRF failure за HTTPS/proxy
+
+Проверьте `DJANGO_CSRF_TRUSTED_ORIGINS` и передачу `X-Forwarded-Proto: https` reverse proxy.
+
+### Login возвращает HTTP 429
+
+Сработал `AuthRateLimitMiddleware`. Проверьте `DJANGO_AUTH_RATE_LIMIT_*` и cache backend.
+
+### Статика не обновилась
+
+Запустите:
+
+```powershell
+python manage.py collectstatic --noinput
+```
+
+В Docker перезапустите `web`, чтобы команда из `command` выполнилась снова.
+
+### `pytest` не найден
+
+`pytest` не является runtime-зависимостью. Установите его в dev-окружение:
+
+```powershell
+python -m pip install pytest
+```
+
+## Deprecated functionality
+
+| Объект | Статус | Замена |
+| --- | --- | --- |
+| `/competencies/by-program-discipline/` | Deprecated compatibility endpoint для `templates/assessment/form.html`. | `/core/lookup/?kind=competence&program_discipline_id=<id>&linked_only=1` |
+
+Legacy-поле `AssessmentItem.competence` остается частью модели и схемы для обратной совместимости. Основные связи задания с компетенциями ведутся через `AssessmentItemCompetence`.
