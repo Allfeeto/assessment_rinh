@@ -280,69 +280,6 @@
         });
     }
 
-    function initDependentSelects() {
-        function updateOptions(parentSelect, childSelect) {
-            const template = childSelect.dataset.fetchUrl;
-            if (!template) {
-                return;
-            }
-
-            const parentValue = parentSelect.value;
-            const selectedBefore = Array.from(childSelect.options)
-                .filter(option => option.selected)
-                .map(option => option.value);
-
-            if (!parentValue) {
-                if (childSelect.multiple) {
-                    childSelect.innerHTML = '';
-                } else {
-                    childSelect.innerHTML = '<option value="">---------</option>';
-                }
-                return;
-            }
-
-            const url = template.replace('{value}', encodeURIComponent(parentValue));
-            fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-                .then(response => response.json())
-                .then(data => {
-                    const results = data.results || [];
-                    const restored = new Set(selectedBefore);
-
-                    if (childSelect.multiple) {
-                        childSelect.innerHTML = '';
-                    } else {
-                        childSelect.innerHTML = '<option value="">---------</option>';
-                    }
-
-                    results.forEach(item => {
-                        const option = document.createElement('option');
-                        option.value = String(item.id);
-                        option.textContent = item.label;
-                        if (restored.has(String(item.id))) {
-                            option.selected = true;
-                        }
-                        childSelect.appendChild(option);
-                    });
-                })
-                .catch(() => {
-                });
-        }
-
-        document.querySelectorAll('select[data-dependent-child]').forEach(parentSelect => {
-            const childId = parentSelect.dataset.dependentChild;
-            const childSelect = document.getElementById(childId);
-            if (!childSelect) {
-                return;
-            }
-
-            parentSelect.addEventListener('change', () => updateOptions(parentSelect, childSelect));
-            if (parentSelect.value) {
-                updateOptions(parentSelect, childSelect);
-            }
-        });
-    }
-
     document.querySelectorAll('select[data-autocomplete-kind]').forEach(initAutocomplete);
-    initDependentSelects();
     initAutoSubmitOnChange();
 })();

@@ -1,11 +1,8 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Count, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
-from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -25,6 +22,7 @@ from core.view_helpers import (
     NamedUpdateView,
     StaffOrModelPermissionRequiredMixin,
     get_per_page,
+    paginate_queryset,
 )
 
 from .forms import DisciplineForm, ProgramDisciplineForm, ProgramDisciplineManageForm
@@ -94,8 +92,12 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
                         program_discipline=selected_program_discipline
                     ).order_by('competence__code')
 
-        program_disciplines_paginator = Paginator(existing_program_disciplines_qs, per_page)
-        pd_page_obj = program_disciplines_paginator.get_page(request.GET.get('pd_page') or 1)
+        pd_page_obj = paginate_queryset(
+            request,
+            existing_program_disciplines_qs,
+            page_param='pd_page',
+            per_page=per_page,
+        )
 
         params = request.GET.copy()
         params.pop('pd_page', None)
@@ -244,11 +246,19 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         if educational_program_id:
             program_disciplines_qs = program_disciplines_qs.filter(educational_program_id=educational_program_id)
 
-        disciplines_paginator = Paginator(disciplines_qs, per_page)
-        d_page_obj = disciplines_paginator.get_page(self.request.GET.get('d_page') or 1)
+        d_page_obj = paginate_queryset(
+            self.request,
+            disciplines_qs,
+            page_param='d_page',
+            per_page=per_page,
+        )
 
-        program_disciplines_paginator = Paginator(program_disciplines_qs, per_page)
-        pd_page_obj = program_disciplines_paginator.get_page(self.request.GET.get('pd_page') or 1)
+        pd_page_obj = paginate_queryset(
+            self.request,
+            program_disciplines_qs,
+            page_param='pd_page',
+            per_page=per_page,
+        )
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
@@ -391,28 +401,3 @@ class ProgramDisciplineDeleteView(NamedDeleteView):
 
     def get_queryset(self):
         return super().get_queryset().filter(educational_program__is_deleted=False)
-
-
-@login_required
-def program_discipline_by_program(request):
-    educational_program_id = request.GET.get('educational_program_id')
-    queryset = program_discipline_queryset_for_user(request.user).select_related(
-        'educational_program__program_profile',
-        'discipline',
-    ).order_by(
-        'educational_program__program_profile__code',
-        'educational_program__admission_year',
-        'discipline__name',
-    )
-    if educational_program_id:
-        queryset = queryset.filter(educational_program_id=educational_program_id)
-
-    data = [
-        {
-            'id': obj.id,
-            'label': f'{obj.educational_program} | {obj.discipline.name}',
-            'discipline_id': obj.discipline_id,
-        }
-        for obj in queryset
-    ]
-    return JsonResponse({'results': data})

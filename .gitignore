@@ -222,6 +222,7 @@ __marimo__/
 !.env.example
 
 # Local database dumps / backups
+*~
 *.dump
 *.sql
 !DB_info/educational_program_trash.sql

@@ -43,7 +43,6 @@ def resolve_attr(obj, path):
 
 
 class StaffOrModelPermissionRequiredMixin(LoginRequiredMixin, PermissionRequiredMixin):
-    login_url = reverse_lazy('login')
     raise_exception = True
     permission_action = None
 
@@ -78,7 +77,6 @@ class StaffOrModelPermissionRequiredMixin(LoginRequiredMixin, PermissionRequired
 
 
 class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
-    login_url = reverse_lazy('login')
     permission_action = 'view'
     template_name = 'common/list.html'
     context_object_name = 'objects'
@@ -141,7 +139,6 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
 
 
 class NamedDetailView(StaffOrModelPermissionRequiredMixin, DetailView):
-    login_url = reverse_lazy('login')
     permission_action = 'view'
     template_name = 'common/detail.html'
     title = ''
@@ -163,7 +160,6 @@ class NamedDetailView(StaffOrModelPermissionRequiredMixin, DetailView):
 
 
 class NamedCreateView(StaffOrModelPermissionRequiredMixin, CreateView):
-    login_url = reverse_lazy('login')
     permission_action = 'add'
     template_name = 'common/form.html'
     title = ''
@@ -181,7 +177,6 @@ class NamedCreateView(StaffOrModelPermissionRequiredMixin, CreateView):
 
 
 class NamedUpdateView(StaffOrModelPermissionRequiredMixin, UpdateView):
-    login_url = reverse_lazy('login')
     permission_action = 'change'
     template_name = 'common/form.html'
     title = ''
@@ -199,7 +194,6 @@ class NamedUpdateView(StaffOrModelPermissionRequiredMixin, UpdateView):
 
 
 class NamedDeleteView(StaffOrModelPermissionRequiredMixin, DeleteView):
-    login_url = reverse_lazy('login')
     permission_action = 'delete'
     template_name = 'common/confirm_delete.html'
     title = ''

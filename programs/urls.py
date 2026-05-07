@@ -21,7 +21,6 @@ from .views import (
     TrainingDirectionDetailView,
     TrainingDirectionListView,
     TrainingDirectionUpdateView,
-    profiles_by_direction,
 )
 
 urlpatterns = [
@@ -49,6 +48,4 @@ urlpatterns = [
     path('trash/<int:pk>/', ProgramTrashDetailView.as_view(), name='programs_trash_detail'),
     path('trash/<int:pk>/restore/', ProgramTrashRestoreView.as_view(), name='programs_trash_restore'),
     path('trash/<int:pk>/hard-delete/', ProgramTrashHardDeleteView.as_view(), name='programs_trash_hard_delete'),
-
-    path('profiles-by-direction/', profiles_by_direction, name='programs_profiles_by_direction'),
 ]

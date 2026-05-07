@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DeleteView, DetailView, ListView, TemplateView
@@ -32,6 +32,7 @@ from .services import (
     get_ui_assessment_item_types_queryset,
     infer_item_type_code,
     prettify_db_error,
+    clear_clipboard,
     set_clipboard_item_ids,
     split_rows_for_detail,
     sync_assessment_item_competences,
@@ -76,7 +77,6 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
     context_object_name = 'items'
     paginate_by = 50
     per_page_choices = (50, 100, 200)
-    login_url = reverse_lazy('login')
 
     def get_paginate_by(self, queryset):
         raw_value = (self.request.GET.get('per_page') or '').strip()
@@ -272,7 +272,6 @@ class AssessmentItemDetailView(LoginRequiredMixin, DetailView):
     model = AssessmentItem
     template_name = 'assessment/detail.html'
     context_object_name = 'item'
-    login_url = reverse_lazy('login')
 
     def get_queryset(self):
         queryset = (
@@ -403,7 +402,6 @@ class AssessmentItemFormMixin:
 
 class AssessmentItemCreateView(LoginRequiredMixin, AssessmentItemFormMixin, View):
     row_formset_class = AssessmentItemRowCreateFormSet
-    login_url = reverse_lazy('login')
 
     def get(self, request, *args, **kwargs):
         self.object = None
@@ -435,7 +433,6 @@ class AssessmentItemCreateView(LoginRequiredMixin, AssessmentItemFormMixin, View
 
 class AssessmentItemUpdateView(LoginRequiredMixin, AssessmentItemFormMixin, View):
     row_formset_class = AssessmentItemRowUpdateFormSet
-    login_url = reverse_lazy('login')
 
     def get_object(self):
         queryset = _restrict_queryset_for_teacher_user(self.request, AssessmentItem.objects.all())
@@ -472,7 +469,6 @@ class AssessmentItemUpdateView(LoginRequiredMixin, AssessmentItemFormMixin, View
 class AssessmentItemDeleteView(LoginRequiredMixin, DeleteView):
     model = AssessmentItem
     template_name = 'common/confirm_delete.html'
-    login_url = reverse_lazy('login')
 
     def get_queryset(self):
         queryset = AssessmentItem.objects.all()
@@ -489,8 +485,6 @@ class AssessmentItemDeleteView(LoginRequiredMixin, DeleteView):
 
 
 class TeacherRequiredMixin(LoginRequiredMixin):
-    login_url = reverse_lazy('login')
-
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
@@ -1105,6 +1099,6 @@ class TeacherWorkspacePasteItemsView(TeacherRequiredMixin, View):
 class TeacherWorkspaceClearClipboardView(TeacherRequiredMixin, View):
     def post(self, request, *args, **kwargs):
         next_url = _safe_next_url(request, reverse('assessment_workspace'))
-        set_clipboard_item_ids(request.session, [])
+        clear_clipboard(request.session)
         messages.success(request, 'Буфер копирования очищен.')
         return redirect(next_url)

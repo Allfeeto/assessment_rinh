@@ -7,7 +7,6 @@ from django.forms import BaseInlineFormSet, inlineformset_factory
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.form_fields import (
     AssessmentItemTypeChoiceField,
-    CompetenceChoiceField,  # noqa: F401 — используется внешними импортами
     CompetenceMultipleChoiceField,
 )
 from competencies.models import Competence, DisciplineCompetence
@@ -23,7 +22,6 @@ from .services import (
     TYPE_SEQUENCE,
     TYPE_SINGLE,
     TYPE_UNKNOWN,
-    get_item_type_ui_name,
     get_ui_assessment_item_types_queryset,
     infer_item_type_code,
 )

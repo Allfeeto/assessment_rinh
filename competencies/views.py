@@ -1,6 +1,5 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.paginator import Paginator
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
@@ -23,6 +22,7 @@ from core.view_helpers import (
     NamedListView,
     NamedUpdateView,
     get_per_page,
+    paginate_queryset,
 )
 from disciplines.models import ProgramDiscipline
 
@@ -175,13 +175,19 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             else Competence.objects.none()
         )
 
-        competences_paginator = Paginator(competences_qs, per_page)
-        competences_page_obj = competences_paginator.get_page(self.request.GET.get('comp_page') or 1)
+        competences_page_obj = paginate_queryset(
+            self.request,
+            competences_qs,
+            page_param='comp_page',
+            per_page=per_page,
+        )
         competences_page = list(competences_page_obj.object_list)
 
-        discipline_competences_paginator = Paginator(discipline_competences_qs, per_page)
-        discipline_competences_page_obj = discipline_competences_paginator.get_page(
-            self.request.GET.get('link_page') or 1
+        discipline_competences_page_obj = paginate_queryset(
+            self.request,
+            discipline_competences_qs,
+            page_param='link_page',
+            per_page=per_page,
         )
         discipline_competences_page = list(discipline_competences_page_obj.object_list)
 

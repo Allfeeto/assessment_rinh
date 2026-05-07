@@ -1,8 +1,6 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, Q
-from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import TemplateView
 
@@ -629,22 +627,3 @@ class ProgramTrashHardDeleteView(StaffRequiredMixin, TemplateView):
             'Образовательная программа и связанные с ней данные окончательно удалены.',
         )
         return redirect('programs_trash')
-
-
-@login_required
-def profiles_by_direction(request):
-    direction_id = request.GET.get('direction_id')
-    queryset = ProgramProfile.objects.order_by('code')
-    if not is_domain_manager(request.user):
-        program_ids = program_discipline_queryset_for_user(request.user).values_list(
-            'educational_program_id',
-            flat=True,
-        )
-        queryset = queryset.filter(
-            educational_programs__id__in=program_ids,
-        ).distinct()
-    if direction_id:
-        queryset = queryset.filter(training_direction_id=direction_id)
-
-    data = [{'id': profile.id, 'label': str(profile)} for profile in queryset]
-    return JsonResponse({'results': data})

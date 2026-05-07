@@ -13,7 +13,6 @@ from .views import (
     ProgramDisciplineListView,
     ProgramDisciplineManagerView,
     ProgramDisciplineUpdateView,
-    program_discipline_by_program,
 )
 
 urlpatterns = [
@@ -31,6 +30,4 @@ urlpatterns = [
     path('program-disciplines/<int:pk>/', ProgramDisciplineDetailView.as_view(), name='disciplines_program_discipline_detail'),
     path('program-disciplines/<int:pk>/edit/', ProgramDisciplineUpdateView.as_view(), name='disciplines_program_discipline_update'),
     path('program-disciplines/<int:pk>/delete/', ProgramDisciplineDeleteView.as_view(), name='disciplines_program_discipline_delete'),
-
-    path('by-program/', program_discipline_by_program, name='disciplines_program_discipline_by_program'),
 ]
