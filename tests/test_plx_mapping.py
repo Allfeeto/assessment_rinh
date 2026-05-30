@@ -197,3 +197,92 @@ def test_duplicate_competence_rows_keep_all_discipline_links():
         ('discipline-row-1', 'competence-1'),
         ('discipline-row-2', 'competence-1'),
     ]
+
+
+def test_discipline_rows_include_plan_code_and_department_from_plx():
+    parsed = ParsedPlxDocument(
+        source_filename='09.03.02.01_1.plx',
+        document_attrs={'УровеньОбразования': 'бакалавриат'},
+        tables={
+            'Планы': [
+                {
+                    'Код': 'plan-1',
+                    'КодООП': 'oop-main',
+                    'ГодНачалаПодготовки': '2025',
+                    'КодПрофКафедры': 'dept-main',
+                }
+            ],
+            'ООП': [
+                {
+                    'Код': 'oop-main',
+                    'Шифр': '09.03.02',
+                    'Название': 'Информационные системы и технологии',
+                }
+            ],
+            'ООП_вложенные': [
+                {
+                    'Код': 'oop-profile',
+                    'КодРодительскогоООП': 'oop-main',
+                    'Название': '09.03.02.01 Информационные системы и технологии',
+                    'Используется': 'true',
+                }
+            ],
+            'Кафедры': [
+                {
+                    'Код': 'dept-main',
+                    'Номер': '1',
+                    'Сокращение': 'КИТ',
+                    'Название': 'Кафедра информационных технологий',
+                },
+                {
+                    'Код': 'dept-discipline',
+                    'Номер': '22',
+                    'Сокращение': 'ИСиПИ',
+                    'Название': 'Информационных систем и прикладной информатики',
+                },
+            ],
+            'ПланыСтроки': [
+                {
+                    'КодПлана': 'plan-1',
+                    'Код': 'discipline-row-1',
+                    'СчитатьВПлане': 'true',
+                    'ТипОбъекта': '2',
+                    'ДисциплинаКод': 'Б1.О.07',
+                    'КодКафедры': 'dept-discipline',
+                    'Дисциплина': 'Анализ данных',
+                },
+                {
+                    'КодПлана': 'plan-1',
+                    'Код': 'discipline-row-2',
+                    'СчитатьВПлане': 'true',
+                    'ТипОбъекта': '2',
+                    'ДисциплинаКод': 'Б1.О.08',
+                    'КодКафедры': 'unknown',
+                    'Дисциплина': 'Теория систем',
+                },
+            ],
+            'ПланыКомпетенции': [
+                {
+                    'КодПлана': 'plan-1',
+                    'КодООП': 'oop-main',
+                    'Код': 'competence-1',
+                    'ШифрКомпетенции': 'ПК-1',
+                    'Наименование': 'Способен решать задачу',
+                    'Тип': '4',
+                    'Удалена': 'false',
+                },
+            ],
+            'ПланыКомпетенцииДисциплины': [],
+        },
+    )
+
+    dto = PlxMapper().map_to_dto(parsed)
+
+    first, second = dto.disciplines
+    assert first.code == 'Б1.О.07'
+    assert first.department_code == 'dept-discipline'
+    assert first.department.number == '22'
+    assert first.department.short_name == 'ИСиПИ'
+    assert second.code == 'Б1.О.08'
+    assert second.department_code == 'unknown'
+    assert second.department is None

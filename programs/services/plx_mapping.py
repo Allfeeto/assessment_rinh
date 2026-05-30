@@ -254,6 +254,29 @@ class PlxMapper:
 
         return DepartmentInfoDTO(number=number, short_name=short_name, full_name=full_name)
 
+    def _resolve_optional_department(
+        self,
+        parsed: ParsedPlxDocument,
+        department_code: str,
+    ) -> DepartmentInfoDTO | None:
+        department_code = normalize_text(department_code)
+        if not department_code:
+            return None
+
+        for row in parsed.table('Кафедры'):
+            if normalize_text(row.get('Код')) == department_code or normalize_text(row.get('Номер')) == department_code:
+                number = normalize_text(row.get('Номер')) or normalize_text(row.get('Код'))
+                short_name = normalize_text(row.get('Сокращение'))
+                full_name = normalize_text(row.get('Название'))
+                if number and short_name and full_name:
+                    return DepartmentInfoDTO(
+                        number=number,
+                        short_name=short_name,
+                        full_name=full_name,
+                    )
+                return None
+        return None
+
     def _extract_disciplines(
         self,
         parsed: ParsedPlxDocument,
@@ -298,6 +321,11 @@ class PlxMapper:
                 external_id=external_id,
                 code=normalize_text(row.get('ДисциплинаКод')),
                 name=name,
+                department_code=normalize_text(row.get('КодКафедры')),
+                department=self._resolve_optional_department(
+                    parsed,
+                    normalize_text(row.get('КодКафедры')),
+                ),
             )
             seen_by_name.setdefault(key, []).append(item)
             result.append(item)

@@ -84,6 +84,30 @@
             {% endif %}
         </div>
 
+        <div class="field" style="margin-bottom: 12px;">
+            <label for="{{ form.discipline_code.id_for_label }}">{{ form.discipline_code.label }}</label>
+            {{ form.discipline_code }}
+            {% if form.discipline_code.errors %}
+                <ul class="errors">
+                    {% for error in form.discipline_code.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        <div class="field" style="margin-bottom: 12px;">
+            <label for="{{ form.department.id_for_label }}">{{ form.department.label }}</label>
+            {{ form.department }}
+            {% if form.department.errors %}
+                <ul class="errors">
+                    {% for error in form.department.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
         {% if form.non_field_errors %}
             <div class="alert">
                 {% for error in form.non_field_errors %}
@@ -106,7 +130,9 @@
         <thead>
         <tr>
             <th>ID связи</th>
+            <th>Код</th>
             <th>Дисциплина</th>
+            <th>Кафедра дисциплины</th>
             <th>Действия</th>
         </tr>
         </thead>
@@ -114,7 +140,9 @@
         {% for pd in existing_program_disciplines %}
             <tr>
                 <td>{{ pd.id }}</td>
+                <td>{{ pd.discipline_code|default:"—" }}</td>
                 <td>{{ pd.discipline.name }}</td>
+                <td>{{ pd.department.short_name|default:"—" }}</td>
                 <td>
                     <div class="actions">
                         <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
@@ -124,7 +152,7 @@
             </tr>
         {% empty %}
             <tr>
-                <td colspan="3" class="muted">
+                <td colspan="5" class="muted">
                     {% if selected_program %}
                         Для выбранной программы дисциплины пока не добавлены.
                     {% else %}

@@ -31,12 +31,17 @@ class Department(models.Model):
         if not self.head_teacher_id:
             return
 
-        teacher_department_id = (
+        teacher = (
             Teacher.objects.filter(pk=self.head_teacher_id)
-            .values_list('department_id', flat=True)
+            .prefetch_related('departments')
             .first()
         )
-        if teacher_department_id is not None and self.pk and teacher_department_id != self.pk:
+        if teacher is None or not self.pk:
+            return
+
+        teacher_department_ids = {teacher.department_id}
+        teacher_department_ids.update(teacher.departments.values_list('id', flat=True))
+        if self.pk not in teacher_department_ids:
             raise ValidationError({
                 'head_teacher': 'Заведующий кафедрой должен быть преподавателем этой же кафедры.'
             })
@@ -58,7 +63,15 @@ class Teacher(models.Model):
         on_delete=models.PROTECT,
         db_column='department_id',
         related_name='teachers',
-        verbose_name='Кафедра',
+        verbose_name='Основная кафедра',
+    )
+    departments = models.ManyToManyField(
+        Department,
+        db_table='teacher_departments',
+        related_name='teachers_by_membership',
+        blank=True,
+        verbose_name='Кафедры преподавателя',
+        help_text='Дополнительные кафедры преподавателя; основная кафедра хранится в legacy-поле выше.',
     )
     full_name = models.TextField(verbose_name='ФИО')
     academic_degree = models.ForeignKey(
@@ -88,6 +101,24 @@ class Teacher(models.Model):
 
     def __str__(self):
         return self.full_name
+
+    @property
+    def departments_display(self):
+        try:
+            departments = list(self.departments.all())
+        except ValueError:
+            departments = []
+        if departments:
+            return ', '.join(
+                department.short_name
+                for department in sorted(departments, key=lambda item: item.number)
+            )
+        department = getattr(self, 'department', None)
+        return department.short_name if department else ''
+
+    def ensure_primary_department_membership(self):
+        if self.pk and self.department_id:
+            self.departments.add(self.department_id)
 
 
 class TeacherProgramDiscipline(models.Model):

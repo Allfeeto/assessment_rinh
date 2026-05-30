@@ -96,11 +96,21 @@ LOCAL_APPS_WITH_EXTERNAL_SCHEMA = (
     'export',
 )
 
-# Предметная схема управляется вне Django migrations. Это не дает случайному
-# migrate применить устаревший DDL к уже развернутой PostgreSQL-базе.
+# Предметная схема в целом управляется вне Django migrations. Для точечных
+# безопасных DDL-изменений включаем миграции только явно, через env-флаг, и
+# только для приложений, где есть ручные RunSQL/RunPython migrations.
+LOCAL_APPS_WITH_SCHEMA_MIGRATIONS = (
+    'teachers',
+    'disciplines',
+)
+DJANGO_ENABLE_LOCAL_MIGRATIONS = env_bool('DJANGO_ENABLE_LOCAL_MIGRATIONS', default=False)
 MIGRATION_MODULES = {
     app_label: None
     for app_label in LOCAL_APPS_WITH_EXTERNAL_SCHEMA
+    if not (
+        DJANGO_ENABLE_LOCAL_MIGRATIONS
+        and app_label in LOCAL_APPS_WITH_SCHEMA_MIGRATIONS
+    )
 }
 DB_SCHEMA_SQL_PATH = env_value('DB_SCHEMA_SQL_PATH')
 

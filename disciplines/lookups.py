@@ -85,6 +85,7 @@ def lookup_program_discipline(request, query, selected_id, limit):
         'educational_program__program_profile',
         'educational_program__department',
         'discipline',
+        'department',
     ).filter(educational_program__is_deleted=False).order_by(
         'educational_program__program_profile__code',
         'educational_program__admission_year',
@@ -100,6 +101,9 @@ def lookup_program_discipline(request, query, selected_id, limit):
         for token in tokens:
             token_filter = (
                 Q(discipline__name__icontains=token)
+                | Q(discipline_code__icontains=token)
+                | Q(department__number__icontains=token)
+                | Q(department__short_name__icontains=token)
                 | Q(educational_program__program_profile__code__icontains=token)
                 | Q(educational_program__program_profile__name__icontains=token)
                 | Q(educational_program__department__short_name__icontains=token)
@@ -112,7 +116,11 @@ def lookup_program_discipline(request, query, selected_id, limit):
     return unique_lookup_results(
         queryset.distinct(),
         limit,
-        lambda obj: f'{obj.educational_program} | {obj.discipline.name}',
+        lambda obj: (
+            f'{obj.educational_program} | '
+            f'{f"{obj.discipline_code} - " if obj.discipline_code else ""}'
+            f'{obj.discipline.name}'
+        ),
     )
 
 

@@ -18,8 +18,17 @@ REQUIRED_CONSTRAINTS = {
 }
 REQUIRED_INDEXES = {
     'educational_program_active_unique_idx',
+    'program_disc_code_idx',
+    'program_disc_dept_idx',
+    'program_disc_prog_code_idx',
+    'teacher_departments_department_idx',
+    'teacher_departments_teacher_department_uidx',
+    'teacher_departments_teacher_idx',
     'uq_assessment_item_row_correct_order',
     'uq_assessment_item_row_sort',
+}
+REQUIRED_TABLES = {
+    'teacher_departments',
 }
 REQUIRED_FUNCTIONS = {
     'check_assessment_item_relation_integrity',
@@ -173,6 +182,8 @@ def _field_type_matches(field: models.Field, sql_type: str) -> bool:
 
 def _check_required_objects(schema: ParsedSQLSchema) -> list[SchemaContractIssue]:
     issues = []
+    for name in sorted(REQUIRED_TABLES - set(schema.tables)):
+        issues.append(SchemaContractIssue(f'В SQL-схеме отсутствует table {name}.'))
     for name in sorted(REQUIRED_CONSTRAINTS - schema.constraints):
         issues.append(SchemaContractIssue(f'В SQL-схеме отсутствует constraint {name}.'))
     for name in sorted(REQUIRED_INDEXES - schema.indexes):
@@ -230,6 +241,12 @@ def check_live_database_contract(using: str = DEFAULT_DB_ALIAS) -> list[SchemaCo
     with connection.cursor() as cursor:
         table_names = set(connection.introspection.table_names(cursor))
         db_objects = set()
+
+        for table_name in sorted(REQUIRED_TABLES - table_names):
+            issues.append(SchemaContractIssue(f'В базе отсутствует таблица {table_name}.'))
+
+        for table_name in sorted(REQUIRED_TABLES & table_names):
+            db_objects.update(connection.introspection.get_constraints(cursor, table_name).keys())
 
         for model in external_schema_models():
             table_name = model._meta.db_table

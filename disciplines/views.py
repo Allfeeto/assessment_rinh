@@ -68,7 +68,10 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
                     is_deleted=False,
                 )
 
-            existing_program_disciplines_qs = ProgramDiscipline.objects.select_related('discipline').filter(
+            existing_program_disciplines_qs = ProgramDiscipline.objects.select_related(
+                'discipline',
+                'department',
+            ).filter(
                 educational_program_id=selected_program_id,
                 educational_program__is_deleted=False,
             ).order_by('discipline__name')
@@ -135,6 +138,8 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
                 ProgramDiscipline.objects.create(
                     educational_program=educational_program,
                     discipline=discipline,
+                    discipline_code=form.cleaned_data.get('discipline_code') or None,
+                    department=form.cleaned_data.get('department'),
                 )
             except IntegrityError:
                 form.add_error('discipline', 'Эта дисциплина уже добавлена в выбранный учебный план.')
@@ -228,6 +233,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             'educational_program__program_profile',
             'educational_program__department',
             'discipline',
+            'department',
         ).annotate(
             competences_count=Coalesce(
                 Subquery(program_discipline_competences_count, output_field=IntegerField()),
@@ -344,13 +350,18 @@ class ProgramDisciplineListView(NamedListView):
     title = 'Дисциплины учебных планов'
     search_fields = (
         'discipline__name',
+        'discipline_code',
+        'department__short_name',
+        'department__full_name',
         'educational_program__program_profile__code',
         'educational_program__program_profile__name',
     )
     list_columns = (
         ('ID', 'id'),
         ('Программа', 'educational_program'),
+        ('Код', 'discipline_code'),
         ('Дисциплина', 'discipline.name'),
+        ('Кафедра дисциплины', 'department.short_name'),
     )
     create_url_name = 'disciplines_program_discipline_create'
     detail_url_name = 'disciplines_program_discipline_detail'
@@ -358,7 +369,12 @@ class ProgramDisciplineListView(NamedListView):
     delete_url_name = 'disciplines_program_discipline_delete'
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        return super().get_queryset().select_related(
+            'educational_program__program_profile',
+            'educational_program__department',
+            'discipline',
+            'department',
+        ).filter(educational_program__is_deleted=False)
 
 
 class ProgramDisciplineDetailView(NamedDetailView):
@@ -370,11 +386,18 @@ class ProgramDisciplineDetailView(NamedDetailView):
     detail_fields = (
         ('ID', 'id'),
         ('Программа', 'educational_program'),
+        ('Код дисциплины', 'discipline_code'),
         ('Дисциплина', 'discipline.name'),
+        ('Кафедра дисциплины', 'department.short_name'),
     )
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        return super().get_queryset().select_related(
+            'educational_program__program_profile',
+            'educational_program__department',
+            'discipline',
+            'department',
+        ).filter(educational_program__is_deleted=False)
 
 
 class ProgramDisciplineCreateView(NamedCreateView):

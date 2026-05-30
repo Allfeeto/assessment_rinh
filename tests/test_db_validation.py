@@ -6,10 +6,17 @@ from django.db import connection
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
 from assessment.services import sync_assessment_item_competences
 from competencies.models import Competence, DisciplineCompetence
-from core.models import AssessmentItemType, CompetenceType, EducationLevel
+from core.models import (
+    AcademicDegree,
+    AcademicTitle,
+    AssessmentItemType,
+    CompetenceType,
+    EducationLevel,
+)
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.forms import EducationalProgramForm, ProgramProfileForm
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
+from teachers.forms import TeacherForm
 from teachers.models import Department, Teacher, TeacherProgramDiscipline
 
 
@@ -26,6 +33,8 @@ def validation_schema():
         EducationLevel,
         CompetenceType,
         AssessmentItemType,
+        AcademicDegree,
+        AcademicTitle,
         Department,
         Teacher,
         TrainingDirection,
@@ -140,3 +149,46 @@ def test_sync_assessment_item_competences_rejects_unlinked_competence(validation
 
     with pytest.raises(ValueError, match='связаны с выбранной дисциплиной'):
         sync_assessment_item_competences(item, [competence])
+
+
+def test_teacher_can_have_multiple_departments(validation_schema):
+    _, _, _, department, _ = _base_program_context()
+    second_department = Department.objects.create(
+        number='2',
+        short_name='ПМ',
+        full_name='Кафедра прикладной математики',
+    )
+    teacher = Teacher.objects.create(
+        department=department,
+        full_name='Иванов Иван Иванович',
+    )
+
+    teacher.departments.add(department, second_department)
+
+    assert set(teacher.departments.values_list('number', flat=True)) == {'1', '2'}
+    assert teacher.departments_display == 'ИС, ПМ'
+
+
+def test_teacher_form_preserves_primary_department_in_m2m(validation_schema):
+    _, _, _, department, _ = _base_program_context()
+    second_department = Department.objects.create(
+        number='2',
+        short_name='ПМ',
+        full_name='Кафедра прикладной математики',
+    )
+
+    form = TeacherForm(data={
+        'department': department.id,
+        'departments': [second_department.id],
+        'full_name': 'Петров Петр Петрович',
+        'academic_degree': '',
+        'academic_title': '',
+    })
+
+    assert form.is_valid(), form.errors
+    teacher = form.save()
+
+    assert set(teacher.departments.values_list('id', flat=True)) == {
+        department.id,
+        second_department.id,
+    }

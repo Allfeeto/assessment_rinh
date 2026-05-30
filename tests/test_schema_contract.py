@@ -68,7 +68,9 @@ def test_sql_schema_contract_parser_detects_required_objects():
         CREATE TABLE public.program_discipline (
             id integer NOT NULL,
             educational_program_id integer NOT NULL,
-            discipline_id integer NOT NULL
+            discipline_id integer NOT NULL,
+            discipline_code character varying(50),
+            department_id integer
         );
         CREATE TABLE public.competence (
             id integer NOT NULL,
@@ -89,6 +91,11 @@ def test_sql_schema_contract_parser_detects_required_objects():
             full_name text NOT NULL,
             academic_degree_id integer,
             academic_title_id integer
+        );
+        CREATE TABLE public.teacher_departments (
+            id bigint NOT NULL,
+            teacher_id integer NOT NULL,
+            department_id integer NOT NULL
         );
         CREATE TABLE public.teacher_program_discipline (
             id integer NOT NULL,
@@ -124,6 +131,12 @@ def test_sql_schema_contract_parser_detects_required_objects():
         );
 
         CREATE UNIQUE INDEX educational_program_active_unique_idx ON public.educational_program (program_profile_id, department_id, admission_year) WHERE (is_deleted = false);
+        CREATE INDEX program_disc_code_idx ON public.program_discipline (discipline_code);
+        CREATE INDEX program_disc_dept_idx ON public.program_discipline (department_id);
+        CREATE INDEX program_disc_prog_code_idx ON public.program_discipline (educational_program_id, discipline_code);
+        CREATE UNIQUE INDEX teacher_departments_teacher_department_uidx ON public.teacher_departments (teacher_id, department_id);
+        CREATE INDEX teacher_departments_teacher_idx ON public.teacher_departments (teacher_id);
+        CREATE INDEX teacher_departments_department_idx ON public.teacher_departments (department_id);
         CREATE UNIQUE INDEX uq_assessment_item_row_correct_order ON public.assessment_item_row (assessment_item_id, correct_order) WHERE (correct_order IS NOT NULL);
         CREATE UNIQUE INDEX uq_assessment_item_row_sort ON public.assessment_item_row (assessment_item_id, sort_order) WHERE (sort_order IS NOT NULL);
 

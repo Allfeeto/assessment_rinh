@@ -142,3 +142,54 @@ def test_import_existing_program_requires_confirm_and_replace_recreates_relation
         ('Новая дисциплина', 'ПК-3'),
         ('Новая дисциплина', 'ПК-4'),
     ]
+
+
+def test_import_stores_program_discipline_code_and_department(import_schema):
+    service = PlxImportService()
+    dto = _dto(
+        discipline_names=['Анализ данных'],
+        competence_codes=['ПК-1'],
+        links=[(1, 1)],
+    )
+    dto.disciplines[0].code = 'Б1.О.07'
+    dto.disciplines[0].department_code = '22'
+    dto.disciplines[0].department = DepartmentInfoDTO(
+        number='22',
+        short_name='ИСиПИ',
+        full_name='Информационных систем и прикладной информатики',
+    )
+
+    result = service.import_program(dto, replace_existing=False)
+
+    program_discipline = ProgramDiscipline.objects.select_related('department').get(
+        educational_program_id=result.created_program_id,
+        discipline__name='Анализ данных',
+    )
+    assert program_discipline.discipline_code == 'Б1.О.07'
+    assert program_discipline.department.number == '22'
+    assert program_discipline.department.short_name == 'ИСиПИ'
+
+
+def test_repeated_discipline_name_keeps_first_program_discipline_metadata(import_schema):
+    service = PlxImportService()
+    dto = _dto(
+        discipline_names=['Производственная практика', 'Производственная практика'],
+        competence_codes=['ПК-1', 'ПК-2'],
+        links=[(1, 1), (2, 2)],
+    )
+    dto.disciplines[0].code = 'Б2.В.01'
+    dto.disciplines[1].code = 'Б2.В.02'
+
+    result = service.import_program(dto, replace_existing=False)
+
+    program_disciplines = list(
+        ProgramDiscipline.objects.filter(
+            educational_program_id=result.created_program_id,
+            discipline__name='Производственная практика',
+        )
+    )
+    assert len(program_disciplines) == 1
+    assert program_disciplines[0].discipline_code == 'Б2.В.01'
+    assert DisciplineCompetence.objects.filter(
+        program_discipline=program_disciplines[0],
+    ).count() == 2

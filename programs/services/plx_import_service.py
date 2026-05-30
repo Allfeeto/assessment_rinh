@@ -19,7 +19,7 @@ from teachers.models import Department
 
 from .exceptions import PlxConflictError, PlxImportError, PlxValidationError
 from .curriculum_replacement_service import CurriculumReplacementService
-from .plx_dto import PlxProgramImportDTO
+from .plx_dto import DepartmentInfoDTO, PlxProgramImportDTO
 from .plx_mapping import normalize_key, normalize_text, PlxMapper
 from .plx_parser import PlxParser
 
@@ -242,6 +242,11 @@ class PlxImportService:
             department.save(update_fields=fields_to_update)
         return department
 
+    def _resolve_optional_department(self, source: DepartmentInfoDTO | None) -> Department | None:
+        if source is None:
+            return None
+        return self._resolve_department(source.number, source.short_name, source.full_name)
+
     def _resolve_discipline(self, name: str) -> Discipline:
         clean_name = normalize_text(name)
         if not clean_name:
@@ -270,10 +275,28 @@ class PlxImportService:
         mapping: dict[str, ProgramDiscipline] = {}
         for item in dto.disciplines:
             discipline = self._resolve_discipline(item.name)
+            discipline_department = self._resolve_optional_department(item.department)
+            if item.department_code and discipline_department is None:
+                logger.warning(
+                    'PLX discipline department not resolved: code=%s discipline_external_id=%s discipline=%s',
+                    item.department_code,
+                    item.external_id,
+                    item.name,
+                )
             program_discipline, _ = ProgramDiscipline.objects.get_or_create(
                 educational_program=program,
                 discipline=discipline,
             )
+            fields_to_update: list[str] = []
+            clean_code = normalize_text(item.code) or None
+            if clean_code and not program_discipline.discipline_code:
+                program_discipline.discipline_code = clean_code
+                fields_to_update.append('discipline_code')
+            if discipline_department and program_discipline.department_id is None:
+                program_discipline.department = discipline_department
+                fields_to_update.append('department')
+            if fields_to_update:
+                program_discipline.save(update_fields=fields_to_update)
             mapping[item.external_id] = program_discipline
         return mapping
 

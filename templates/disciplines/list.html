@@ -109,7 +109,9 @@
         <tr>
             <th>ID</th>
             <th>Образовательная программа</th>
+            <th>Код</th>
             <th>Дисциплина</th>
+            <th>Кафедра дисциплины</th>
             <th>Компетенций в матрице</th>
             <th>Заданий</th>
             {% if can_manage_disciplines %}<th>Действия</th>{% endif %}
@@ -120,7 +122,9 @@
             <tr>
                 <td>{{ pd.id }}</td>
                 <td>{{ pd.educational_program }}</td>
+                <td>{{ pd.discipline_code|default:"—" }}</td>
                 <td>{{ pd.discipline.name }}</td>
+                <td>{{ pd.department.short_name|default:"—" }}</td>
                 <td>{{ pd.competences_count }}</td>
                 <td>{{ pd.items_count }}</td>
                 {% if can_manage_disciplines %}
@@ -133,7 +137,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_disciplines %}6{% else %}5{% endif %}" class="muted">Связи дисциплин с учебными планами не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_disciplines %}8{% else %}7{% endif %}" class="muted">Связи дисциплин с учебными планами не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>

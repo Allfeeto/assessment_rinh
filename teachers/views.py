@@ -3,6 +3,7 @@ import json
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -100,7 +101,7 @@ def _build_assignment_rows(teacher, educational_program, query, user):
             educational_program=educational_program,
             educational_program__is_deleted=False,
         )
-        .select_related('discipline')
+        .select_related('discipline', 'department')
         .order_by('discipline__name')
     )
     visible_ids = _assignment_program_discipline_ids_for_user(user)
@@ -139,6 +140,8 @@ def _build_assignment_rows(teacher, educational_program, query, user):
         rows.append({
             'id': pd.id,
             'discipline_name': pd.discipline.name,
+            'discipline_code': pd.discipline_code,
+            'department': pd.department.short_name if pd.department_id else '',
             'is_assigned': bucket['is_assigned'],
             'other_teachers': ', '.join(bucket['others']) if bucket['others'] else '',
         })
@@ -157,7 +160,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         can_manage_directory = is_staff_or_superuser(self.request.user)
 
         departments_qs = Department.objects.select_related('head_teacher').order_by('number')
-        teachers_qs = Teacher.objects.select_related('department').order_by('full_name')
+        teachers_qs = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
         teacher_program_disciplines_qs = TeacherProgramDiscipline.objects.select_related(
             'teacher',
             'program_discipline__educational_program__program_profile',
@@ -174,7 +177,10 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
                 teachers_qs = teachers_qs.none()
                 teacher_program_disciplines_qs = teacher_program_disciplines_qs.none()
             else:
-                departments_qs = departments_qs.filter(pk=active_teacher.department_id)
+                departments_qs = departments_qs.filter(
+                    Q(pk=active_teacher.department_id)
+                    | Q(teachers_by_membership=active_teacher)
+                ).distinct()
                 teachers_qs = teachers_qs.filter(pk=active_teacher.pk)
                 teacher_program_disciplines_qs = teacher_program_disciplines_qs.filter(
                     teacher=active_teacher,
@@ -230,7 +236,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             self.request.user,
         )
 
-        teachers_picker_qs = Teacher.objects.select_related('department').order_by('full_name')
+        teachers_picker_qs = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
         if not can_change_active and active_teacher is not None:
             teachers_picker_qs = teachers_picker_qs.filter(pk=active_teacher.id)
 
@@ -300,12 +306,17 @@ class DepartmentDeleteView(NamedDeleteView):
 class TeacherListView(NamedListView):
     model = Teacher
     title = 'Преподаватели'
-    search_fields = ('full_name', 'department__short_name', 'user__username')
+    search_fields = (
+        'full_name',
+        'department__short_name',
+        'departments__short_name',
+        'user__username',
+    )
     list_columns = (
         ('ID', 'id'),
         ('ФИО', 'full_name'),
         ('Пользователь', 'user.username'),
-        ('Кафедра', 'department.short_name'),
+        ('Кафедры', 'departments_display'),
         ('Степень', 'academic_degree.name'),
         ('Звание', 'academic_title.name'),
     )
@@ -313,6 +324,15 @@ class TeacherListView(NamedListView):
     detail_url_name = 'teachers_teacher_detail'
     update_url_name = 'teachers_teacher_update'
     delete_url_name = 'teachers_teacher_delete'
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .select_related('department', 'user', 'academic_degree', 'academic_title')
+            .prefetch_related('departments')
+            .distinct()
+        )
 
 
 class TeacherDetailView(NamedDetailView):
@@ -325,10 +345,19 @@ class TeacherDetailView(NamedDetailView):
         ('ID', 'id'),
         ('ФИО', 'full_name'),
         ('Пользователь', 'user.username'),
-        ('Кафедра', 'department.short_name'),
+        ('Основная кафедра', 'department.short_name'),
+        ('Кафедры', 'departments_display'),
         ('Учёная степень', 'academic_degree.name'),
         ('Учёное звание', 'academic_title.name'),
     )
+
+    def get_queryset(self):
+        return super().get_queryset().select_related(
+            'department',
+            'user',
+            'academic_degree',
+            'academic_title',
+        ).prefetch_related('departments')
 
 
 class TeacherCreateView(NamedCreateView):

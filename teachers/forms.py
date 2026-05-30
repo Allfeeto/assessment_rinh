@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.permissions import is_staff_or_superuser
@@ -20,7 +21,13 @@ class DepartmentForm(forms.ModelForm):
             'Можно оставить пустым при создании кафедры и назначить позже.'
         )
         if self.instance and self.instance.pk:
-            self.fields['head_teacher'].queryset = Teacher.objects.filter(department=self.instance).order_by('full_name')
+            self.fields['head_teacher'].queryset = (
+                Teacher.objects.filter(
+                    Q(department=self.instance) | Q(departments=self.instance)
+                )
+                .distinct()
+                .order_by('full_name')
+            )
             apply_autocomplete_attrs(
                 self.fields['head_teacher'],
                 kind='teacher',
@@ -33,7 +40,13 @@ class DepartmentForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         head_teacher = cleaned_data.get('head_teacher')
-        if head_teacher and self.instance and self.instance.pk and head_teacher.department_id != self.instance.id:
+        if (
+            head_teacher
+            and self.instance
+            and self.instance.pk
+            and head_teacher.department_id != self.instance.id
+            and not head_teacher.departments.filter(pk=self.instance.id).exists()
+        ):
             self.add_error('head_teacher', 'Заведующий должен относиться к этой кафедре.')
         return cleaned_data
 
@@ -41,7 +54,14 @@ class DepartmentForm(forms.ModelForm):
 class TeacherForm(forms.ModelForm):
     class Meta:
         model = Teacher
-        fields = ('user', 'department', 'full_name', 'academic_degree', 'academic_title')
+        fields = (
+            'user',
+            'department',
+            'departments',
+            'full_name',
+            'academic_degree',
+            'academic_title',
+        )
 
     def __init__(self, *args, **kwargs):
         request_user = kwargs.pop('request_user', None)
@@ -80,10 +100,21 @@ class TeacherForm(forms.ModelForm):
         apply_autocomplete_attrs(
             self.fields['department'],
             kind='department',
-            placeholder='Введите номер или название кафедры',
+            placeholder='Введите номер или название основной кафедры',
+        )
+        self.fields['departments'].required = False
+        self.fields['departments'].queryset = Department.objects.order_by('number')
+        self.fields['departments'].help_text = (
+            'Выберите все кафедры преподавателя. Основная кафедра будет добавлена автоматически.'
         )
         self.fields['academic_degree'].queryset = self.fields['academic_degree'].queryset.order_by('name')
         self.fields['academic_title'].queryset = self.fields['academic_title'].queryset.order_by('name')
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            instance.ensure_primary_department_membership()
+        return instance
 
 
 class TeacherProgramDisciplineForm(forms.ModelForm):

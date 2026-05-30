@@ -23,7 +23,15 @@ class DepartmentAdmin(admin.ModelAdmin):
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ('id', 'full_name', 'user', 'department', 'academic_degree', 'academic_title')
+    list_display = (
+        'id',
+        'full_name',
+        'user',
+        'department',
+        'departments_display',
+        'academic_degree',
+        'academic_title',
+    )
     search_fields = (
         'full_name',
         'user__username',
@@ -31,8 +39,11 @@ class TeacherAdmin(admin.ModelAdmin):
         'user__last_name',
         'department__short_name',
         'department__number',
+        'departments__short_name',
+        'departments__number',
     )
-    list_filter = ('department', 'academic_degree', 'academic_title')
+    list_filter = ('department', 'departments', 'academic_degree', 'academic_title')
+    filter_horizontal = ('departments',)
     inlines = (TeacherProgramDisciplineInline,)
 
 

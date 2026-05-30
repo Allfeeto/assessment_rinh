@@ -61,20 +61,31 @@ class DisciplineDTO:
     external_id: str
     code: str
     name: str
+    department_code: str = ''
+    department: DepartmentInfoDTO | None = None
 
     def to_dict(self) -> dict:
         return {
             'external_id': self.external_id,
             'code': self.code,
             'name': self.name,
+            'department_code': self.department_code,
+            'department': self.department.to_dict() if self.department else None,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'DisciplineDTO':
+        department_data = data.get('department')
         return cls(
             external_id=data['external_id'],
             code=data['code'],
             name=data['name'],
+            department_code=data.get('department_code', ''),
+            department=(
+                DepartmentInfoDTO.from_dict(department_data)
+                if department_data
+                else None
+            ),
         )
 
 
@@ -169,4 +180,3 @@ class PlxProgramImportDTO:
             'competences_count': len(self.competences),
             'links_count': len(self.discipline_competence_links),
         }
-
