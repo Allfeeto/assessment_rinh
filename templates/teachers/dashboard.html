@@ -32,7 +32,9 @@
 
 <div class="panel" id="assignment-panel"
      data-panel-url="{% url 'teachers_assignments_panel' %}"
-     data-toggle-url="{% url 'teachers_assignments_toggle' %}">
+     data-toggle-url="{% url 'teachers_assignments_toggle' %}"
+     data-assignment-sort="{{ assignment_sort|default:'code' }}"
+     data-assignment-dir="{{ assignment_sort_dir|default:'asc' }}">
     <h2>Назначение преподавателей на дисциплины</h2>
 
     {% if assignment_active_teacher %}
@@ -130,6 +132,8 @@
         if (searchInput && searchInput.value.trim()) {
             params.set('assignment_q', searchInput.value.trim());
         }
+        params.set('assignment_sort', panel.dataset.assignmentSort || 'code');
+        params.set('assignment_dir', panel.dataset.assignmentDir || 'asc');
         return params;
     }
 
@@ -141,7 +145,7 @@
             .then(response => response.text())
             .then(html => {
                 tableWrap.innerHTML = html;
-                bindCheckboxes();
+                bindTableActions();
             })
             .catch(() => {});
     }
@@ -195,6 +199,26 @@
         });
     }
 
+    function bindSortButtons() {
+        tableWrap.querySelectorAll('.js-assignment-sort').forEach(button => {
+            button.addEventListener('click', () => {
+                const requestedSort = button.dataset.assignmentSort || 'code';
+                const currentSort = panel.dataset.assignmentSort || 'code';
+                const currentDir = panel.dataset.assignmentDir || 'asc';
+                panel.dataset.assignmentSort = requestedSort;
+                panel.dataset.assignmentDir = (
+                    requestedSort === currentSort && currentDir === 'asc'
+                ) ? 'desc' : 'asc';
+                reloadTable();
+            });
+        });
+    }
+
+    function bindTableActions() {
+        bindCheckboxes();
+        bindSortButtons();
+    }
+
     if (teacherSelect) {
         teacherSelect.addEventListener('change', reloadTable);
     }
@@ -210,7 +234,7 @@
             timer = setTimeout(reloadTable, 250);
         });
     }
-    bindCheckboxes();
+    bindTableActions();
 })();
 </script>
 

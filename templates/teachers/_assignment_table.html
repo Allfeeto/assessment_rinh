@@ -8,7 +8,24 @@
         <thead>
         <tr>
             <th style="width:60px;">Назначен</th>
-            <th>Дисциплина</th>
+            <th style="width:130px;">
+                <button
+                    type="button"
+                    class="table-sort js-assignment-sort{% if assignment_sort == 'code' %} active{% endif %}"
+                    data-assignment-sort="code"
+                >
+                    Код{% if assignment_sort == 'code' %} {% if assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </button>
+            </th>
+            <th>
+                <button
+                    type="button"
+                    class="table-sort js-assignment-sort{% if assignment_sort == 'discipline' %} active{% endif %}"
+                    data-assignment-sort="discipline"
+                >
+                    Дисциплина{% if assignment_sort == 'discipline' %} {% if assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </button>
+            </th>
             <th>Кафедра дисциплины</th>
             <th>Другие преподаватели</th>
             <th>Статус</th>
@@ -28,8 +45,11 @@
                         aria-label="Назначить дисциплину «{{ row.discipline_name }}»"
                     >
                 </td>
+                <td class="muted">
+                    {{ row.discipline_code|default:"—" }}
+                </td>
                 <td>
-                    {{ row.discipline_display_name|default:row.discipline_name }}
+                    {{ row.discipline_name }}
                     {% if row.is_assigned %}
                         <span class="muted" style="margin-left:6px;">— назначено</span>
                     {% endif %}

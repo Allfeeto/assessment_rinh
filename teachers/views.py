@@ -42,6 +42,41 @@ from .forms import DepartmentForm, TeacherForm, TeacherProgramDisciplineForm
 from .models import Department, Teacher, TeacherProgramDiscipline
 
 
+ASSIGNMENT_SORT_FIELDS = {'code', 'discipline'}
+ASSIGNMENT_SORT_DIRECTIONS = {'asc', 'desc'}
+
+
+def _normalize_assignment_sort(sort_by, sort_direction):
+    if sort_by not in ASSIGNMENT_SORT_FIELDS:
+        sort_by = 'code'
+    if sort_direction not in ASSIGNMENT_SORT_DIRECTIONS:
+        sort_direction = 'asc'
+    return sort_by, sort_direction
+
+
+def _assignment_sort_from_request(request):
+    return _normalize_assignment_sort(
+        request.GET.get('assignment_sort', 'code'),
+        request.GET.get('assignment_dir', 'asc'),
+    )
+
+
+def _assignment_row_group(row):
+    if row['is_assigned']:
+        return 0
+    if row['can_assign']:
+        return 1
+    return 2
+
+
+def _assignment_secondary_sort_key(row, sort_by):
+    discipline_code = row['discipline_code'] or ''
+    discipline_name = row['discipline_name'].casefold()
+    if sort_by == 'discipline':
+        return discipline_name, discipline_code, row['id']
+    return discipline_code, discipline_name, row['id']
+
+
 def _resolve_active_teacher(request):
     """
     Кто сейчас «активный преподаватель» в панели назначений.
@@ -106,16 +141,24 @@ def _program_is_visible_for_assignments(user, program_id):
     ).exists()
 
 
-def _build_assignment_rows(teacher, educational_program, query, user):
+def _build_assignment_rows(
+    teacher,
+    educational_program,
+    query,
+    user,
+    sort_by='code',
+    sort_direction='asc',
+):
     """
     Список ProgramDiscipline для активного преподавателя и выбранной программы.
     Возвращает список словарей: id, discipline_name, is_assigned (для активного teacher),
     other_teachers (строка с ФИО других назначенных).
     Сортировка: сначала уже назначенные, затем доступные для назначения,
-    затем прежний порядок по коду и названию дисциплины.
+    затем недоступные. Внутри групп сортируем по выбранному столбцу.
     """
     if educational_program is None:
         return []
+    sort_by, sort_direction = _normalize_assignment_sort(sort_by, sort_direction)
 
     program_disciplines = (
         ProgramDiscipline.objects.filter(
@@ -175,12 +218,10 @@ def _build_assignment_rows(teacher, educational_program, query, user):
         })
 
     rows.sort(
-        key=lambda row: (
-            0 if row['is_assigned'] else 1 if row['can_assign'] else 2,
-            row['discipline_code'] or '',
-            row['discipline_name'].lower(),
-        )
+        key=lambda row: _assignment_secondary_sort_key(row, sort_by),
+        reverse=sort_direction == 'desc',
     )
+    rows.sort(key=_assignment_row_group)
     return rows
 
 
@@ -272,11 +313,14 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
                 )
 
         assignment_query = self.request.GET.get('assignment_q', '').strip()
+        assignment_sort, assignment_sort_dir = _assignment_sort_from_request(self.request)
         assignment_rows = _build_assignment_rows(
             active_teacher,
             active_program,
             assignment_query,
             self.request.user,
+            assignment_sort,
+            assignment_sort_dir,
         )
 
         teachers_picker_qs = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
@@ -295,6 +339,8 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         context['assignment_active_program'] = active_program
         context['assignment_active_program_id'] = active_program.id if active_program else ''
         context['assignment_query'] = assignment_query
+        context['assignment_sort'] = assignment_sort
+        context['assignment_sort_dir'] = assignment_sort_dir
         context['assignment_rows'] = assignment_rows
         return context
 
@@ -633,7 +679,15 @@ class TeacherAssignmentPanelView(LoginRequiredMixin, View):
                     .first()
                 )
         query = request.GET.get('assignment_q', '').strip()
-        rows = _build_assignment_rows(active_teacher, active_program, query, request.user)
+        assignment_sort, assignment_sort_dir = _assignment_sort_from_request(request)
+        rows = _build_assignment_rows(
+            active_teacher,
+            active_program,
+            query,
+            request.user,
+            assignment_sort,
+            assignment_sort_dir,
+        )
         return render(
             request,
             self.template_name,
@@ -642,6 +696,8 @@ class TeacherAssignmentPanelView(LoginRequiredMixin, View):
                 'assignment_active_program': active_program,
                 'assignment_active_teacher': active_teacher,
                 'assignment_can_edit': _user_can_assign(request.user, active_teacher),
+                'assignment_sort': assignment_sort,
+                'assignment_sort_dir': assignment_sort_dir,
             },
         )
 

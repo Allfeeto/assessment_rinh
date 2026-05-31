@@ -300,6 +300,38 @@ th {
     font-size: 12px;
     letter-spacing: .3px;
 }
+.table-sort {
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: #284147;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font: inherit;
+    font-weight: 700;
+    letter-spacing: inherit;
+    text-align: left;
+    text-transform: inherit;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.table-sort:hover,
+.table-sort.active {
+    border-color: #b8d1d6;
+    background: #fff;
+    color: var(--accent);
+}
+.table-sort.active {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(26, 106, 115, .08);
+}
+.table-sort:focus-visible {
+    outline: 2px solid rgba(26, 106, 115, .32);
+    outline-offset: 2px;
+}
 .table-wrap { overflow-x: auto; }
 .muted { color: var(--muted); }
 .pagination {

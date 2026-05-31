@@ -205,10 +205,17 @@ def test_assignment_rows_keep_foreign_disciplines_visible_but_disabled(departmen
             'assignment_active_program': ctx.program,
             'assignment_rows': rows,
             'assignment_can_edit': True,
+            'assignment_sort': 'code',
+            'assignment_sort_dir': 'asc',
         },
     )
     assert f'data-program-discipline-id="{ctx.pd_ib.id}"' in html
     assert f'data-program-discipline-id="{ctx.pd_isipi.id}"' in html
+    assert 'data-assignment-sort="code"' in html
+    assert 'data-assignment-sort="discipline"' in html
+    assert '<th>Дисциплина</th>' not in html
+    assert 'Б1.О.01' in html
+    assert 'Б1.О.01 — Информационная безопасность' not in html
     assert 'Нельзя назначить преподавателя: дисциплина относится к другой кафедре.' in html
 
 
@@ -265,6 +272,77 @@ def test_assignment_rows_keep_assigned_disciplines_before_available(department_p
     assert rows[0]['id'] == assigned_foreign_last_by_code.id
     assert rows[0]['is_assigned'] is True
     assert rows[0]['can_assign'] is False
+
+
+def test_assignment_rows_sort_by_requested_column_inside_fixed_groups(department_permissions_schema):
+    ctx = _create_context()
+    available_first_by_name = ProgramDiscipline.objects.create(
+        educational_program=ctx.program,
+        discipline=Discipline.objects.create(name='Аналитические системы'),
+        discipline_code='Б1.О.99',
+        department=ctx.ib,
+    )
+    available_last_by_name = ProgramDiscipline.objects.create(
+        educational_program=ctx.program,
+        discipline=Discipline.objects.create(name='Языки программирования'),
+        discipline_code='Б1.О.00',
+        department=ctx.ib,
+    )
+    unavailable_first_by_name = ProgramDiscipline.objects.create(
+        educational_program=ctx.program,
+        discipline=Discipline.objects.create(name='Анализ чужой кафедры'),
+        discipline_code='Б1.О.01',
+        department=ctx.isipi,
+    )
+    assigned_foreign_last_by_name = ProgramDiscipline.objects.create(
+        educational_program=ctx.program,
+        discipline=Discipline.objects.create(name='Язык чужой кафедры'),
+        discipline_code='Б1.О.98',
+        department=ctx.isipi,
+    )
+    TeacherProgramDiscipline.objects.create(
+        teacher=ctx.teacher_multi,
+        program_discipline=assigned_foreign_last_by_name,
+    )
+
+    rows = _build_assignment_rows(
+        ctx.teacher_multi,
+        ctx.program,
+        '',
+        ctx.senior_ib_user,
+        sort_by='discipline',
+    )
+    row_ids = [row['id'] for row in rows]
+    available_ids = [row['id'] for row in rows if row['can_assign'] and not row['is_assigned']]
+    unavailable_ids = [row['id'] for row in rows if not row['can_assign'] and not row['is_assigned']]
+
+    assert row_ids[0] == assigned_foreign_last_by_name.id
+    assert available_ids[:3] == [
+        available_first_by_name.id,
+        ctx.pd_ib.id,
+        available_last_by_name.id,
+    ]
+    assert unavailable_ids[0] == unavailable_first_by_name.id
+
+    descending_rows = _build_assignment_rows(
+        ctx.teacher_multi,
+        ctx.program,
+        '',
+        ctx.senior_ib_user,
+        sort_by='discipline',
+        sort_direction='desc',
+    )
+    descending_available_ids = [
+        row['id']
+        for row in descending_rows
+        if row['can_assign'] and not row['is_assigned']
+    ]
+    assert descending_rows[0]['id'] == assigned_foreign_last_by_name.id
+    assert descending_available_ids[:3] == [
+        available_last_by_name.id,
+        ctx.pd_ib.id,
+        available_first_by_name.id,
+    ]
 
 
 def test_assignment_toggle_rejects_forbidden_direct_post(department_permissions_schema):
