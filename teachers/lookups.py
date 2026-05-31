@@ -9,13 +9,22 @@ from core.lookups import (
     unique_lookup_results,
     user_can_lookup_all,
 )
+from core.permissions import (
+    filter_teachers_for_assignment,
+    get_user_departments,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 
 from .models import Department, Teacher
 
 
 def lookup_department(request, query, selected_id, limit):
     queryset = Department.objects.order_by('number')
-    if not user_can_lookup_all(request.user):
+    purpose = request.GET.get('purpose')
+    if purpose in {'teacher_management', 'program_discipline_management'}:
+        queryset = get_user_departments(request.user).order_by('number')
+    elif not user_can_lookup_all(request.user):
         teacher = getattr(request.user, 'teacher_profile', None)
         queryset = (
             queryset.filter(
@@ -36,7 +45,11 @@ def lookup_department(request, query, selected_id, limit):
 
 def lookup_teacher(request, query, selected_id, limit):
     queryset = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
-    if not user_can_lookup_all(request.user):
+    if request.GET.get('purpose') == 'assignment':
+        queryset = filter_teachers_for_assignment(request.user, queryset)
+    elif is_senior_teacher(request.user) and not is_superuser_or_platform_admin(request.user):
+        queryset = filter_teachers_for_assignment(request.user, queryset)
+    elif not user_can_lookup_all(request.user):
         teacher = getattr(request.user, 'teacher_profile', None)
         queryset = queryset.filter(pk=teacher.pk) if teacher else queryset.none()
     department_id = request.GET.get('department_id')

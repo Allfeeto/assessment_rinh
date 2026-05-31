@@ -107,7 +107,9 @@
 {% if can_manage_competencies %}
     <div class="panel">
         <div class="actions">
-            <a class="btn" href="{% url 'competencies_competence_create' %}">Создать компетенцию</a>
+            {% if can_manage_competence_directory %}
+                <a class="btn" href="{% url 'competencies_competence_create' %}">Создать компетенцию</a>
+            {% endif %}
             <a class="btn" href="{% url 'competencies_discipline_competence_create' %}">Связать дисциплину и компетенцию</a>
             <a class="btn secondary" href="{% url 'competencies_competence_list' %}">Все компетенции</a>
             <a class="btn secondary" href="{% url 'competencies_discipline_competence_list' %}">Все связи матрицы</a>
@@ -127,7 +129,7 @@
             <th>Программа</th>
             <th>Связей с дисциплинами</th>
             <th>Заданий</th>
-            {% if can_manage_competencies %}<th>Действия</th>{% endif %}
+            {% if can_manage_competence_directory %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -140,7 +142,7 @@
                 <td>{{ competence.educational_program }}</td>
                 <td>{{ competence.disciplines_count }}</td>
                 <td>{{ competence.items_count }}</td>
-                {% if can_manage_competencies %}
+                {% if can_manage_competence_directory %}
                     <td>
                         <div class="actions">
                             <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
@@ -150,7 +152,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_competencies %}8{% else %}7{% endif %}" class="muted">Компетенции не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_competence_directory %}8{% else %}7{% endif %}" class="muted">Компетенции не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -194,8 +196,12 @@
                 {% if can_manage_competencies %}
                     <td>
                         <div class="actions">
-                            <a class="btn secondary" href="{% url 'competencies_discipline_competence_update' link.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'competencies_discipline_competence_delete' link.id %}">Удалить</a>
+                            {% if link.can_manage %}
+                                <a class="btn secondary" href="{% url 'competencies_discipline_competence_update' link.id %}">Изменить</a>
+                                <a class="btn danger" href="{% url 'competencies_discipline_competence_delete' link.id %}">Удалить</a>
+                            {% else %}
+                                <span class="muted">Нет прав изменения</span>
+                            {% endif %}
                         </div>
                     </td>
                 {% endif %}

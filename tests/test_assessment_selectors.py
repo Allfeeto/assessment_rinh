@@ -196,7 +196,7 @@ def test_assessment_item_form_scopes_program_disciplines_for_regular_teacher(sel
     assert list(forbidden_form.fields['program_discipline'].queryset) == []
 
 
-def test_assessment_item_form_gives_senior_teacher_global_program_discipline_scope(selector_schema):
+def test_assessment_item_form_requires_senior_teacher_department_scope(selector_schema):
     program_discipline, _item_type, _comp_a, _comp_b = _base_refs()
     other_discipline = Discipline.objects.create(name='Selector senior discipline')
     other_program_discipline = ProgramDiscipline.objects.create(
@@ -212,4 +212,4 @@ def test_assessment_item_form_gives_senior_teacher_global_program_discipline_sco
         initial={'program_discipline': other_program_discipline.id},
     )
 
-    assert list(form.fields['program_discipline'].queryset) == [other_program_discipline]
+    assert list(form.fields['program_discipline'].queryset) == []

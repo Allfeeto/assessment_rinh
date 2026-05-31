@@ -10,6 +10,7 @@ from core.lookups import (
     unique_lookup_results,
     user_can_lookup_all,
 )
+from core.permissions import filter_program_disciplines_for_assignment
 
 from .models import Discipline, ProgramDiscipline
 
@@ -114,7 +115,9 @@ def lookup_program_discipline(request, query, selected_id, limit):
         'educational_program__admission_year',
         'discipline__name',
     )
-    if not user_can_lookup_all(request.user):
+    if request.GET.get('purpose') == 'assignment':
+        queryset = filter_program_disciplines_for_assignment(request.user, queryset)
+    elif not user_can_lookup_all(request.user):
         queryset = queryset.filter(pk__in=_lookup_program_discipline_ids(request.user))
     educational_program_id = request.GET.get('educational_program_id')
     if educational_program_id:

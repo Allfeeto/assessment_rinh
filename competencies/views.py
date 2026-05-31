@@ -11,7 +11,13 @@ from assessment.selectors import (
     count_items_by_competence,
     count_items_by_program_discipline_competence,
 )
-from core.permissions import is_domain_manager
+from core.permissions import (
+    can_manage_program_discipline,
+    filter_program_disciplines_for_assignment,
+    is_domain_manager,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -193,6 +199,8 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             per_page=per_page,
         )
         discipline_competences_page = list(discipline_competences_page_obj.object_list)
+        for link in discipline_competences_page:
+            link.can_manage = can_manage_program_discipline(self.request.user, link.program_discipline)
 
         item_scope = AssessmentItem.objects.filter(
             program_discipline__educational_program__is_deleted=False,
@@ -264,6 +272,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_manage_competencies'] = can_manage_competencies
+        context['can_manage_competence_directory'] = is_superuser_or_platform_admin(self.request.user)
         return context
 
 
@@ -282,6 +291,11 @@ class CompetenceListView(NamedListView):
     detail_url_name = 'competencies_competence_detail'
     update_url_name = 'competencies_competence_update'
     delete_url_name = 'competencies_competence_delete'
+
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return is_superuser_or_platform_admin(self.request.user)
+        return super().can_use_action(action)
 
     def get_queryset(self):
         return super().get_queryset().filter(educational_program__is_deleted=False)
@@ -311,12 +325,18 @@ class CompetenceCreateView(NamedCreateView):
     title = 'Создать компетенцию'
     list_url_name = 'competencies_competence_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class CompetenceUpdateView(NamedUpdateView):
     model = Competence
     form_class = CompetenceForm
     title = 'Редактировать компетенцию'
     list_url_name = 'competencies_competence_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
     def get_queryset(self):
         return super().get_queryset().filter(educational_program__is_deleted=False)
@@ -326,6 +346,9 @@ class CompetenceDeleteView(NamedDeleteView):
     model = Competence
     title = 'Удалить компетенцию'
     list_url_name = 'competencies_competence_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
     def get_queryset(self):
         return super().get_queryset().filter(educational_program__is_deleted=False)
@@ -351,7 +374,27 @@ class DisciplineCompetenceListView(NamedListView):
     delete_url_name = 'competencies_discipline_competence_delete'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                )
+            )
+        return queryset
+
+    def can_change_object(self, obj):
+        return super().can_change_object(obj) and can_manage_program_discipline(
+            self.request.user,
+            obj.program_discipline,
+        )
+
+    def can_delete_object(self, obj):
+        return super().can_delete_object(obj) and can_manage_program_discipline(
+            self.request.user,
+            obj.program_discipline,
+        )
 
 
 class DisciplineCompetenceDetailView(NamedDetailView):
@@ -367,7 +410,15 @@ class DisciplineCompetenceDetailView(NamedDetailView):
     )
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                )
+            )
+        return queryset
 
 
 class DisciplineCompetenceCreateView(NamedCreateView):
@@ -375,6 +426,11 @@ class DisciplineCompetenceCreateView(NamedCreateView):
     form_class = DisciplineCompetenceForm
     title = 'Создать связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class DisciplineCompetenceUpdateView(NamedUpdateView):
@@ -384,7 +440,20 @@ class DisciplineCompetenceUpdateView(NamedUpdateView):
     list_url_name = 'competencies_discipline_competence_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                )
+            )
+        return queryset
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class DisciplineCompetenceDeleteView(NamedDeleteView):
@@ -393,7 +462,15 @@ class DisciplineCompetenceDeleteView(NamedDeleteView):
     list_url_name = 'competencies_discipline_competence_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                )
+            )
+        return queryset
 
 
 @login_required

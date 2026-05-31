@@ -118,7 +118,9 @@
 
         <div class="actions">
             <button class="btn" type="submit">Добавить дисциплину в учебный план</button>
-            <a class="btn secondary" href="{% url 'disciplines_discipline_create' %}">Создать новую дисциплину</a>
+            {% if can_manage_global_disciplines %}
+                <a class="btn secondary" href="{% url 'disciplines_discipline_create' %}">Создать новую дисциплину</a>
+            {% endif %}
             <a class="btn secondary" href="{% url 'disciplines_overview' %}">Общий обзор дисциплин</a>
         </div>
     </form>
@@ -147,8 +149,12 @@
                 <td>{{ pd.plan_status_label }}</td>
                 <td>
                     <div class="actions">
-                        <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
-                        <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                        {% if pd.can_manage %}
+                            <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
+                            <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                        {% else %}
+                            <span class="muted">Нет прав изменения</span>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

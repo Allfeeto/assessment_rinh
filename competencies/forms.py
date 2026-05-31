@@ -1,6 +1,12 @@
 from django import forms
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from core.permissions import (
+    can_manage_program_discipline,
+    filter_program_disciplines_for_assignment,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 from disciplines.models import ProgramDiscipline
 from programs.models import EducationalProgram
 
@@ -39,6 +45,7 @@ class DisciplineCompetenceForm(forms.ModelForm):
         fields = ('program_discipline', 'competence')
 
     def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
         selected_program_discipline_id = None
         selected_competence_id = None
@@ -57,6 +64,11 @@ class DisciplineCompetenceForm(forms.ModelForm):
             'educational_program__admission_year',
             'discipline__name',
         )
+        if self.request_user is not None:
+            base_program_discipline_qs = filter_program_disciplines_for_assignment(
+                self.request_user,
+                base_program_discipline_qs,
+            )
         self.fields['program_discipline'].queryset = autocomplete_queryset(
             base_program_discipline_qs,
             selected_program_discipline_id,
@@ -68,6 +80,7 @@ class DisciplineCompetenceForm(forms.ModelForm):
             self.fields['program_discipline'],
             kind='program_discipline',
             placeholder='Введите программу или дисциплину',
+            extra_params={'purpose': 'assignment'} if self.request_user is not None else None,
         )
 
         competence_qs = Competence.objects.none()
@@ -110,4 +123,11 @@ class DisciplineCompetenceForm(forms.ModelForm):
                 self.add_error('program_discipline', 'Нельзя менять матрицу программы из корзины.')
             if program_discipline.educational_program_id != competence.educational_program_id:
                 self.add_error('competence', 'Компетенция должна быть из того же учебного плана.')
+            if (
+                self.request_user is not None
+                and is_senior_teacher(self.request_user)
+                and not is_superuser_or_platform_admin(self.request_user)
+                and not can_manage_program_discipline(self.request_user, program_discipline)
+            ):
+                self.add_error('program_discipline', 'Нельзя изменить матрицу чужой кафедральной дисциплины.')
         return cleaned_data

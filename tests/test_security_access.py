@@ -8,7 +8,6 @@ from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
 
 import assessment_rinh.urls  # noqa: F401 - applies superuser-only admin policy
-from assessment.access import can_access_program_discipline
 from core.middleware import AuthRateLimitMiddleware
 from core.permissions import SENIOR_TEACHER_GROUP_NAME, is_domain_manager
 from core.default_lookups import lookup_auth_user
@@ -88,7 +87,7 @@ def test_senior_teacher_group_is_domain_manager_without_staff_flag():
     user = _regular_user(groups=_FakeGroups({SENIOR_TEACHER_GROUP_NAME}))
 
     assert is_domain_manager(user) is True
-    assert can_access_program_discipline(user, program_discipline_id=999) is True
+    assert user_can_lookup_all(user) is True
 
 
 def test_django_admin_requires_superuser_not_staff_only():

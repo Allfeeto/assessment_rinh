@@ -11,7 +11,7 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView
 
 from competencies.models import Competence
 from core.models import AssessmentItemType, EducationLevel
-from core.permissions import is_domain_manager
+from core.permissions import is_superuser_or_platform_admin
 from core.view_helpers import PER_PAGE_CHOICES, get_per_page, paginate_queryset
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
@@ -60,7 +60,7 @@ def _restrict_queryset_for_teacher_user(request, queryset):
 
     queryset = queryset.filter(program_discipline__educational_program__is_deleted=False)
 
-    if is_domain_manager(user):
+    if is_superuser_or_platform_admin(user):
         return queryset
 
     teacher = getattr(user, 'teacher_profile', None)
@@ -215,7 +215,7 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         # из прошлой программы, явно подмешиваем их в queryset, чтобы <option selected>
         # не пропадал из <select> и UI не «забывал» выбор.
         def _force_include(queryset, model, selected_value):
-            if not is_domain_manager(self.request.user):
+            if not is_superuser_or_platform_admin(self.request.user):
                 return queryset
             if not selected_value or not str(selected_value).isdigit():
                 return queryset
@@ -376,7 +376,7 @@ class AssessmentItemFormMixin:
 
     def _validate_teacher_scope(self, form):
         user = self.request.user
-        if not user.is_authenticated or is_domain_manager(user):
+        if not user.is_authenticated or is_superuser_or_platform_admin(user):
             return True
 
         teacher = getattr(user, 'teacher_profile', None)
@@ -504,7 +504,7 @@ class TeacherRequiredMixin(LoginRequiredMixin):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        self.has_global_scope = is_domain_manager(request.user)
+        self.has_global_scope = is_superuser_or_platform_admin(request.user)
         if self.has_global_scope:
             self.teacher = getattr(request.user, 'teacher_profile', None)
             return super().dispatch(request, *args, **kwargs)

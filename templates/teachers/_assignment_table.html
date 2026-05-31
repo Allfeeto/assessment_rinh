@@ -11,6 +11,7 @@
             <th>Дисциплина</th>
             <th>Кафедра дисциплины</th>
             <th>Другие преподаватели</th>
+            <th>Статус</th>
         </tr>
         </thead>
         <tbody>
@@ -19,10 +20,11 @@
                 <td style="text-align:center;">
                     <input
                         type="checkbox"
-                        class="js-assignment-toggle"
+                        {% if assignment_can_edit and row.can_assign %}class="js-assignment-toggle"{% endif %}
                         data-program-discipline-id="{{ row.id }}"
                         {% if row.is_assigned %}checked{% endif %}
-                        {% if not assignment_can_edit %}disabled{% endif %}
+                        {% if not assignment_can_edit or not row.can_assign %}disabled{% endif %}
+                        {% if row.cannot_assign_reason %}title="{{ row.cannot_assign_reason }}"{% endif %}
                         aria-label="Назначить дисциплину «{{ row.discipline_name }}»"
                     >
                 </td>
@@ -40,6 +42,13 @@
                 </td>
                 <td class="muted">
                     {{ row.other_teachers|default:"—" }}
+                </td>
+                <td class="muted">
+                    {% if row.can_assign %}
+                        Доступно
+                    {% else %}
+                        {{ row.cannot_assign_reason|default:"Нет прав назначения" }}
+                    {% endif %}
                 </td>
             </tr>
         {% endfor %}

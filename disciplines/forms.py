@@ -1,6 +1,12 @@
 from django import forms
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
+from core.permissions import (
+    can_manage_program_discipline,
+    get_user_departments,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 from programs.models import EducationalProgram
 from teachers.models import Department
 
@@ -19,6 +25,7 @@ class ProgramDisciplineForm(forms.ModelForm):
         fields = ('educational_program', 'discipline', 'discipline_code', 'department', 'is_active_in_plan')
 
     def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
         selected_program_id = None
         selected_discipline_id = None
@@ -52,6 +59,14 @@ class ProgramDisciplineForm(forms.ModelForm):
         )
 
         base_department_qs = Department.objects.order_by('number')
+        department_extra_params = None
+        if (
+            self.request_user is not None
+            and is_senior_teacher(self.request_user)
+            and not is_superuser_or_platform_admin(self.request_user)
+        ):
+            base_department_qs = get_user_departments(self.request_user).order_by('number')
+            department_extra_params = {'purpose': 'program_discipline_management'}
         self.fields['department'].required = False
         self.fields['department'].queryset = autocomplete_queryset(
             base_department_qs,
@@ -61,7 +76,38 @@ class ProgramDisciplineForm(forms.ModelForm):
             self.fields['department'],
             kind='department',
             placeholder='Введите номер или название кафедры дисциплины',
+            extra_params=department_extra_params,
         )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.request_user is None or is_superuser_or_platform_admin(self.request_user):
+            return cleaned_data
+
+        if not is_senior_teacher(self.request_user):
+            self.add_error(None, 'Недостаточно прав для изменения дисциплины учебного плана.')
+            return cleaned_data
+
+        user_departments = get_user_departments(self.request_user)
+        user_department_ids = set(user_departments.values_list('id', flat=True))
+        if not user_department_ids:
+            self.add_error(None, 'Для вашей учётной записи не указаны кафедры управления.')
+            return cleaned_data
+
+        if self.instance and self.instance.pk and not can_manage_program_discipline(
+            self.request_user,
+            self.instance,
+        ):
+            self.add_error(None, 'Нельзя изменить дисциплину: она относится к другой кафедре.')
+            return cleaned_data
+
+        department = cleaned_data.get('department')
+        if not department:
+            self.add_error('department', 'Для изменения старшим преподавателем у дисциплины должна быть указана кафедра.')
+        elif department.id not in user_department_ids:
+            self.add_error('department', 'Нельзя изменить дисциплину: выбрана чужая кафедра.')
+
+        return cleaned_data
 
 
 class ProgramDisciplineManageForm(forms.Form):
@@ -87,6 +133,7 @@ class ProgramDisciplineManageForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
 
         selected_program_id = None
@@ -124,6 +171,14 @@ class ProgramDisciplineManageForm(forms.Form):
         )
 
         base_department_qs = Department.objects.order_by('number')
+        department_extra_params = None
+        if (
+            self.request_user is not None
+            and is_senior_teacher(self.request_user)
+            and not is_superuser_or_platform_admin(self.request_user)
+        ):
+            base_department_qs = get_user_departments(self.request_user).order_by('number')
+            department_extra_params = {'purpose': 'program_discipline_management'}
         self.fields['department'].queryset = autocomplete_queryset(
             base_department_qs,
             selected_department_id,
@@ -132,6 +187,7 @@ class ProgramDisciplineManageForm(forms.Form):
             self.fields['department'],
             kind='department',
             placeholder='Введите номер или название кафедры дисциплины',
+            extra_params=department_extra_params,
         )
 
     def clean(self):
@@ -150,5 +206,21 @@ class ProgramDisciplineManageForm(forms.Form):
                 'discipline',
                 'Эта дисциплина уже добавлена в выбранный учебный план.',
             )
+
+        if self.request_user is not None and not is_superuser_or_platform_admin(self.request_user):
+            if not is_senior_teacher(self.request_user):
+                self.add_error(None, 'Недостаточно прав для добавления дисциплины учебного плана.')
+                return cleaned_data
+
+            user_department_ids = set(
+                get_user_departments(self.request_user).values_list('id', flat=True)
+            )
+            department = cleaned_data.get('department')
+            if not user_department_ids:
+                self.add_error(None, 'Для вашей учётной записи не указаны кафедры управления.')
+            elif not department:
+                self.add_error('department', 'Для добавления старшим преподавателем у дисциплины должна быть указана кафедра.')
+            elif department.id not in user_department_ids:
+                self.add_error('department', 'Нельзя добавить дисциплину в выбранную кафедру.')
 
         return cleaned_data

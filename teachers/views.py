@@ -11,7 +11,19 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from assessment.access import allowed_program_discipline_ids_for_user
-from core.permissions import can_manage_teacher_assignments, is_staff_or_superuser
+from core.permissions import (
+    assignment_denial_reason,
+    can_assign_teacher_to_program_discipline,
+    can_manage_teacher,
+    can_manage_teacher_assignments,
+    filter_program_disciplines_for_assignment,
+    filter_teachers_for_assignment,
+    get_assignment_availability,
+    get_user_departments,
+    is_senior_teacher,
+    is_staff_or_superuser,
+    is_superuser_or_platform_admin,
+)
 from core.view_helpers import (
     PER_PAGE_CHOICES,
     NamedCreateView,
@@ -42,8 +54,12 @@ def _resolve_active_teacher(request):
     can_change = can_manage_teacher_assignments(user)
 
     requested_id = request.GET.get('teacher') or request.POST.get('teacher')
+    available_teachers = Teacher.objects.all()
+    if can_change:
+        available_teachers = filter_teachers_for_assignment(user, available_teachers)
+
     if can_change and requested_id and str(requested_id).isdigit():
-        teacher = Teacher.objects.filter(pk=int(requested_id)).first()
+        teacher = available_teachers.filter(pk=int(requested_id)).first()
         if teacher is not None:
             return teacher, True
 
@@ -51,7 +67,7 @@ def _resolve_active_teacher(request):
         return profile, can_change
 
     if can_change:
-        teacher = Teacher.objects.order_by('full_name').first()
+        teacher = available_teachers.order_by('full_name').first()
         return teacher, True
 
     return None, False
@@ -61,6 +77,10 @@ def _user_can_assign(user, teacher):
     """Может ли пользователь назначать/снимать активного преподавателя."""
     if not user.is_authenticated or teacher is None:
         return False
+    if is_superuser_or_platform_admin(user):
+        return True
+    if can_manage_teacher_assignments(user) and is_senior_teacher(user):
+        return can_manage_teacher(user, teacher)
     return can_manage_teacher_assignments(user)
 
 
@@ -91,7 +111,8 @@ def _build_assignment_rows(teacher, educational_program, query, user):
     Список ProgramDiscipline для активного преподавателя и выбранной программы.
     Возвращает список словарей: id, discipline_name, is_assigned (для активного teacher),
     other_teachers (строка с ФИО других назначенных).
-    Сортировка: сначала назначенные, затем по алфавиту.
+    Сортировка: сначала уже назначенные, затем доступные для назначения,
+    затем прежний порядок по коду и названию дисциплины.
     """
     if educational_program is None:
         return []
@@ -122,7 +143,7 @@ def _build_assignment_rows(teacher, educational_program, query, user):
 
     assignments = TeacherProgramDiscipline.objects.filter(
         program_discipline_id__in=pd_ids,
-    ).select_related('teacher')
+    ).select_related('teacher').prefetch_related('teacher__departments')
     if not can_manage_teacher_assignments(user):
         assignments = assignments.filter(teacher=teacher)
 
@@ -134,10 +155,12 @@ def _build_assignment_rows(teacher, educational_program, query, user):
         else:
             bucket['others'].append(link.teacher.full_name)
 
+    availability = get_assignment_availability(user, teacher, program_disciplines)
     rows = []
     for pd in program_disciplines:
         bucket = by_pd[pd.id]
         bucket['others'].sort()
+        row_availability = availability.get(pd.id, {})
         rows.append({
             'id': pd.id,
             'discipline_name': pd.discipline.name,
@@ -147,9 +170,17 @@ def _build_assignment_rows(teacher, educational_program, query, user):
             'is_active_in_plan': pd.is_active_in_plan,
             'is_assigned': bucket['is_assigned'],
             'other_teachers': ', '.join(bucket['others']) if bucket['others'] else '',
+            'can_assign': bool(row_availability.get('can_assign')),
+            'cannot_assign_reason': row_availability.get('cannot_assign_reason', ''),
         })
 
-    rows.sort(key=lambda row: (0 if row['is_assigned'] else 1, row['discipline_code'] or '', row['discipline_name'].lower()))
+    rows.sort(
+        key=lambda row: (
+            0 if row['is_assigned'] else 1 if row['can_assign'] else 2,
+            row['discipline_code'] or '',
+            row['discipline_name'].lower(),
+        )
+    )
     return rows
 
 
@@ -174,7 +205,16 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile__code',
             'program_discipline__discipline__name',
         )
-        if not can_manage_directory:
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            teachers_qs = filter_teachers_for_assignment(self.request.user, teachers_qs)
+            departments_qs = departments_qs.filter(pk__in=get_user_departments(self.request.user))
+            teacher_program_disciplines_qs = teacher_program_disciplines_qs.filter(
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                )
+            )
+        elif not can_manage_directory:
             if active_teacher is None:
                 departments_qs = departments_qs.none()
                 teachers_qs = teachers_qs.none()
@@ -240,13 +280,17 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         )
 
         teachers_picker_qs = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
-        if not can_change_active and active_teacher is not None:
+        if can_change_active:
+            teachers_picker_qs = filter_teachers_for_assignment(self.request.user, teachers_picker_qs)
+        elif active_teacher is not None:
             teachers_picker_qs = teachers_picker_qs.filter(pk=active_teacher.id)
 
         context['assignment_active_teacher'] = active_teacher
         context['assignment_can_change_teacher'] = can_change_active
         context['assignment_can_edit'] = _user_can_assign(self.request.user, active_teacher)
         context['can_manage_teacher_directory'] = can_manage_directory
+        context['can_manage_departments'] = is_superuser_or_platform_admin(self.request.user)
+        context['can_delete_teachers'] = is_superuser_or_platform_admin(self.request.user)
         context['assignment_teachers'] = teachers_picker_qs
         context['assignment_active_program'] = active_program
         context['assignment_active_program_id'] = active_program.id if active_program else ''
@@ -270,6 +314,11 @@ class DepartmentListView(NamedListView):
     update_url_name = 'teachers_department_update'
     delete_url_name = 'teachers_department_delete'
 
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return is_superuser_or_platform_admin(self.request.user)
+        return super().can_use_action(action)
+
 
 class DepartmentDetailView(NamedDetailView):
     model = Department
@@ -292,6 +341,9 @@ class DepartmentCreateView(NamedCreateView):
     title = 'Создать кафедру'
     list_url_name = 'teachers_department_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class DepartmentUpdateView(NamedUpdateView):
     model = Department
@@ -299,11 +351,17 @@ class DepartmentUpdateView(NamedUpdateView):
     title = 'Редактировать кафедру'
     list_url_name = 'teachers_department_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class DepartmentDeleteView(NamedDeleteView):
     model = Department
     title = 'Удалить кафедру'
     list_url_name = 'teachers_department_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 class TeacherListView(NamedListView):
@@ -329,13 +387,22 @@ class TeacherListView(NamedListView):
     delete_url_name = 'teachers_teacher_delete'
 
     def get_queryset(self):
-        return (
+        queryset = (
             super()
             .get_queryset()
             .select_related('department', 'user', 'academic_degree', 'academic_title')
             .prefetch_related('departments')
             .distinct()
         )
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_teachers_for_assignment(self.request.user, queryset)
+        return queryset
+
+    def can_change_object(self, obj):
+        return super().can_change_object(obj) and can_manage_teacher(self.request.user, obj)
+
+    def can_delete_object(self, obj):
+        return super().can_delete_object(obj) and is_superuser_or_platform_admin(self.request.user)
 
 
 class TeacherDetailView(NamedDetailView):
@@ -355,12 +422,15 @@ class TeacherDetailView(NamedDetailView):
     )
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
+        queryset = super().get_queryset().select_related(
             'department',
             'user',
             'academic_degree',
             'academic_title',
         ).prefetch_related('departments')
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_teachers_for_assignment(self.request.user, queryset)
+        return queryset
 
 
 class TeacherCreateView(NamedCreateView):
@@ -386,11 +456,26 @@ class TeacherUpdateView(NamedUpdateView):
         kwargs['request_user'] = self.request.user
         return kwargs
 
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related('department').prefetch_related('departments')
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_teachers_for_assignment(self.request.user, queryset)
+        return queryset
+
 
 class TeacherDeleteView(NamedDeleteView):
     model = Teacher
     title = 'Удалить преподавателя'
     list_url_name = 'teachers_teacher_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related('department').prefetch_related('departments')
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_teachers_for_assignment(self.request.user, queryset)
+        return queryset
 
 
 class TeacherProgramDisciplineListView(NamedListView):
@@ -420,7 +505,29 @@ class TeacherProgramDisciplineListView(NamedListView):
     delete_url_name = 'teachers_teacher_program_discipline_delete'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                teacher__in=filter_teachers_for_assignment(self.request.user, Teacher.objects.all()),
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                ),
+            )
+        return queryset
+
+    def can_change_object(self, obj):
+        return (
+            super().can_change_object(obj)
+            and can_assign_teacher_to_program_discipline(
+                self.request.user,
+                obj.teacher,
+                obj.program_discipline,
+            )
+        )
+
+    def can_delete_object(self, obj):
+        return self.can_change_object(obj)
 
 
 class TeacherProgramDisciplineDetailView(NamedDetailView):
@@ -437,7 +544,16 @@ class TeacherProgramDisciplineDetailView(NamedDetailView):
     )
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                teacher__in=filter_teachers_for_assignment(self.request.user, Teacher.objects.all()),
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                ),
+            )
+        return queryset
 
 
 class TeacherProgramDisciplineCreateView(NamedCreateView):
@@ -445,6 +561,11 @@ class TeacherProgramDisciplineCreateView(NamedCreateView):
     form_class = TeacherProgramDisciplineForm
     title = 'Назначить преподавателю дисциплину учебного плана'
     list_url_name = 'teachers_teacher_program_discipline_list'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class TeacherProgramDisciplineUpdateView(NamedUpdateView):
@@ -454,7 +575,21 @@ class TeacherProgramDisciplineUpdateView(NamedUpdateView):
     list_url_name = 'teachers_teacher_program_discipline_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                teacher__in=filter_teachers_for_assignment(self.request.user, Teacher.objects.all()),
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                ),
+            )
+        return queryset
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class TeacherProgramDisciplineDeleteView(NamedDeleteView):
@@ -463,7 +598,16 @@ class TeacherProgramDisciplineDeleteView(NamedDeleteView):
     list_url_name = 'teachers_teacher_program_discipline_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = queryset.filter(
+                teacher__in=filter_teachers_for_assignment(self.request.user, Teacher.objects.all()),
+                program_discipline__in=filter_program_disciplines_for_assignment(
+                    self.request.user,
+                    ProgramDiscipline.objects.all(),
+                ),
+            )
+        return queryset
 
 
 class TeacherAssignmentPanelView(LoginRequiredMixin, View):
@@ -541,11 +685,21 @@ class TeacherAssignmentToggleView(LoginRequiredMixin, View):
         if not _user_can_assign(request.user, teacher):
             raise PermissionDenied('Недостаточно прав для управления назначениями преподавателей.')
 
-        if not ProgramDiscipline.objects.filter(
+        program_discipline = ProgramDiscipline.objects.select_related('department', 'discipline').filter(
             pk=program_discipline_id,
             educational_program__is_deleted=False,
-        ).exists():
+        ).first()
+        if program_discipline is None:
             return HttpResponseBadRequest('Дисциплина учебного плана не найдена.')
+
+        if not can_assign_teacher_to_program_discipline(request.user, teacher, program_discipline):
+            return JsonResponse(
+                {
+                    'ok': False,
+                    'error': assignment_denial_reason(request.user, teacher, program_discipline),
+                },
+                status=403,
+            )
 
         with transaction.atomic():
             if assign:

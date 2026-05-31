@@ -176,19 +176,19 @@ def test_active_querysets_and_teacher_scope_exclude_trash_by_default(trash_schem
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'])
-def test_senior_teacher_group_has_global_application_scope_without_teacher_profile(trash_schema):
+def test_senior_teacher_group_without_teacher_profile_has_no_department_scope(trash_schema):
     data = _program_bundle()
     senior = User.objects.create_user(username='senior-without-profile')
     senior.groups.add(Group.objects.create(name=SENIOR_TEACHER_GROUP_NAME))
 
-    assert allowed_program_discipline_ids_for_user(senior) == [data['program_discipline'].id]
-    assert can_access_program_discipline(senior, data['program_discipline'].id) is True
+    assert allowed_program_discipline_ids_for_user(senior) == []
+    assert can_access_program_discipline(senior, data['program_discipline'].id) is False
 
     client = Client()
     client.force_login(senior)
     response = client.get(reverse('assessment_workspace'))
 
-    assert response.status_code == 200
+    assert response.status_code == 302
 
 
 def test_export_for_trash_program_is_blocked(trash_schema):

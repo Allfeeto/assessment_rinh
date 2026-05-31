@@ -120,7 +120,6 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
         context['detail_url_name'] = self.detail_url_name
         context['update_url_name'] = self.update_url_name if can_change else ''
         context['delete_url_name'] = self.delete_url_name if can_delete else ''
-        context['has_row_actions'] = can_view_detail or can_change or can_delete
         context['per_page_choices'] = self.per_page_choices
         context['selected_per_page'] = self.get_paginate_by(context.get('object_list'))
 
@@ -130,12 +129,25 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
                 {
                     'object': obj,
                     'values': [resolve_attr(obj, column_path) for _, column_path in self.list_columns],
+                    'can_view_detail': can_view_detail,
+                    'can_change': bool(self.update_url_name and can_change and self.can_change_object(obj)),
+                    'can_delete': bool(self.delete_url_name and can_delete and self.can_delete_object(obj)),
                 }
             )
         context['rows'] = rows
+        context['has_row_actions'] = can_view_detail or any(
+            row['can_view_detail'] or row['can_change'] or row['can_delete']
+            for row in rows
+        )
 
         context['query_params'] = query_params_without(self.request, 'page')
         return context
+
+    def can_change_object(self, obj):
+        return True
+
+    def can_delete_object(self, obj):
+        return True
 
 
 class NamedDetailView(StaffOrModelPermissionRequiredMixin, DetailView):

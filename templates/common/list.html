@@ -52,13 +52,13 @@
                 {% if has_row_actions %}
                     <td>
                         <div class="actions">
-                            {% if detail_url_name %}
+                            {% if row.can_view_detail %}
                                 <a class="btn secondary" href="{% url detail_url_name row.object.pk %}">Открыть</a>
                             {% endif %}
-                            {% if update_url_name %}
+                            {% if row.can_change %}
                                 <a class="btn secondary" href="{% url update_url_name row.object.pk %}">Изменить</a>
                             {% endif %}
-                            {% if delete_url_name %}
+                            {% if row.can_delete %}
                                 <a class="btn danger" href="{% url delete_url_name row.object.pk %}">Удалить</a>
                             {% endif %}
                         </div>

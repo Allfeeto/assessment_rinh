@@ -18,7 +18,9 @@
     </form>
     {% if can_manage_teacher_directory %}
         <div class="actions">
-            <a class="btn" href="{% url 'teachers_department_create' %}">Создать кафедру</a>
+            {% if can_manage_departments %}
+                <a class="btn" href="{% url 'teachers_department_create' %}">Создать кафедру</a>
+            {% endif %}
             <a class="btn" href="{% url 'teachers_teacher_create' %}">Создать преподавателя</a>
             <a class="btn" href="{% url 'teachers_teacher_program_discipline_create' %}">Назначить дисциплину преподавателю</a>
             <a class="btn secondary" href="{% url 'teachers_department_list' %}">Все кафедры</a>
@@ -168,7 +170,11 @@
         })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('toggle failed: ' + response.status);
+                    return response.json()
+                        .catch(() => ({}))
+                        .then(data => {
+                            throw new Error(data.error || 'Не удалось изменить назначение.');
+                        });
                 }
                 return response.json();
             })
@@ -176,9 +182,10 @@
                 // Перерисуем таблицу, чтобы назначенные сразу всплыли наверх.
                 reloadTable();
             })
-            .catch(() => {
+            .catch(error => {
                 checkbox.checked = !checkbox.checked;
                 checkbox.disabled = false;
+                alert(error.message || 'Не удалось изменить назначение. Проверьте права на преподавателя и дисциплину.');
             });
     }
 
@@ -216,7 +223,7 @@
             <th>Номер</th>
             <th>Краткое название</th>
             <th>Заведующий</th>
-            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
+            {% if can_manage_departments %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -226,7 +233,7 @@
                 <td>{{ department.number }}</td>
                 <td>{{ department.short_name }}</td>
                 <td>{{ department.head_teacher.full_name|default:"—" }}</td>
-                {% if can_manage_teacher_directory %}
+                {% if can_manage_departments %}
                     <td>
                         <div class="actions">
                             <a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a>
@@ -236,7 +243,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_teacher_directory %}5{% else %}4{% endif %}" class="muted">Кафедры пока не добавлены.</td></tr>
+            <tr><td colspan="{% if can_manage_departments %}5{% else %}4{% endif %}" class="muted">Кафедры пока не добавлены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -277,7 +284,9 @@
                     <td>
                         <div class="actions">
                             <a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
+                            {% if can_delete_teachers %}
+                                <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
+                            {% endif %}
                         </div>
                     </td>
                 {% endif %}

@@ -7,7 +7,7 @@ from django.views.generic import TemplateView
 from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
 from competencies.models import Competence, DisciplineCompetence
-from core.permissions import is_domain_manager
+from core.permissions import is_domain_manager, is_superuser_or_platform_admin
 from core.models import EducationLevel
 from core.view_helpers import (
     PER_PAGE_CHOICES,
@@ -43,7 +43,7 @@ class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     raise_exception = True
 
     def test_func(self):
-        return is_domain_manager(self.request.user)
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 def _trash_programs_for_user(user):
@@ -123,7 +123,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_import_plx'] = can_manage_programs
-        context['can_manage_programs'] = can_manage_programs
+        context['can_manage_programs'] = is_superuser_or_platform_admin(self.request.user)
         context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
         context['import_error'] = kwargs.get('import_error')
         context['import_result'] = kwargs.get('import_result')
@@ -381,6 +381,11 @@ class TrainingDirectionListView(NamedListView):
     update_url_name = 'programs_direction_update'
     delete_url_name = 'programs_direction_delete'
 
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return is_superuser_or_platform_admin(self.request.user)
+        return super().can_use_action(action)
+
 
 class TrainingDirectionDetailView(NamedDetailView):
     model = TrainingDirection
@@ -402,6 +407,9 @@ class TrainingDirectionCreateView(NamedCreateView):
     title = 'Создать направление'
     list_url_name = 'programs_direction_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class TrainingDirectionUpdateView(NamedUpdateView):
     model = TrainingDirection
@@ -409,11 +417,17 @@ class TrainingDirectionUpdateView(NamedUpdateView):
     title = 'Редактировать направление'
     list_url_name = 'programs_direction_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class TrainingDirectionDeleteView(NamedDeleteView):
     model = TrainingDirection
     title = 'Удалить направление'
     list_url_name = 'programs_direction_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 class ProgramProfileListView(NamedListView):
@@ -430,6 +444,11 @@ class ProgramProfileListView(NamedListView):
     detail_url_name = 'programs_profile_detail'
     update_url_name = 'programs_profile_update'
     delete_url_name = 'programs_profile_delete'
+
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return is_superuser_or_platform_admin(self.request.user)
+        return super().can_use_action(action)
 
 
 class ProgramProfileDetailView(NamedDetailView):
@@ -452,6 +471,9 @@ class ProgramProfileCreateView(NamedCreateView):
     title = 'Создать профиль'
     list_url_name = 'programs_profile_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class ProgramProfileUpdateView(NamedUpdateView):
     model = ProgramProfile
@@ -459,11 +481,17 @@ class ProgramProfileUpdateView(NamedUpdateView):
     title = 'Редактировать профиль'
     list_url_name = 'programs_profile_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class ProgramProfileDeleteView(NamedDeleteView):
     model = ProgramProfile
     title = 'Удалить профиль'
     list_url_name = 'programs_profile_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 class EducationalProgramListView(NamedListView):
@@ -484,6 +512,11 @@ class EducationalProgramListView(NamedListView):
     detail_url_name = 'programs_educational_program_detail'
     update_url_name = 'programs_educational_program_update'
     delete_url_name = 'programs_educational_program_delete'
+
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return is_superuser_or_platform_admin(self.request.user)
+        return super().can_use_action(action)
 
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
@@ -514,12 +547,18 @@ class EducationalProgramCreateView(NamedCreateView):
     title = 'Создать образовательную программу'
     list_url_name = 'programs_educational_program_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class EducationalProgramUpdateView(NamedUpdateView):
     model = EducationalProgram
     form_class = EducationalProgramForm
     title = 'Редактировать образовательную программу'
     list_url_name = 'programs_educational_program_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
@@ -530,6 +569,9 @@ class EducationalProgramDeleteView(NamedDeleteView):
     template_name = 'programs/confirm_move_to_trash.html'
     title = 'Переместить образовательную программу в корзину'
     list_url_name = 'programs_educational_program_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
@@ -614,7 +656,7 @@ class ProgramTrashListView(LoginRequiredMixin, TemplateView):
                 'per_page_choices': PER_PAGE_CHOICES,
                 'selected_per_page': per_page,
                 'query_params': query_params_without(self.request, 'page'),
-                'can_manage_trash': is_domain_manager(self.request.user),
+                'can_manage_trash': is_superuser_or_platform_admin(self.request.user),
             }
         )
         return context
@@ -663,7 +705,7 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
                 'assessment_items_count': AssessmentItem.objects.filter(
                     program_discipline__educational_program=program
                 ).count(),
-                'can_manage_trash': is_domain_manager(self.request.user),
+                'can_manage_trash': is_superuser_or_platform_admin(self.request.user),
             }
         )
         return context

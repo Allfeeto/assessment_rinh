@@ -1,4 +1,5 @@
 import pytest
+from django import forms
 from django.contrib.auth.models import Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
@@ -194,6 +195,25 @@ def test_teacher_form_preserves_primary_department_in_m2m(validation_schema):
         department.id,
         second_department.id,
     }
+
+
+def test_teacher_form_departments_render_as_checkboxes(validation_schema):
+    _, _, _, department, _ = _base_program_context()
+    Department.objects.create(
+        number='2',
+        short_name='ПМ',
+        full_name='Кафедра прикладной математики',
+    )
+
+    form = TeacherForm(initial={'department': department.id})
+    rendered = form['departments'].as_widget()
+
+    assert isinstance(form.fields['departments'].widget, forms.CheckboxSelectMultiple)
+    assert 'type="checkbox"' in rendered
+    assert 'choice-list' in rendered
+    assert '<div id="id_departments" class="choice-list">' in rendered
+    assert 'type="checkbox" name="departments" value="' in rendered
+    assert '<select' not in rendered
 
 
 def test_program_discipline_lookup_label_includes_plan_code(validation_schema):

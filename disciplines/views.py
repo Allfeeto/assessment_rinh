@@ -10,7 +10,13 @@ from django.views.generic import TemplateView
 
 from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
-from core.permissions import is_domain_manager
+from core.permissions import (
+    can_manage_program_discipline,
+    filter_program_disciplines_for_assignment,
+    is_domain_manager,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 from programs.models import EducationalProgram
 
 from core.view_helpers import (
@@ -108,6 +114,11 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
             page_param='pd_page',
             per_page=per_page,
         )
+        for program_discipline in pd_page_obj.object_list:
+            program_discipline.can_manage = can_manage_program_discipline(
+                request.user,
+                program_discipline,
+            )
 
         params = request.GET.copy()
         params.pop('pd_page', None)
@@ -126,16 +137,17 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
             'pd_query_params': params.urlencode(),
             'per_page_choices': PER_PAGE_CHOICES,
             'selected_per_page': per_page,
+            'can_manage_global_disciplines': is_superuser_or_platform_admin(request.user),
         }
 
     def get(self, request, *args, **kwargs):
         selected_program_id = self._get_selected_program_id(request)
         initial = {'educational_program': selected_program_id} if selected_program_id else None
-        form = ProgramDisciplineManageForm(initial=initial)
+        form = ProgramDisciplineManageForm(initial=initial, request_user=request.user)
         return render(request, self.template_name, self._build_context(request, form))
 
     def post(self, request, *args, **kwargs):
-        form = ProgramDisciplineManageForm(request.POST)
+        form = ProgramDisciplineManageForm(request.POST, request_user=request.user)
 
         if form.is_valid():
             educational_program = form.cleaned_data['educational_program']
@@ -272,6 +284,11 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             page_param='pd_page',
             per_page=per_page,
         )
+        for program_discipline in pd_page_obj.object_list:
+            program_discipline.can_manage = can_manage_program_discipline(
+                self.request.user,
+                program_discipline,
+            )
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
@@ -309,6 +326,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_manage_disciplines'] = can_manage_disciplines
+        context['can_manage_global_disciplines'] = is_superuser_or_platform_admin(self.request.user)
         return context
 
 
@@ -321,6 +339,9 @@ class DisciplineListView(NamedListView):
     detail_url_name = 'disciplines_discipline_detail'
     update_url_name = 'disciplines_discipline_update'
     delete_url_name = 'disciplines_discipline_delete'
+
+    def can_use_action(self, action):
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 class DisciplineDetailView(NamedDetailView):
@@ -338,6 +359,9 @@ class DisciplineCreateView(NamedCreateView):
     title = 'Создать дисциплину'
     list_url_name = 'disciplines_discipline_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class DisciplineUpdateView(NamedUpdateView):
     model = Discipline
@@ -345,11 +369,17 @@ class DisciplineUpdateView(NamedUpdateView):
     title = 'Редактировать дисциплину'
     list_url_name = 'disciplines_discipline_list'
 
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
+
 
 class DisciplineDeleteView(NamedDeleteView):
     model = Discipline
     title = 'Удалить дисциплину'
     list_url_name = 'disciplines_discipline_list'
+
+    def has_permission(self):
+        return is_superuser_or_platform_admin(self.request.user)
 
 
 class ProgramDisciplineListView(NamedListView):
@@ -385,6 +415,12 @@ class ProgramDisciplineListView(NamedListView):
             'department',
         ).filter(educational_program__is_deleted=False)
 
+    def can_change_object(self, obj):
+        return super().can_change_object(obj) and can_manage_program_discipline(self.request.user, obj)
+
+    def can_delete_object(self, obj):
+        return super().can_delete_object(obj) and can_manage_program_discipline(self.request.user, obj)
+
 
 class ProgramDisciplineDetailView(NamedDetailView):
     model = ProgramDiscipline
@@ -416,6 +452,11 @@ class ProgramDisciplineCreateView(NamedCreateView):
     title = 'Создать дисциплину учебного плана'
     list_url_name = 'disciplines_program_discipline_list'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
 
 class ProgramDisciplineUpdateView(NamedUpdateView):
     model = ProgramDiscipline
@@ -424,7 +465,15 @@ class ProgramDisciplineUpdateView(NamedUpdateView):
     list_url_name = 'disciplines_program_discipline_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_program_disciplines_for_assignment(self.request.user, queryset)
+        return queryset
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class ProgramDisciplineDeleteView(NamedDeleteView):
@@ -433,4 +482,7 @@ class ProgramDisciplineDeleteView(NamedDeleteView):
     list_url_name = 'disciplines_program_discipline_list'
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+            queryset = filter_program_disciplines_for_assignment(self.request.user, queryset)
+        return queryset

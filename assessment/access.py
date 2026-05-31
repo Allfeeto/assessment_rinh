@@ -1,5 +1,9 @@
 from disciplines.models import ProgramDiscipline
-from core.permissions import is_domain_manager
+from core.permissions import (
+    filter_program_disciplines_for_assignment,
+    is_senior_teacher,
+    is_superuser_or_platform_admin,
+)
 
 
 def program_discipline_queryset_for_user(user, *, include_deleted=False, deleted_only=False):
@@ -12,8 +16,11 @@ def program_discipline_queryset_for_user(user, *, include_deleted=False, deleted
     if not user.is_authenticated:
         return queryset.none()
 
-    if is_domain_manager(user):
+    if is_superuser_or_platform_admin(user):
         return queryset
+
+    if is_senior_teacher(user):
+        return filter_program_disciplines_for_assignment(user, queryset)
 
     teacher = getattr(user, 'teacher_profile', None)
     if not teacher:
@@ -41,7 +48,7 @@ def can_access_program_discipline(user, program_discipline_id, *, allow_staff=Fa
     if not user.is_authenticated:
         return False
 
-    if is_domain_manager(user):
+    if is_superuser_or_platform_admin(user):
         return True
 
     return int(program_discipline_id) in set(allowed_program_discipline_ids_for_user(user))

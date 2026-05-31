@@ -45,7 +45,9 @@
 {% if can_manage_disciplines %}
     <div class="panel">
         <div class="actions">
-            <a class="btn" href="{% url 'disciplines_discipline_create' %}">Создать дисциплину</a>
+            {% if can_manage_global_disciplines %}
+                <a class="btn" href="{% url 'disciplines_discipline_create' %}">Создать дисциплину</a>
+            {% endif %}
             <a class="btn" href="{% url 'disciplines_program_discipline_create' %}">Добавить дисциплину в учебный план</a>
             <a class="btn secondary" href="{% url 'disciplines_discipline_list' %}">Справочник дисциплин</a>
             <a class="btn secondary" href="{% url 'disciplines_program_discipline_list' %}">Все связи дисциплин и программ</a>
@@ -62,7 +64,7 @@
             <th>Дисциплина</th>
             <th>В учебных планах</th>
             <th>Заданий</th>
-            {% if can_manage_disciplines %}<th>Действия</th>{% endif %}
+            {% if can_manage_global_disciplines %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
         <tbody>
@@ -72,7 +74,7 @@
                 <td>{{ discipline.name }}</td>
                 <td>{{ discipline.programs_count }}</td>
                 <td>{{ discipline.items_count }}</td>
-                {% if can_manage_disciplines %}
+                {% if can_manage_global_disciplines %}
                     <td>
                         <div class="actions">
                             <a class="btn secondary" href="{% url 'disciplines_discipline_update' discipline.id %}">Изменить</a>
@@ -82,7 +84,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_disciplines %}5{% else %}4{% endif %}" class="muted">Дисциплины не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_global_disciplines %}5{% else %}4{% endif %}" class="muted">Дисциплины не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -132,8 +134,12 @@
                 {% if can_manage_disciplines %}
                     <td>
                         <div class="actions">
-                            <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                            {% if pd.can_manage %}
+                                <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
+                                <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
+                            {% else %}
+                                <span class="muted">Нет прав изменения</span>
+                            {% endif %}
                         </div>
                     </td>
                 {% endif %}
