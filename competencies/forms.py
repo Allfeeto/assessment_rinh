@@ -61,6 +61,9 @@ class DisciplineCompetenceForm(forms.ModelForm):
             base_program_discipline_qs,
             selected_program_discipline_id,
         )
+        self.fields['program_discipline'].label_from_instance = (
+            lambda obj: f'{obj.educational_program} | {obj.discipline_display_name}'
+        )
         apply_autocomplete_attrs(
             self.fields['program_discipline'],
             kind='program_discipline',

@@ -16,7 +16,7 @@ class DisciplineForm(forms.ModelForm):
 class ProgramDisciplineForm(forms.ModelForm):
     class Meta:
         model = ProgramDiscipline
-        fields = ('educational_program', 'discipline', 'discipline_code', 'department')
+        fields = ('educational_program', 'discipline', 'discipline_code', 'department', 'is_active_in_plan')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

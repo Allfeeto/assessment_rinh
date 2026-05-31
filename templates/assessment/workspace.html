@@ -32,7 +32,7 @@
                 <option value="">Выберите дисциплину</option>
                 {% for pd in available_program_disciplines %}
                     <option value="{{ pd.id }}" {% if selected_program_discipline == pd.id|stringformat:"s" %}selected{% endif %}>
-                        {{ pd.discipline.name }}
+                        {{ pd.discipline_display_name }}{% if not pd.is_active_in_plan %} (нет в актуальном PLX){% endif %}
                     </option>
                 {% endfor %}
             </select>
@@ -77,8 +77,11 @@
 {% if current_program_discipline %}
     <div class="panel">
         <h2 style="margin-bottom: 8px;">
-            Контекст: {{ current_program_discipline.educational_program }} / {{ current_program_discipline.discipline.name }}
+            Контекст: {{ current_program_discipline.educational_program }} / {{ current_program_discipline.discipline_display_name }}
         </h2>
+        {% if not current_program_discipline.is_active_in_plan %}
+            <p class="muted">Эта дисциплина отсутствует в последнем загруженном PLX, но сохранена вместе с заданиями и назначениями.</p>
+        {% endif %}
         <div class="actions">
             <a
                 class="btn"

@@ -4,7 +4,6 @@ from django.db.models import Q
 
 from assessment.access import program_discipline_queryset_for_user
 from core.lookups import (
-    apply_lookup_tokens,
     filter_selected_id,
     register_lookup,
     tokenize_lookup_query,
@@ -75,9 +74,33 @@ def lookup_discipline(request, query, selected_id, limit):
         linked_ids = linked_program_disciplines.values_list('discipline_id', flat=True)
         queryset = queryset.filter(id__in=linked_ids)
     if query:
-        queryset = apply_lookup_tokens(queryset, query, ('name',))
+        tokens = tokenize_lookup_query(query) or [query.strip().lower()]
+        for token in tokens:
+            queryset = queryset.filter(
+                Q(name__icontains=token)
+                | Q(program_disciplines__discipline_code__icontains=token)
+                | Q(program_disciplines__discipline_code__icontains=query.strip())
+            )
     queryset = filter_selected_id(queryset, selected_id)
-    return unique_lookup_results(queryset.distinct(), limit, lambda obj: obj.name)
+    label_program_disciplines = scoped_program_disciplines.select_related('discipline').order_by(
+        'discipline__name',
+        'discipline_code',
+    )
+    if educational_program_id:
+        label_program_disciplines = label_program_disciplines.filter(
+            educational_program_id=educational_program_id
+        )
+    labels_by_discipline_id = {}
+    for program_discipline in label_program_disciplines:
+        labels_by_discipline_id.setdefault(
+            program_discipline.discipline_id,
+            program_discipline.discipline_display_name,
+        )
+    return unique_lookup_results(
+        queryset.distinct(),
+        limit,
+        lambda obj: labels_by_discipline_id.get(obj.id, obj.name),
+    )
 
 
 def lookup_program_discipline(request, query, selected_id, limit):
@@ -102,6 +125,7 @@ def lookup_program_discipline(request, query, selected_id, limit):
             token_filter = (
                 Q(discipline__name__icontains=token)
                 | Q(discipline_code__icontains=token)
+                | Q(discipline_code__icontains=query.strip())
                 | Q(department__number__icontains=token)
                 | Q(department__short_name__icontains=token)
                 | Q(educational_program__program_profile__code__icontains=token)
@@ -118,8 +142,7 @@ def lookup_program_discipline(request, query, selected_id, limit):
         limit,
         lambda obj: (
             f'{obj.educational_program} | '
-            f'{f"{obj.discipline_code} - " if obj.discipline_code else ""}'
-            f'{obj.discipline.name}'
+            f'{obj.discipline_display_name}'
         ),
     )
 

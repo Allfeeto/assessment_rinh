@@ -175,12 +175,13 @@ def build_reports_dashboard_context(request, form) -> dict:
     discipline_competence_qs = (
         discipline_competence_qs.values(
             'program_discipline_id',
+            'program_discipline__discipline_code',
             'program_discipline__discipline__name',
             'competence_id',
             'competence__code',
             'competence__name',
         )
-        .order_by('program_discipline__discipline__name', 'competence__code')
+        .order_by('program_discipline__discipline_code', 'program_discipline__discipline__name', 'competence__code')
     )
     discipline_competence_page_obj = paginate_queryset(
         request,
@@ -197,6 +198,13 @@ def build_reports_dashboard_context(request, form) -> dict:
         ],
     )
     for row in discipline_competence_report:
+        discipline_code = row.get('program_discipline__discipline_code')
+        discipline_name = row['program_discipline__discipline__name']
+        row['discipline_label'] = (
+            f'{discipline_code} — {discipline_name}'
+            if discipline_code
+            else discipline_name
+        )
         row['items_count'] = matrix_counts.get(
             (row['program_discipline_id'], row['competence_id']),
             0,

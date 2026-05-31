@@ -68,9 +68,14 @@ def _get_program_code(program) -> str:
     return getattr(profile, 'code', None) or getattr(program, 'code', None) or ''
 
 
-def build_export_filename(program, discipline) -> str:
+def build_export_filename(program, discipline, program_discipline=None) -> str:
     program_fallback = f'program_{getattr(program, "id", "unknown")}'
     discipline_fallback = f'discipline_{getattr(discipline, "id", "unknown")}'
     program_code = _sanitize_filename_part(_get_program_code(program), program_fallback)
-    discipline_name = _sanitize_filename_part(getattr(discipline, 'name', None), discipline_fallback)
+    discipline_label = (
+        getattr(program_discipline, 'discipline_display_name', None)
+        if program_discipline is not None
+        else getattr(discipline, 'name', None)
+    ) or getattr(discipline, 'name', None)
+    discipline_name = _sanitize_filename_part(discipline_label, discipline_fallback)
     return f'{program_code}_{discipline_name}.docx'

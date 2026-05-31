@@ -70,7 +70,8 @@ def test_sql_schema_contract_parser_detects_required_objects():
             educational_program_id integer NOT NULL,
             discipline_id integer NOT NULL,
             discipline_code character varying(50),
-            department_id integer
+            department_id integer,
+            is_active_in_plan boolean NOT NULL
         );
         CREATE TABLE public.competence (
             id integer NOT NULL,
@@ -134,6 +135,7 @@ def test_sql_schema_contract_parser_detects_required_objects():
         CREATE INDEX program_disc_code_idx ON public.program_discipline (discipline_code);
         CREATE INDEX program_disc_dept_idx ON public.program_discipline (department_id);
         CREATE INDEX program_disc_prog_code_idx ON public.program_discipline (educational_program_id, discipline_code);
+        CREATE INDEX program_disc_prog_active_idx ON public.program_discipline (educational_program_id, is_active_in_plan);
         CREATE UNIQUE INDEX teacher_departments_teacher_department_uidx ON public.teacher_departments (teacher_id, department_id);
         CREATE INDEX teacher_departments_teacher_idx ON public.teacher_departments (teacher_id);
         CREATE INDEX teacher_departments_department_idx ON public.teacher_departments (department_id);

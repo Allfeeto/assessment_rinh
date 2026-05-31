@@ -27,12 +27,12 @@
                     >
                 </td>
                 <td>
-                    {{ row.discipline_name }}
-                    {% if row.discipline_code %}
-                        <span class="muted" style="margin-left:6px;">{{ row.discipline_code }}</span>
-                    {% endif %}
+                    {{ row.discipline_display_name|default:row.discipline_name }}
                     {% if row.is_assigned %}
                         <span class="muted" style="margin-left:6px;">— назначено</span>
+                    {% endif %}
+                    {% if not row.is_active_in_plan %}
+                        <span class="muted" style="margin-left:6px;">— нет в актуальном PLX</span>
                     {% endif %}
                 </td>
                 <td class="muted">

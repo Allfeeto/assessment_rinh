@@ -188,7 +188,7 @@
             <tr>
                 <td>{{ link.id }}</td>
                 <td>{{ link.program_discipline.educational_program }}</td>
-                <td>{{ link.program_discipline.discipline.name }}</td>
+                <td>{{ link.program_discipline.discipline_display_name }}</td>
                 <td>{{ link.competence.code }} — {{ link.competence.name }}</td>
                 <td>{{ link.items_count }}</td>
                 {% if can_manage_competencies %}

@@ -234,6 +234,21 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
             Competence,
             self.request.GET.get('competence'),
         )
+        discipline_labels = {}
+        label_scope = program_discipline_scope.select_related('discipline').order_by(
+            'discipline__name',
+            'discipline_code',
+        )
+        if selected_educational_program:
+            label_scope = label_scope.filter(educational_program_id=selected_educational_program)
+        for program_discipline in label_scope:
+            discipline_labels.setdefault(
+                program_discipline.discipline_id,
+                program_discipline.discipline_display_name,
+            )
+        disciplines = list(disciplines)
+        for discipline in disciplines:
+            discipline.lookup_label = discipline_labels.get(discipline.id, discipline.name)
 
         context['education_levels'] = education_levels
         context['training_directions'] = directions
@@ -555,7 +570,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
             for program_discipline in available_program_disciplines_all
             if not selected_program_id or str(program_discipline.educational_program_id) == selected_program_id
         ]
-        available_program_disciplines.sort(key=lambda pd: pd.discipline.name.lower())
+        available_program_disciplines.sort(key=lambda pd: ((pd.discipline_code or ''), pd.discipline.name.lower()))
 
         selected_program_discipline_id = self.request.GET.get('program_discipline')
         valid_program_discipline_ids = {str(pd.id) for pd in available_program_disciplines}
@@ -755,7 +770,7 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
             for program_discipline in available_program_disciplines_all
             if not selected_program_id or str(program_discipline.educational_program_id) == selected_program_id
         ]
-        available_program_disciplines.sort(key=lambda pd: pd.discipline.name.lower())
+        available_program_disciplines.sort(key=lambda pd: ((pd.discipline_code or ''), pd.discipline.name.lower()))
 
         selected_program_discipline_id = self.request.GET.get('program_discipline')
         valid_program_discipline_ids = {str(pd.id) for pd in available_program_disciplines}

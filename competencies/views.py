@@ -93,6 +93,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
 
         discipline_competences_qs = DisciplineCompetence.objects.select_related(
             'program_discipline__discipline',
+            'program_discipline__department',
             'program_discipline__educational_program__program_profile',
             'competence__competence_type',
             'competence',
@@ -101,6 +102,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             program_discipline__in=program_discipline_scope,
         ).order_by(
             'program_discipline__educational_program__program_profile__code',
+            'program_discipline__discipline_code',
             'program_discipline__discipline__name',
             'competence__code',
         )
@@ -334,6 +336,7 @@ class DisciplineCompetenceListView(NamedListView):
     title = 'Матрица дисциплина → компетенция'
     search_fields = (
         'program_discipline__discipline__name',
+        'program_discipline__discipline_code',
         'competence__code',
         'competence__name',
     )

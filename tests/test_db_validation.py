@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.test import RequestFactory
 
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
 from assessment.services import sync_assessment_item_competences
@@ -14,6 +15,7 @@ from core.models import (
     EducationLevel,
 )
 from disciplines.models import Discipline, ProgramDiscipline
+from disciplines.lookups import lookup_program_discipline
 from programs.forms import EducationalProgramForm, ProgramProfileForm
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 from teachers.forms import TeacherForm
@@ -192,3 +194,24 @@ def test_teacher_form_preserves_primary_department_in_m2m(validation_schema):
         department.id,
         second_department.id,
     }
+
+
+def test_program_discipline_lookup_label_includes_plan_code(validation_schema):
+    _, _, _, _, program = _base_program_context()
+    discipline = Discipline.objects.create(name='Базы данных')
+    program_discipline = ProgramDiscipline.objects.create(
+        educational_program=program,
+        discipline=discipline,
+        discipline_code='Б1.О.07',
+    )
+    request = RequestFactory().get('/core/lookup/', {'kind': 'program_discipline', 'q': 'Б1.О.07'})
+    request.user = User.objects.create_superuser(username='admin')
+
+    results = lookup_program_discipline(request, 'Б1.О.07', None, 20)
+
+    assert results == [
+        {
+            'id': program_discipline.id,
+            'label': f'{program} | Б1.О.07 — Базы данных',
+        }
+    ]

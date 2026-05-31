@@ -320,7 +320,7 @@ def build_document(program_discipline, prepared_items: list[dict]) -> Document:
     )
     _add_text_styled(
         doc,
-        f'«{program_discipline.discipline.name}»',
+        f'«{program_discipline.discipline_display_name}»',
         align=WD_ALIGN_PARAGRAPH.CENTER,
         size_pt=TITLE_FONT_SIZE_PT,
     )

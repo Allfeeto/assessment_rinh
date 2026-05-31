@@ -74,11 +74,18 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
             ).filter(
                 educational_program_id=selected_program_id,
                 educational_program__is_deleted=False,
-            ).order_by('discipline__name')
+            ).order_by('discipline_code', 'discipline__name')
 
-            discipline_filter_options = list(
-                existing_program_disciplines_qs.values('discipline_id', 'discipline__name').distinct()
-            )
+            discipline_filter_options = []
+            seen_discipline_ids = set()
+            for program_discipline in existing_program_disciplines_qs:
+                if program_discipline.discipline_id in seen_discipline_ids:
+                    continue
+                seen_discipline_ids.add(program_discipline.discipline_id)
+                discipline_filter_options.append({
+                    'discipline_id': program_discipline.discipline_id,
+                    'label': program_discipline.discipline_display_name,
+                })
             valid_discipline_ids = {str(option['discipline_id']) for option in discipline_filter_options}
             if selected_discipline_id and selected_discipline_id not in valid_discipline_ids:
                 selected_discipline_id = ''
@@ -348,6 +355,7 @@ class DisciplineDeleteView(NamedDeleteView):
 class ProgramDisciplineListView(NamedListView):
     model = ProgramDiscipline
     title = 'Дисциплины учебных планов'
+    order_by = ('educational_program__program_profile__code', 'discipline_code', 'discipline__name')
     search_fields = (
         'discipline__name',
         'discipline_code',
@@ -362,6 +370,7 @@ class ProgramDisciplineListView(NamedListView):
         ('Код', 'discipline_code'),
         ('Дисциплина', 'discipline.name'),
         ('Кафедра дисциплины', 'department.short_name'),
+        ('Статус PLX', 'plan_status_label'),
     )
     create_url_name = 'disciplines_program_discipline_create'
     detail_url_name = 'disciplines_program_discipline_detail'
@@ -389,6 +398,7 @@ class ProgramDisciplineDetailView(NamedDetailView):
         ('Код дисциплины', 'discipline_code'),
         ('Дисциплина', 'discipline.name'),
         ('Кафедра дисциплины', 'department.short_name'),
+        ('Статус PLX', 'plan_status_label'),
     )
 
     def get_queryset(self):

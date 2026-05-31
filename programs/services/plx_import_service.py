@@ -65,6 +65,7 @@ class PlxImportService:
             raise PlxValidationError(
                 f'Год набора должен быть в диапазоне {MIN_ADMISSION_YEAR}-{MAX_ADMISSION_YEAR}.'
             )
+        self._validate_unique_discipline_codes(dto)
 
         with transaction.atomic():
             education_level = self._resolve_education_level(dto.program.education_level_name)
@@ -126,6 +127,26 @@ class PlxImportService:
                 disciplines_count=len(discipline_map),
                 competences_count=len(competence_map),
                 links_count=links_count,
+            )
+
+    @staticmethod
+    def _validate_unique_discipline_codes(dto: PlxProgramImportDTO) -> None:
+        seen: dict[str, str] = {}
+        duplicates: list[str] = []
+        for item in dto.disciplines:
+            code = normalize_text(item.code)
+            if not code:
+                continue
+            previous_external_id = seen.get(code)
+            if previous_external_id and previous_external_id != item.external_id:
+                duplicates.append(code)
+            else:
+                seen[code] = item.external_id
+        if duplicates:
+            duplicate_list = ', '.join(sorted(set(duplicates)))
+            raise PlxValidationError(
+                f'В PLX найден дублирующийся код дисциплины учебного плана: {duplicate_list}. '
+                'Проверьте строки ПланыСтроки.ДисциплинаКод.'
             )
 
     def _resolve_education_level(self, source_name: str) -> EducationLevel:

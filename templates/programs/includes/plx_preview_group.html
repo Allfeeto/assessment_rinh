@@ -1,0 +1,24 @@
+<div class="table-wrap" style="margin-top:10px;">
+    <h4>{{ title }}</h4>
+    <table>
+        <thead><tr><th>Объект</th><th>Детали</th></tr></thead>
+        <tbody>
+        {% for entry in entries %}
+            <tr>
+                <td>{{ entry.label }}</td>
+                <td>
+                    {% if entry.details %}
+                        {% for detail in entry.details %}
+                            <div>{{ detail }}</div>
+                        {% endfor %}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="2" class="muted">{{ empty_text }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

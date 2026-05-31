@@ -52,12 +52,17 @@
 <div class="panel table-wrap">
     <h2>Дисциплины учебного плана</h2>
     <table>
-        <thead><tr><th>ID</th><th>Дисциплина</th></tr></thead>
+        <thead><tr><th>ID</th><th>Код дисциплины</th><th>Дисциплина</th><th>Статус PLX</th></tr></thead>
         <tbody>
         {% for pd in program_disciplines %}
-            <tr><td>{{ pd.id }}</td><td>{{ pd.discipline.name }}</td></tr>
+            <tr>
+                <td>{{ pd.id }}</td>
+                <td>{{ pd.discipline_code|default:"—" }}</td>
+                <td>{{ pd.discipline.name }}</td>
+                <td>{{ pd.plan_status_label }}</td>
+            </tr>
         {% empty %}
-            <tr><td colspan="2" class="muted">Дисциплины не найдены.</td></tr>
+            <tr><td colspan="4" class="muted">Дисциплины не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -83,7 +88,7 @@
         <thead><tr><th>Дисциплина</th><th>Компетенция</th></tr></thead>
         <tbody>
         {% for link in discipline_competences %}
-            <tr><td>{{ link.program_discipline.discipline.name }}</td><td>{{ link.competence.code }} — {{ link.competence.name }}</td></tr>
+            <tr><td>{{ link.program_discipline.discipline_display_name }}</td><td>{{ link.competence.code }} — {{ link.competence.name }}</td></tr>
         {% empty %}
             <tr><td colspan="2" class="muted">Связи не найдены.</td></tr>
         {% endfor %}
@@ -97,7 +102,7 @@
         <thead><tr><th>Преподаватель</th><th>Дисциплина</th></tr></thead>
         <tbody>
         {% for link in teacher_assignments %}
-            <tr><td>{{ link.teacher.full_name }}</td><td>{{ link.program_discipline.discipline.name }}</td></tr>
+            <tr><td>{{ link.teacher.full_name }}</td><td>{{ link.program_discipline.discipline_display_name }}</td></tr>
         {% empty %}
             <tr><td colspan="2" class="muted">Назначения не найдены.</td></tr>
         {% endfor %}

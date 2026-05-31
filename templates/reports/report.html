@@ -98,7 +98,7 @@
         <tbody>
         {% for row in discipline_competence_report %}
             <tr>
-                <td>{{ row.program_discipline__discipline__name }}</td>
+                <td>{{ row.discipline_label }}</td>
                 <td>{{ row.competence__code }}</td>
                 <td>{{ row.competence__name }}</td>
                 <td>{{ row.items_count }}</td>

@@ -11,7 +11,7 @@ class DisciplineAdmin(admin.ModelAdmin):
 
 @admin.register(ProgramDiscipline)
 class ProgramDisciplineAdmin(admin.ModelAdmin):
-    list_display = ('id', 'educational_program', 'discipline_code', 'discipline', 'department')
+    list_display = ('id', 'educational_program', 'discipline_code', 'discipline', 'department', 'is_active_in_plan')
     search_fields = (
         'educational_program__program_profile__code',
         'educational_program__program_profile__name',
@@ -26,4 +26,5 @@ class ProgramDisciplineAdmin(admin.ModelAdmin):
         'educational_program__program_profile',
         'educational_program__admission_year',
         'department',
+        'is_active_in_plan',
     )

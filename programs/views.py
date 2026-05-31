@@ -25,7 +25,7 @@ from teachers.models import Department, TeacherProgramDiscipline
 
 from .forms import EducationalProgramForm, PlxImportUploadForm, ProgramProfileForm, TrainingDirectionForm
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
-from .services import PlxConflictError, PlxImportError, PlxImportService
+from .services import PlxConflictError, PlxImportError, PlxImportService, PlxProgramUpdateService
 from .services.plx_dto import PlxProgramImportDTO
 from .services.program_trash_service import ProgramTrashConflictError, ProgramTrashService
 
@@ -68,6 +68,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
     template_name = 'programs/dashboard.html'
     pending_session_key = 'plx_import_pending_dto'
     import_service = PlxImportService()
+    update_service = PlxProgramUpdateService(import_service=import_service)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -129,6 +130,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         context['import_summary'] = kwargs.get('import_summary')
         context['conflict_program'] = kwargs.get('conflict_program')
         context['pending_conflict'] = kwargs.get('pending_conflict', False)
+        context['import_preview'] = kwargs.get('import_preview')
         return context
 
     def get(self, request, *args, **kwargs):
@@ -150,6 +152,10 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         action = request.POST.get('action', 'upload')
         if action == 'confirm_replace':
             return self._handle_confirm_replace(request)
+        if action == 'preview_update':
+            return self._handle_preview_update(request)
+        if action == 'apply_update':
+            return self._handle_apply_update(request)
         if action == 'cancel_replace':
             request.session.pop(self.pending_session_key, None)
             return redirect('programs_root')
@@ -187,7 +193,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
                 context_kwargs['conflict_program'] = existing_program
                 context_kwargs['import_error'] = (
                     'Такая образовательная программа уже существует. '
-                    'Подтвердите замену, чтобы переместить старую версию в корзину и загрузить новую.'
+                    'Выберите отмену, полную замену или безопасное обновление существующей записи.'
                 )
                 return render(request, self.template_name, self.get_context_data(**context_kwargs), status=409)
 
@@ -261,6 +267,90 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             )
             return render(request, self.template_name, self.get_context_data(**context_kwargs), status=400)
 
+    def _handle_preview_update(self, request):
+        pending = request.session.get(self.pending_session_key)
+        if not pending:
+            context = self.get_context_data(
+                import_error='Не найдено отложенной операции импорта. Загрузите .plx повторно.',
+            )
+            return render(request, self.template_name, context, status=400)
+
+        dto = PlxProgramImportDTO.from_dict(pending['dto'])
+        existing_program = self._get_pending_existing_program(pending)
+        if existing_program is None:
+            context = self.get_context_data(
+                import_summary=dto.summary(),
+                import_error='Существующая программа больше не найдена. Загрузите .plx повторно.',
+            )
+            return render(request, self.template_name, context, status=400)
+
+        preview = self.update_service.build_preview(dto, existing_program)
+        context = self.get_context_data(
+            pending_conflict=True,
+            import_summary=dto.summary(),
+            conflict_program=existing_program,
+            import_preview=preview,
+        )
+        return render(request, self.template_name, context, status=409 if preview.has_blocking_conflicts else 200)
+
+    def _handle_apply_update(self, request):
+        pending = request.session.get(self.pending_session_key)
+        if not pending:
+            context = self.get_context_data(
+                import_error='Не найдено отложенной операции импорта. Загрузите .plx повторно.',
+            )
+            return render(request, self.template_name, context, status=400)
+
+        dto = PlxProgramImportDTO.from_dict(pending['dto'])
+        existing_program = self._get_pending_existing_program(pending)
+        if existing_program is None:
+            context = self.get_context_data(
+                import_summary=dto.summary(),
+                import_error='Существующая программа больше не найдена. Загрузите .plx повторно.',
+            )
+            return render(request, self.template_name, context, status=400)
+
+        try:
+            result = self.update_service.apply_update(dto, existing_program, user=request.user)
+        except PlxImportError as exc:
+            preview = self.update_service.build_preview(dto, existing_program)
+            context = self.get_context_data(
+                pending_conflict=True,
+                import_summary=dto.summary(),
+                conflict_program=existing_program,
+                import_preview=preview,
+                import_error=str(exc),
+            )
+            return render(request, self.template_name, context, status=400)
+
+        request.session.pop(self.pending_session_key, None)
+        context = self.get_context_data(
+            import_form=PlxImportUploadForm(),
+            import_summary=dto.summary(),
+            import_result=(
+                f'Изменения применены к существующей программе ID={result.program_id}. '
+                f'Добавлено дисциплин: {result.created_disciplines}, '
+                f'обновлено дисциплин: {result.updated_disciplines}, '
+                f'помечено отсутствующими в PLX: {result.marked_inactive_disciplines}, '
+                f'добавлено компетенций: {result.created_competences}, '
+                f'обновлено компетенций: {result.updated_competences}, '
+                f'добавлено связей дисциплина-компетенция: {result.created_links}.'
+            ),
+        )
+        return render(request, self.template_name, context)
+
+    @staticmethod
+    def _get_pending_existing_program(pending):
+        existing_program_id = pending.get('existing_program_id')
+        if not existing_program_id:
+            return None
+        return (
+            EducationalProgram.objects.active()
+            .select_related('program_profile__training_direction__education_level', 'department')
+            .filter(pk=existing_program_id)
+            .first()
+        )
+
     def _load_pending_dto(self, request):
         pending = request.session.get(self.pending_session_key)
         if not pending:
@@ -272,7 +362,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         existing_program_id = pending.get('existing_program_id')
         existing_program = None
         if existing_program_id:
-            existing_program = EducationalProgram.objects.active().filter(pk=existing_program_id).first()
+            existing_program = self._get_pending_existing_program(pending)
         return dto, existing_program
 
 
@@ -544,7 +634,7 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
         program = self.get_program()
         program_disciplines = ProgramDiscipline.objects.filter(
             educational_program=program
-        ).select_related('discipline').order_by('discipline__name')
+        ).select_related('discipline', 'department').order_by('discipline_code', 'discipline__name')
         competences = Competence.objects.filter(
             educational_program=program
         ).select_related('competence_type').order_by('code')
@@ -552,14 +642,15 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
             program_discipline__educational_program=program
         ).select_related(
             'program_discipline__discipline',
+            'program_discipline__department',
             'competence__competence_type',
-        ).order_by('program_discipline__discipline__name', 'competence__code')
+        ).order_by('program_discipline__discipline_code', 'program_discipline__discipline__name', 'competence__code')
         teacher_assignments = TeacherProgramDiscipline.objects.filter(
             program_discipline__educational_program=program
         ).select_related(
             'teacher',
             'program_discipline__discipline',
-        ).order_by('teacher__full_name', 'program_discipline__discipline__name')
+        ).order_by('teacher__full_name', 'program_discipline__discipline_code', 'program_discipline__discipline__name')
 
         context.update(
             {

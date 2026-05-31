@@ -48,7 +48,7 @@
             <select id="id_discipline" name="discipline" data-autocomplete-kind="discipline" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите название дисциплины" data-autocomplete-dynamic-params="id_education_level:education_level_id,id_training_direction:training_direction_id,id_program_profile:program_profile_id,id_educational_program:educational_program_id,id_competence:competence_id" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for discipline in disciplines %}
-                    <option value="{{ discipline.id }}" {% if selected.discipline == discipline.id|stringformat:"s" %}selected{% endif %}>{{ discipline.name }}</option>
+                    <option value="{{ discipline.id }}" {% if selected.discipline == discipline.id|stringformat:"s" %}selected{% endif %}>{{ discipline.lookup_label|default:discipline.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -112,7 +112,7 @@
                 <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
                 <td>{{ item.ui_competence_codes }}</td>
                 <td>{{ item.program_discipline.educational_program }}</td>
-                <td>{{ item.program_discipline.discipline.name }}</td>
+                <td>{{ item.program_discipline.discipline_display_name }}</td>
                 <td>
                     <div class="actions">
                         <a class="btn secondary" href="{% url 'assessment_detail' item.pk %}?next={{ request.get_full_path|urlencode }}">Открыть</a>

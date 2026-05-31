@@ -76,6 +76,18 @@ class ReportFilterForm(forms.Form):
             program_disciplines__in=program_discipline_scope,
         ).distinct().order_by('name')
         self.fields['discipline'].queryset = autocomplete_queryset(base_discipline_qs, discipline_id)
+        label_scope = program_discipline_scope.select_related('discipline').order_by('discipline__name', 'discipline_code')
+        if program_id:
+            label_scope = label_scope.filter(educational_program_id=program_id)
+        discipline_labels = {}
+        for program_discipline in label_scope:
+            discipline_labels.setdefault(
+                program_discipline.discipline_id,
+                program_discipline.discipline_display_name,
+            )
+        self.fields['discipline'].label_from_instance = (
+            lambda obj: discipline_labels.get(obj.id, obj.name)
+        )
         apply_autocomplete_attrs(
             self.fields['discipline'],
             kind='discipline',

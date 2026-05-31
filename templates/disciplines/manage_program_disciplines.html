@@ -38,7 +38,7 @@
                 <option value="">Все дисциплины программы</option>
                 {% for option in discipline_filter_options %}
                     <option value="{{ option.discipline_id }}" {% if selected_discipline_id == option.discipline_id|stringformat:"s" %}selected{% endif %}>
-                        {{ option.discipline__name }}
+                        {{ option.label }}
                     </option>
                 {% endfor %}
             </select>
@@ -133,6 +133,7 @@
             <th>Код</th>
             <th>Дисциплина</th>
             <th>Кафедра дисциплины</th>
+            <th>Статус PLX</th>
             <th>Действия</th>
         </tr>
         </thead>
@@ -143,6 +144,7 @@
                 <td>{{ pd.discipline_code|default:"—" }}</td>
                 <td>{{ pd.discipline.name }}</td>
                 <td>{{ pd.department.short_name|default:"—" }}</td>
+                <td>{{ pd.plan_status_label }}</td>
                 <td>
                     <div class="actions">
                         <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
@@ -152,7 +154,7 @@
             </tr>
         {% empty %}
             <tr>
-                <td colspan="5" class="muted">
+                <td colspan="6" class="muted">
                     {% if selected_program %}
                         Для выбранной программы дисциплины пока не добавлены.
                     {% else %}
@@ -183,7 +185,7 @@
     <h2>
         Компетенции дисциплины
         {% if selected_program_discipline %}
-            «{{ selected_program_discipline.discipline.name }}»
+            «{{ selected_program_discipline.discipline_display_name }}»
         {% endif %}
     </h2>
     <table>

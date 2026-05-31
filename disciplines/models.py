@@ -48,6 +48,11 @@ class ProgramDiscipline(models.Model):
         verbose_name='Кафедра дисциплины',
         help_text='Кафедра, указанная для строки учебного плана в PLX.',
     )
+    is_active_in_plan = models.BooleanField(
+        default=True,
+        verbose_name='Есть в актуальном учебном плане',
+        help_text='Сбрасывается при обновлении PLX, если строка больше не найдена в новом учебном плане.',
+    )
 
     class Meta:
         managed = False
@@ -67,8 +72,21 @@ class ProgramDiscipline(models.Model):
                 fields=('educational_program', 'discipline_code'),
                 name='program_disc_prog_code_idx',
             ),
+            models.Index(
+                fields=('educational_program', 'is_active_in_plan'),
+                name='program_disc_prog_active_idx',
+            ),
         ]
 
     def __str__(self):
-        code = f' [{self.discipline_code}]' if self.discipline_code else ''
-        return f'{self.educational_program} | {self.discipline.name}{code}'
+        return f'{self.educational_program} | {self.discipline_display_name}'
+
+    @property
+    def discipline_display_name(self):
+        if self.discipline_code:
+            return f'{self.discipline_code} — {self.discipline.name}'
+        return self.discipline.name
+
+    @property
+    def plan_status_label(self):
+        return 'В актуальном PLX' if self.is_active_in_plan else 'Нет в актуальном PLX'

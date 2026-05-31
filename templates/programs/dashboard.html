@@ -85,7 +85,7 @@
 {% if can_import_plx and pending_conflict %}
     <div class="panel" style="border-color:#efb3b3;background:#fff7f7;">
         <h2>Найдена существующая программа</h2>
-        <p class="muted">Обнаружена программа с теми же ключевыми признаками. Можно отменить операцию или подтвердить замену.</p>
+        <p class="muted">Обнаружена программа с теми же ключевыми признаками. Выберите, что сделать с загруженным PLX.</p>
         {% if conflict_program %}
             <p>
                 Текущая запись:
@@ -97,8 +97,13 @@
         <div class="actions">
             <form method="post">
                 {% csrf_token %}
+                <input type="hidden" name="action" value="preview_update">
+                <button type="submit" class="btn">Посмотреть изменения</button>
+            </form>
+            <form method="post">
+                {% csrf_token %}
                 <input type="hidden" name="action" value="confirm_replace">
-                <button type="submit" class="btn danger">Подтвердить замену</button>
+                <button type="submit" class="btn danger">Полностью заменить</button>
             </form>
             <form method="post">
                 {% csrf_token %}
@@ -106,6 +111,72 @@
                 <button type="submit" class="btn secondary">Отменить</button>
             </form>
         </div>
+        <p class="muted" style="margin-top:10px;">
+            Полная замена переместит текущую программу в корзину и создаст новую запись. Обновление применяет изменения к текущей записи и сохраняет существующие задания и назначения преподавателей.
+        </p>
+    </div>
+{% endif %}
+
+{% if can_import_plx and import_preview %}
+    <div class="panel">
+        <h2>Предпросмотр изменений PLX</h2>
+        <p class="muted">
+            Preview ничего не меняет в БД. Применение выполнится одной транзакцией к программе ID={{ import_preview.existing_program_id }}.
+        </p>
+
+        {% if import_preview.conflicts %}
+            <h3>Предупреждения и конфликты</h3>
+            <table>
+                <thead><tr><th>Объект</th><th>Уровень</th><th>Описание</th></tr></thead>
+                <tbody>
+                {% for conflict in import_preview.conflicts %}
+                    <tr>
+                        <td>{{ conflict.label }}</td>
+                        <td>{% if conflict.severity == "blocking" %}Блокирует применение{% else %}Предупреждение{% endif %}</td>
+                        <td>{{ conflict.message }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+
+        <h3>Будет добавлено</h3>
+        <div class="stats">
+            <div class="stat"><div class="muted">Дисциплин</div><div class="stat-value">{{ import_preview.additions.disciplines|length }}</div></div>
+            <div class="stat"><div class="muted">Компетенций</div><div class="stat-value">{{ import_preview.additions.competences|length }}</div></div>
+            <div class="stat"><div class="muted">Связей</div><div class="stat-value">{{ import_preview.additions.links|length }}</div></div>
+            <div class="stat"><div class="muted">Кафедр</div><div class="stat-value">{{ import_preview.additions.departments|length }}</div></div>
+        </div>
+        {% include "programs/includes/plx_preview_group.html" with title="Новые дисциплины" entries=import_preview.additions.disciplines empty_text="Новых дисциплин нет." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Новые компетенции" entries=import_preview.additions.competences empty_text="Новых компетенций нет." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Новые связи дисциплина-компетенция" entries=import_preview.additions.links empty_text="Новых связей нет." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Новые кафедры из PLX" entries=import_preview.additions.departments empty_text="Новых кафедр нет." %}
+
+        <h3>Будет изменено</h3>
+        {% include "programs/includes/plx_preview_group.html" with title="Метаданные программы" entries=import_preview.changes.program empty_text="Метаданные программы не меняются." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Дисциплины" entries=import_preview.changes.disciplines empty_text="Дисциплины не меняются." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Компетенции" entries=import_preview.changes.competences empty_text="Компетенции не меняются." %}
+
+        <h3>Больше нет в новом PLX</h3>
+        {% include "programs/includes/plx_preview_group.html" with title="Дисциплины" entries=import_preview.missing.disciplines empty_text="Все текущие дисциплины найдены в новом PLX." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Компетенции" entries=import_preview.missing.competences empty_text="Все текущие компетенции найдены в новом PLX." %}
+        {% include "programs/includes/plx_preview_group.html" with title="Связи дисциплина-компетенция" entries=import_preview.missing.links empty_text="Все текущие связи найдены в новом PLX." %}
+
+        <div class="actions" style="margin-top:16px;">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="apply_update">
+                <button type="submit" class="btn" {% if not import_preview.can_apply %}disabled{% endif %}>Применить изменения</button>
+            </form>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel_replace">
+                <button type="submit" class="btn secondary">Отменить</button>
+            </form>
+        </div>
+        {% if not import_preview.can_apply %}
+            <p class="alert" style="margin-top:12px;">В PLX есть блокирующие конфликты. Применение отключено до исправления файла.</p>
+        {% endif %}
     </div>
 {% endif %}
 

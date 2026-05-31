@@ -102,7 +102,7 @@ def _build_assignment_rows(teacher, educational_program, query, user):
             educational_program__is_deleted=False,
         )
         .select_related('discipline', 'department')
-        .order_by('discipline__name')
+        .order_by('discipline_code', 'discipline__name')
     )
     visible_ids = _assignment_program_discipline_ids_for_user(user)
     if visible_ids is not None:
@@ -110,7 +110,8 @@ def _build_assignment_rows(teacher, educational_program, query, user):
 
     if query:
         program_disciplines = program_disciplines.filter(
-            discipline__name__icontains=query.strip(),
+            Q(discipline__name__icontains=query.strip())
+            | Q(discipline_code__icontains=query.strip()),
         )
 
     program_disciplines = list(program_disciplines)
@@ -141,12 +142,14 @@ def _build_assignment_rows(teacher, educational_program, query, user):
             'id': pd.id,
             'discipline_name': pd.discipline.name,
             'discipline_code': pd.discipline_code,
+            'discipline_display_name': pd.discipline_display_name,
             'department': pd.department.short_name if pd.department_id else '',
+            'is_active_in_plan': pd.is_active_in_plan,
             'is_assigned': bucket['is_assigned'],
             'other_teachers': ', '.join(bucket['others']) if bucket['others'] else '',
         })
 
-    rows.sort(key=lambda row: (0 if row['is_assigned'] else 1, row['discipline_name'].lower()))
+    rows.sort(key=lambda row: (0 if row['is_assigned'] else 1, row['discipline_code'] or '', row['discipline_name'].lower()))
     return rows
 
 
@@ -393,16 +396,23 @@ class TeacherDeleteView(NamedDeleteView):
 class TeacherProgramDisciplineListView(NamedListView):
     model = TeacherProgramDiscipline
     title = 'Привязки преподавателей к дисциплинам учебных планов'
+    order_by = (
+        'teacher__full_name',
+        'program_discipline__educational_program__program_profile__code',
+        'program_discipline__discipline_code',
+        'program_discipline__discipline__name',
+    )
     search_fields = (
         'teacher__full_name',
         'program_discipline__discipline__name',
+        'program_discipline__discipline_code',
         'program_discipline__educational_program__program_profile__code',
     )
     list_columns = (
         ('ID', 'id'),
         ('Преподаватель', 'teacher.full_name'),
         ('Программа', 'program_discipline.educational_program'),
-        ('Дисциплина', 'program_discipline.discipline.name'),
+        ('Дисциплина', 'program_discipline.discipline_display_name'),
     )
     create_url_name = 'teachers_teacher_program_discipline_create'
     detail_url_name = 'teachers_teacher_program_discipline_detail'
@@ -423,7 +433,7 @@ class TeacherProgramDisciplineDetailView(NamedDetailView):
         ('ID', 'id'),
         ('Преподаватель', 'teacher.full_name'),
         ('Образовательная программа', 'program_discipline.educational_program'),
-        ('Дисциплина', 'program_discipline.discipline.name'),
+        ('Дисциплина', 'program_discipline.discipline_display_name'),
     )
 
     def get_queryset(self):

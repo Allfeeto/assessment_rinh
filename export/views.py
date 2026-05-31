@@ -40,19 +40,19 @@ class WordExportView(LoginRequiredMixin, View):
         assessment_item_type = form.cleaned_data.get('assessment_item_type')
         competence = form.cleaned_data.get('competence')
 
-        program_discipline_id = (
+        program_discipline = (
             ProgramDiscipline.objects.filter(
                 educational_program_id=educational_program.id,
                 discipline_id=discipline.id,
                 educational_program__is_deleted=False,
             )
-            .values_list('id', flat=True)
             .first()
         )
-        if not program_discipline_id:
+        if not program_discipline:
             form.add_error('discipline', 'Выбранная дисциплина не включена в указанную образовательную программу.')
             return render(request, self.template_name, {'form': form}, status=404)
 
+        program_discipline_id = getattr(program_discipline, 'id', program_discipline)
         if not can_access_program_discipline(request.user, program_discipline_id):
             raise PermissionDenied('У вас нет доступа к экспорту материалов по выбранной дисциплине.')
 
@@ -81,7 +81,7 @@ class WordExportView(LoginRequiredMixin, View):
             },
         )
 
-        filename = build_export_filename(educational_program, discipline)
+        filename = build_export_filename(educational_program, discipline, program_discipline)
         response = HttpResponse(
             content,
             content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',

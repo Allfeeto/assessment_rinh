@@ -20,6 +20,7 @@ REQUIRED_INDEXES = {
     'educational_program_active_unique_idx',
     'program_disc_code_idx',
     'program_disc_dept_idx',
+    'program_disc_prog_active_idx',
     'program_disc_prog_code_idx',
     'teacher_departments_department_idx',
     'teacher_departments_teacher_department_uidx',

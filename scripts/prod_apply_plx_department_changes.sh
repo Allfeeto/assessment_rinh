@@ -32,6 +32,7 @@ connection.ensure_connection()
 fields = {field.name: field for field in ProgramDiscipline._meta.get_fields()}
 assert "discipline_code" in fields, "ProgramDiscipline.discipline_code missing"
 assert "department" in fields, "ProgramDiscipline.department missing"
+assert "is_active_in_plan" in fields, "ProgramDiscipline.is_active_in_plan missing"
 assert hasattr(Teacher, "departments"), "Teacher.departments missing"
 
 tables = set(connection.introspection.table_names())
