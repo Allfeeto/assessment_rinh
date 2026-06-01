@@ -188,6 +188,35 @@ class EducationalProgram(models.Model):
         )
 
     @property
+    def full_display_name(self):
+        profile = getattr(self, 'program_profile', None)
+        department = getattr(self, 'department', None)
+        direction = getattr(profile, 'training_direction', None)
+        education_level = getattr(direction, 'education_level', None)
+
+        code = (getattr(profile, 'code', '') or '').strip()
+        name = (getattr(profile, 'name', '') or '').strip()
+        if code and name:
+            label = f'{code} — {name}'
+        else:
+            label = code or name or 'Образовательная программа'
+
+        details = []
+        if self.admission_year:
+            details.append(f'набор {self.admission_year}')
+        department_short_name = (getattr(department, 'short_name', '') or '').strip()
+        if department_short_name:
+            details.append(department_short_name)
+        education_level_name = (getattr(education_level, 'name', '') or '').strip()
+        if education_level_name:
+            details.append(education_level_name)
+        if details:
+            label = f'{label}, {", ".join(details)}'
+        if self.is_deleted:
+            label = f'{label} (в корзине)'
+        return label
+
+    @property
     def display_name(self):
         label = self.base_name
         if self.is_deleted and '(в корзине)' not in label:

@@ -8,25 +8,48 @@ from core.lookups import (
     register_lookup,
     tokenize_lookup_query,
     unique_lookup_results,
-    user_can_lookup_all,
 )
-from core.permissions import filter_program_disciplines_for_assignment
+from core.permissions import filter_program_disciplines_for_assignment, is_superuser_or_platform_admin
 
 from .models import Discipline, ProgramDiscipline
 
 
-def _lookup_program_discipline_scope(user):
-    return program_discipline_queryset_for_user(user)
+def _truthy(value):
+    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _lookup_program_discipline_ids(user):
-    return _lookup_program_discipline_scope(user).values_list('id', flat=True)
+def _lookup_mode(request):
+    deleted_only = _truthy(request.GET.get('deleted_only')) or request.GET.get('mode') == 'trash'
+    include_deleted = _truthy(request.GET.get('include_deleted'))
+    return include_deleted, deleted_only
+
+
+def _lookup_program_discipline_scope(user, *, include_deleted=False, deleted_only=False):
+    return program_discipline_queryset_for_user(
+        user,
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
+    )
+
+
+def _base_program_discipline_queryset(*, include_deleted=False, deleted_only=False):
+    queryset = ProgramDiscipline.objects.all()
+    if deleted_only:
+        return queryset.filter(educational_program__is_deleted=True)
+    if not include_deleted:
+        return queryset.filter(educational_program__is_deleted=False)
+    return queryset
 
 
 def lookup_discipline(request, query, selected_id, limit):
+    include_deleted, deleted_only = _lookup_mode(request)
     queryset = Discipline.objects.order_by('name')
-    scoped_program_disciplines = _lookup_program_discipline_scope(request.user)
-    if not user_can_lookup_all(request.user):
+    scoped_program_disciplines = _lookup_program_discipline_scope(
+        request.user,
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
+    )
+    if not is_superuser_or_platform_admin(request.user):
         queryset = queryset.filter(program_disciplines__in=scoped_program_disciplines).distinct()
     exclude_program_id = request.GET.get('exclude_program_id')
     education_level_id = request.GET.get('education_level_id')
@@ -48,9 +71,10 @@ def lookup_discipline(request, query, selected_id, limit):
         or competence_id
     ):
         linked_program_disciplines = scoped_program_disciplines
-        if user_can_lookup_all(request.user):
-            linked_program_disciplines = ProgramDiscipline.objects.filter(
-                educational_program__is_deleted=False
+        if is_superuser_or_platform_admin(request.user):
+            linked_program_disciplines = _base_program_discipline_queryset(
+                include_deleted=include_deleted,
+                deleted_only=deleted_only,
             )
         if education_level_id:
             linked_program_disciplines = linked_program_disciplines.filter(
@@ -105,23 +129,46 @@ def lookup_discipline(request, query, selected_id, limit):
 
 
 def lookup_program_discipline(request, query, selected_id, limit):
-    queryset = ProgramDiscipline.objects.select_related(
+    include_deleted, deleted_only = _lookup_mode(request)
+    queryset = _base_program_discipline_queryset(
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
+    ).select_related(
         'educational_program__program_profile',
+        'educational_program__program_profile__training_direction__education_level',
         'educational_program__department',
         'discipline',
         'department',
-    ).filter(educational_program__is_deleted=False).order_by(
+    ).order_by(
         'educational_program__program_profile__code',
         'educational_program__admission_year',
         'discipline__name',
     )
     if request.GET.get('purpose') == 'assignment':
         queryset = filter_program_disciplines_for_assignment(request.user, queryset)
-    elif not user_can_lookup_all(request.user):
-        queryset = queryset.filter(pk__in=_lookup_program_discipline_ids(request.user))
+    elif not is_superuser_or_platform_admin(request.user):
+        queryset = queryset.filter(
+            pk__in=_lookup_program_discipline_scope(
+                request.user,
+                include_deleted=include_deleted,
+                deleted_only=deleted_only,
+            ).values_list('id', flat=True)
+        )
     educational_program_id = request.GET.get('educational_program_id')
+    year = request.GET.get('admission_year') or request.GET.get('year')
+    program_department_id = (
+        request.GET.get('program_department_id')
+        or request.GET.get('educational_program_department_id')
+    )
+    discipline_department_id = request.GET.get('discipline_department_id')
     if educational_program_id:
         queryset = queryset.filter(educational_program_id=educational_program_id)
+    if year and str(year).isdigit():
+        queryset = queryset.filter(educational_program__admission_year=int(year))
+    if program_department_id and str(program_department_id).isdigit():
+        queryset = queryset.filter(educational_program__department_id=int(program_department_id))
+    if discipline_department_id and str(discipline_department_id).isdigit():
+        queryset = queryset.filter(department_id=int(discipline_department_id))
     if query:
         tokens = tokenize_lookup_query(query) or [query.strip().lower()]
         for token in tokens:
@@ -131,8 +178,10 @@ def lookup_program_discipline(request, query, selected_id, limit):
                 | Q(discipline_code__icontains=query.strip())
                 | Q(department__number__icontains=token)
                 | Q(department__short_name__icontains=token)
+                | Q(department__full_name__icontains=token)
                 | Q(educational_program__program_profile__code__icontains=token)
                 | Q(educational_program__program_profile__name__icontains=token)
+                | Q(educational_program__department__number__icontains=token)
                 | Q(educational_program__department__short_name__icontains=token)
                 | Q(educational_program__department__full_name__icontains=token)
             )
@@ -143,8 +192,8 @@ def lookup_program_discipline(request, query, selected_id, limit):
     return unique_lookup_results(
         queryset.distinct(),
         limit,
-        lambda obj: (
-            f'{obj.educational_program} | '
+        lambda obj: obj.discipline_display_name if educational_program_id else (
+            f'{obj.educational_program.full_display_name} | '
             f'{obj.discipline_display_name}'
         ),
     )

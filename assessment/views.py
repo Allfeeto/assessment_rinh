@@ -21,7 +21,13 @@ from core.view_helpers import (
     sort_link_queries,
 )
 from disciplines.models import Discipline, ProgramDiscipline
-from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
+from programs.models import (
+    MAX_ADMISSION_YEAR,
+    MIN_ADMISSION_YEAR,
+    EducationalProgram,
+    ProgramProfile,
+    TrainingDirection,
+)
 
 from .access import (
     allowed_program_discipline_ids_for_user as _allowed_program_discipline_ids_for_user,
@@ -571,57 +577,147 @@ class TeacherRequiredMixin(LoginRequiredMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
+def _clean_positive_id(value):
+    value = (value or '').strip()
+    if value.isdigit() and int(value) > 0:
+        return value
+    return ''
+
+
+def _clean_admission_year(value):
+    value = (value or '').strip()
+    if not value.isdigit():
+        return ''
+    year = int(value)
+    if MIN_ADMISSION_YEAR <= year <= MAX_ADMISSION_YEAR:
+        return str(year)
+    return ''
+
+
+def _workspace_program_discipline_scope(user, *, deleted_only=False):
+    return list(
+        program_discipline_queryset_for_user(user, deleted_only=deleted_only)
+        .select_related(
+            'educational_program__program_profile__training_direction__education_level',
+            'educational_program__department',
+            'discipline',
+            'department',
+        )
+        .distinct()
+    )
+
+
+def _program_sort_key(program):
+    return (
+        program.program_profile.code or '',
+        program.admission_year or 0,
+        program.department.short_name or '',
+        program.id,
+    )
+
+
+def _department_sort_key(department):
+    return (
+        department.number or '',
+        department.short_name or '',
+        department.id,
+    )
+
+
+def _build_workspace_filter_state(request, program_disciplines):
+    selected_year = _clean_admission_year(
+        request.GET.get('year') or request.GET.get('admission_year')
+    )
+    selected_department = _clean_positive_id(
+        request.GET.get('department') or request.GET.get('department_id')
+    )
+
+    admission_years = sorted({
+        program_discipline.educational_program.admission_year
+        for program_discipline in program_disciplines
+        if program_discipline.educational_program.admission_year
+    })
+    if selected_year:
+        selected_year_int = int(selected_year)
+        if selected_year_int not in admission_years:
+            admission_years.append(selected_year_int)
+            admission_years.sort()
+
+    department_map = {}
+    for program_discipline in program_disciplines:
+        department = program_discipline.educational_program.department
+        department_map[str(department.id)] = department
+    if selected_department not in department_map:
+        selected_department = ''
+    departments = sorted(department_map.values(), key=_department_sort_key)
+
+    filtered_program_disciplines = program_disciplines
+    if selected_year:
+        filtered_program_disciplines = [
+            program_discipline
+            for program_discipline in filtered_program_disciplines
+            if str(program_discipline.educational_program.admission_year) == selected_year
+        ]
+    if selected_department:
+        filtered_program_disciplines = [
+            program_discipline
+            for program_discipline in filtered_program_disciplines
+            if str(program_discipline.educational_program.department_id) == selected_department
+        ]
+
+    program_map = {}
+    for program_discipline in filtered_program_disciplines:
+        program = program_discipline.educational_program
+        program_map[program.id] = program
+    programs = sorted(program_map.values(), key=_program_sort_key)
+
+    selected_program_id = _clean_positive_id(request.GET.get('program'))
+    valid_program_ids = {str(program.id) for program in programs}
+    if selected_program_id not in valid_program_ids:
+        selected_program_id = ''
+    if not selected_program_id and programs:
+        selected_program_id = str(programs[0].id)
+
+    available_program_disciplines = [
+        program_discipline
+        for program_discipline in filtered_program_disciplines
+        if not selected_program_id
+        or str(program_discipline.educational_program_id) == selected_program_id
+    ]
+    available_program_disciplines.sort(
+        key=lambda pd: (
+            pd.discipline_code or '',
+            pd.discipline.name.lower(),
+            pd.id,
+        )
+    )
+
+    return {
+        'admission_years': admission_years,
+        'program_departments': departments,
+        'programs': programs,
+        'available_program_disciplines': available_program_disciplines,
+        'selected_year': selected_year,
+        'selected_department': selected_department,
+        'selected_program': selected_program_id,
+    }
+
+
 class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
     template_name = 'assessment/workspace.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        if not getattr(self, 'has_global_scope', False):
-            available_program_disciplines_all = list(
-                ProgramDiscipline.objects.filter(
-                    teacher_program_disciplines__teacher=self.teacher,
-                    educational_program__is_deleted=False,
-                )
-                .select_related(
-                    'educational_program__program_profile__training_direction',
-                    'educational_program__department',
-                    'discipline',
-                )
-                .distinct()
-            )
-        else:
-            available_program_disciplines_all = list(
-                ProgramDiscipline.objects.filter(educational_program__is_deleted=False).select_related(
-                    'educational_program__program_profile__training_direction',
-                    'educational_program__department',
-                    'discipline',
-                )
-            )
-
-        program_map = {}
-        for program_discipline in available_program_disciplines_all:
-            program = program_discipline.educational_program
-            program_map[program.id] = program
-        programs = sorted(
-            program_map.values(),
-            key=lambda program: (program.program_profile.code, program.admission_year, program.id),
+        filter_state = _build_workspace_filter_state(
+            self.request,
+            _workspace_program_discipline_scope(self.request.user),
         )
+        programs = filter_state['programs']
+        available_program_disciplines = filter_state['available_program_disciplines']
+        selected_program_id = filter_state['selected_program']
 
-        selected_program_id = self.request.GET.get('program')
-        if selected_program_id and not selected_program_id.isdigit():
-            selected_program_id = ''
-        if not selected_program_id and programs:
-            selected_program_id = str(programs[0].id)
-
-        available_program_disciplines = [
-            program_discipline
-            for program_discipline in available_program_disciplines_all
-            if not selected_program_id or str(program_discipline.educational_program_id) == selected_program_id
-        ]
-        available_program_disciplines.sort(key=lambda pd: ((pd.discipline_code or ''), pd.discipline.name.lower()))
-
-        selected_program_discipline_id = self.request.GET.get('program_discipline')
+        selected_program_discipline_id = _clean_positive_id(self.request.GET.get('program_discipline'))
         valid_program_discipline_ids = {str(pd.id) for pd in available_program_disciplines}
         if selected_program_discipline_id not in valid_program_discipline_ids:
             selected_program_discipline_id = ''
@@ -651,6 +747,7 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
             competences = (
                 Competence.objects.select_related('competence_type')
                 .filter(
+                    educational_program__is_deleted=False,
                     discipline_competences__program_discipline=current_program_discipline
                 )
                 .distinct()
@@ -665,17 +762,22 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                 and not competences.filter(pk=selected_competence).exists()
             ):
                 forced = Competence.objects.select_related('competence_type').filter(
-                    pk=int(selected_competence)
+                    pk=int(selected_competence),
+                    educational_program__is_deleted=False,
                 )
                 competences = (competences | forced).distinct()
 
             items = (
-                AssessmentItem.objects.filter(program_discipline=current_program_discipline)
+                AssessmentItem.objects.filter(
+                    program_discipline=current_program_discipline,
+                    program_discipline__educational_program__is_deleted=False,
+                )
                 .select_related(
                     'assessment_item_type',
                     'competence',
                     'program_discipline__discipline',
                     'program_discipline__educational_program__program_profile',
+                    'program_discipline__educational_program__department',
                 )
                 .prefetch_related('competence_links__competence')
                 # Сначала группа по типу задания (с устойчивым кодом),
@@ -727,6 +829,8 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
         item_query_params = self.request.GET.copy()
         item_query_params.pop('page', None)
         normalized_params = {
+            'year': filter_state['selected_year'],
+            'department': filter_state['selected_department'],
             'program': selected_program_id,
             'program_discipline': selected_program_discipline_id,
             'competence': selected_competence,
@@ -749,9 +853,13 @@ class TeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
         context.update(
             {
                 'teacher': getattr(self, 'teacher', None),
+                'admission_years': filter_state['admission_years'],
+                'program_departments': filter_state['program_departments'],
                 'programs': programs,
                 'available_program_disciplines': available_program_disciplines,
                 'current_program_discipline': current_program_discipline,
+                'selected_year': filter_state['selected_year'],
+                'selected_department': filter_state['selected_department'],
                 'selected_program': selected_program_id,
                 'selected_program_discipline': selected_program_discipline_id,
                 'selected_competence': selected_competence,
@@ -777,51 +885,15 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        if not getattr(self, 'has_global_scope', False):
-            available_program_disciplines_all = list(
-                ProgramDiscipline.objects.filter(
-                    teacher_program_disciplines__teacher=self.teacher,
-                    educational_program__is_deleted=True,
-                )
-                .select_related(
-                    'educational_program__program_profile__training_direction',
-                    'educational_program__department',
-                    'discipline',
-                )
-                .distinct()
-            )
-        else:
-            available_program_disciplines_all = list(
-                ProgramDiscipline.objects.filter(educational_program__is_deleted=True).select_related(
-                    'educational_program__program_profile__training_direction',
-                    'educational_program__department',
-                    'discipline',
-                )
-            )
-
-        program_map = {}
-        for program_discipline in available_program_disciplines_all:
-            program = program_discipline.educational_program
-            program_map[program.id] = program
-        programs = sorted(
-            program_map.values(),
-            key=lambda program: (program.program_profile.code, program.admission_year, program.id),
+        filter_state = _build_workspace_filter_state(
+            self.request,
+            _workspace_program_discipline_scope(self.request.user, deleted_only=True),
         )
+        programs = filter_state['programs']
+        available_program_disciplines = filter_state['available_program_disciplines']
+        selected_program_id = filter_state['selected_program']
 
-        selected_program_id = self.request.GET.get('program')
-        if selected_program_id and not selected_program_id.isdigit():
-            selected_program_id = ''
-        if not selected_program_id and programs:
-            selected_program_id = str(programs[0].id)
-
-        available_program_disciplines = [
-            program_discipline
-            for program_discipline in available_program_disciplines_all
-            if not selected_program_id or str(program_discipline.educational_program_id) == selected_program_id
-        ]
-        available_program_disciplines.sort(key=lambda pd: ((pd.discipline_code or ''), pd.discipline.name.lower()))
-
-        selected_program_discipline_id = self.request.GET.get('program_discipline')
+        selected_program_discipline_id = _clean_positive_id(self.request.GET.get('program_discipline'))
         valid_program_discipline_ids = {str(pd.id) for pd in available_program_disciplines}
         if selected_program_discipline_id not in valid_program_discipline_ids:
             selected_program_discipline_id = ''
@@ -879,6 +951,7 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
                     'competence',
                     'program_discipline__discipline',
                     'program_discipline__educational_program__program_profile',
+                    'program_discipline__educational_program__department',
                 )
                 .prefetch_related('competence_links__competence')
                 .order_by(
@@ -927,6 +1000,8 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
         item_query_params = self.request.GET.copy()
         item_query_params.pop('page', None)
         normalized_params = {
+            'year': filter_state['selected_year'],
+            'department': filter_state['selected_department'],
             'program': selected_program_id,
             'program_discipline': selected_program_discipline_id,
             'competence': selected_competence,
@@ -950,9 +1025,13 @@ class TrashTeacherWorkspaceView(TeacherRequiredMixin, TemplateView):
         context.update(
             {
                 'teacher': getattr(self, 'teacher', None),
+                'admission_years': filter_state['admission_years'],
+                'program_departments': filter_state['program_departments'],
                 'programs': programs,
                 'available_program_disciplines': available_program_disciplines,
                 'current_program_discipline': current_program_discipline,
+                'selected_year': filter_state['selected_year'],
+                'selected_department': filter_state['selected_department'],
                 'selected_program': selected_program_id,
                 'selected_program_discipline': selected_program_discipline_id,
                 'selected_competence': selected_competence,

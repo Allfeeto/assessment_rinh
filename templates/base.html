@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Система оценочных материалов{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=workspace-filters-3">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -13,9 +13,9 @@
         <a class="brand" href="/">Assessment RINH</a>
         {% if request.user.is_authenticated %}
             {% if can_use_teacher_workspace %}
-                <a class="nav-link {% if request.path|slice:':21' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
+                <a class="nav-link {% if request.path|slice:':22' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
                 <a class="nav-link {% if request.path|slice:':28' == '/assessment/trash-workspace/' %}active{% endif %}" href="{% url 'assessment_trash_workspace' %}">Корзина заданий</a>
-                <a class="nav-link {% if request.path|slice:':12' == '/assessment/' %}active{% endif %}" href="/assessment/">Задания</a>
+                <a class="nav-link {% if request.path|slice:':12' == '/assessment/' and request.path|slice:':22' != '/assessment/workspace/' and request.path|slice:':28' != '/assessment/trash-workspace/' %}active{% endif %}" href="/assessment/">Задания</a>
                 <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
                 <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
             {% endif %}
@@ -54,7 +54,7 @@
     {% endif %}
     {% block content %}{% endblock %}
 </main>
-<script src="{% static 'js/base.js' %}"></script>
+<script src="{% static 'js/base.js' %}?v=workspace-filters-3"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

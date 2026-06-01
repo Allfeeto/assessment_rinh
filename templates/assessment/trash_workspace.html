@@ -19,30 +19,70 @@
 </div>
 
 <div class="panel">
-    <form method="get" class="form-row">
-        <div class="field">
-            <label for="id_program">Образовательная программа в корзине</label>
-            <select id="id_program" name="program" data-auto-submit-change="1">
-                <option value="">Выберите программу</option>
-                {% for program in programs %}
-                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>
-                        {{ program.display_name }}
+    <form method="get" class="form-row workspace-filter-grid">
+        <div class="field workspace-filter-year">
+            <label for="id_year">Год набора</label>
+            <select id="id_year" name="year" data-auto-submit-change="1">
+                <option value="">Все годы</option>
+                {% for year in admission_years %}
+                    <option value="{{ year }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>
+                        {{ year }}
                     </option>
                 {% endfor %}
             </select>
         </div>
-        <div class="field">
+        <div class="field workspace-filter-department">
+            <label for="id_department">Кафедра образовательной программы</label>
+            <select id="id_department" name="department" data-auto-submit-change="1">
+                <option value="">Все кафедры</option>
+                {% for department in program_departments %}
+                    <option value="{{ department.id }}" {% if selected_department == department.id|stringformat:"s" %}selected{% endif %}>
+                        {{ department.number }} — {{ department.short_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field workspace-filter-program">
+            <label for="id_program">Образовательная программа в корзине</label>
+            <select
+                id="id_program"
+                name="program"
+                data-autocomplete-kind="educational_program"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите код или название программы"
+                data-autocomplete-dynamic-params="id_year:year,id_department:department_id"
+                data-autocomplete-extra="deleted_only=1"
+                data-auto-submit-change="1"
+            >
+                <option value="">Начните вводить код или название</option>
+                {% for program in programs %}
+                    <option value="{{ program.id }}" {% if selected_program == program.id|stringformat:"s" %}selected{% endif %}>{{ program.full_display_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field workspace-filter-discipline">
             <label for="id_program_discipline">Дисциплина учебного плана</label>
-            <select id="id_program_discipline" name="program_discipline" data-auto-submit-change="1">
+            <select
+                id="id_program_discipline"
+                name="program_discipline"
+                data-autocomplete-kind="program_discipline"
+                data-autocomplete-url="/core/lookup/"
+                data-autocomplete-placeholder="Введите код или название дисциплины"
+                data-autocomplete-disabled-placeholder="Сначала выберите образовательную программу"
+                data-autocomplete-parent="id_program"
+                data-autocomplete-parent-param="educational_program_id"
+                data-autocomplete-parent-required="1"
+                data-autocomplete-dynamic-params="id_year:year,id_department:program_department_id"
+                data-autocomplete-extra="deleted_only=1"
+                data-auto-submit-change="1"
+            >
                 <option value="">Выберите дисциплину</option>
                 {% for pd in available_program_disciplines %}
-                    <option value="{{ pd.id }}" {% if selected_program_discipline == pd.id|stringformat:"s" %}selected{% endif %}>
-                        {{ pd.discipline_display_name }}{% if not pd.is_active_in_plan %} (нет в актуальном PLX){% endif %}
-                    </option>
+                    <option value="{{ pd.id }}" {% if selected_program_discipline == pd.id|stringformat:"s" %}selected{% endif %}>{{ pd.discipline_display_name }}{% if not pd.is_active_in_plan %} (нет в актуальном PLX){% endif %}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="field">
+        <div class="field workspace-filter-competence">
             <label for="id_competence">Компетенция</label>
             <select id="id_competence" name="competence" data-auto-submit-change="1">
                 <option value="">Все компетенции</option>
@@ -53,7 +93,7 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="field">
+        <div class="field workspace-filter-type">
             <label for="id_assessment_item_type">Тип задания</label>
             <select id="id_assessment_item_type" name="assessment_item_type" data-auto-submit-change="1">
                 <option value="">Все типы</option>
@@ -64,11 +104,11 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="field">
+        <div class="field workspace-filter-search">
             <label for="id_q">Поиск по тексту</label>
             <input id="id_q" type="text" name="q" value="{{ search_query }}" placeholder="Часть текста задания">
         </div>
-        <div class="field" style="max-width: 170px;">
+        <div class="field workspace-filter-per-page">
             <label for="id_per_page">Строк на странице</label>
             <select id="id_per_page" name="per_page" data-auto-submit-change="1">
                 {% for option in per_page_choices %}
@@ -76,7 +116,7 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="actions">
+        <div class="actions workspace-filter-actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="{% url 'assessment_trash_workspace' %}">Сбросить</a>
             <a class="btn secondary" href="{% url 'assessment_workspace' %}">Обычное рабочее место</a>
@@ -95,8 +135,11 @@
 {% if current_program_discipline %}
     <div class="panel">
         <h2 style="margin-bottom: 8px;">
-            Источник: {{ current_program_discipline.educational_program.display_name }} / {{ current_program_discipline.discipline_display_name }}
+            Источник: {{ current_program_discipline.educational_program.full_display_name }} / {{ current_program_discipline.discipline_display_name }}
         </h2>
+        {% if current_program_discipline.department %}
+            <p class="muted">Кафедра дисциплины: {{ current_program_discipline.department.short_name }}</p>
+        {% endif %}
         <p class="muted">Скопируйте старые задания, затем вставьте их в активную дисциплину в обычном рабочем месте.</p>
     </div>
 
@@ -140,7 +183,7 @@
                 {% empty %}
                     <tbody>
                     <tr>
-                        <td colspan="5" class="muted">В текущем контексте заданий нет.</td>
+                        <td colspan="5" class="muted">Нет данных по выбранным фильтрам.</td>
                     </tr>
                     </tbody>
                 {% endfor %}
@@ -165,7 +208,13 @@
     </div>
 {% else %}
     <div class="panel">
-        <div class="muted">В корзине нет доступных вам дисциплин учебных планов.</div>
+        <div class="muted">
+            {% if programs %}
+                Выберите образовательную программу и дисциплину учебного плана в корзине.
+            {% else %}
+                Нет данных по выбранным фильтрам.
+            {% endif %}
+        </div>
     </div>
 {% endif %}
 {% endblock %}

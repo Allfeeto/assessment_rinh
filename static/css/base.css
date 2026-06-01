@@ -139,6 +139,51 @@ h1, h2, h3 {
     gap: 10px;
     align-items: flex-end;
 }
+.workspace-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(130px, 160px) minmax(220px, 260px) repeat(3, minmax(170px, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+.workspace-filter-grid .field {
+    min-width: 0;
+    flex: initial;
+}
+.workspace-filter-grid label {
+    min-height: 36px;
+    display: flex;
+    align-items: flex-end;
+}
+.workspace-filter-year {
+    grid-column: 1;
+}
+.workspace-filter-department {
+    grid-column: 2;
+}
+.workspace-filter-program {
+    grid-column: 3 / -1;
+    min-width: 420px;
+}
+.workspace-filter-discipline {
+    grid-column: 1 / span 2;
+}
+.workspace-filter-competence {
+    grid-column: 3;
+}
+.workspace-filter-type {
+    grid-column: 4;
+}
+.workspace-filter-search {
+    grid-column: 5;
+}
+.workspace-filter-per-page {
+    grid-column: 1;
+    max-width: 170px;
+}
+.workspace-filter-actions {
+    grid-column: 2 / -1;
+    align-self: end;
+}
 .field {
     min-width: 180px;
     flex: 1 1 180px;
@@ -210,6 +255,8 @@ input[type="checkbox"] {
     font: inherit;
     color: var(--text);
     background: #fff;
+    direction: ltr;
+    text-align: left;
 }
 .autocomplete-menu {
     position: absolute;
@@ -389,4 +436,29 @@ th {
     font-size: 24px;
     color: var(--accent);
     font-weight: 700;
+}
+
+@media (max-width: 980px) {
+    .workspace-filter-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .workspace-filter-year,
+    .workspace-filter-department,
+    .workspace-filter-program,
+    .workspace-filter-discipline,
+    .workspace-filter-competence,
+    .workspace-filter-type,
+    .workspace-filter-search,
+    .workspace-filter-per-page,
+    .workspace-filter-actions {
+        grid-column: auto;
+        min-width: 0;
+        max-width: none;
+    }
+    .workspace-filter-program {
+        grid-column: 1 / -1;
+    }
+    .workspace-filter-grid label {
+        min-height: 0;
+    }
 }

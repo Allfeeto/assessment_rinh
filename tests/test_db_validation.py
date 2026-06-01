@@ -232,6 +232,6 @@ def test_program_discipline_lookup_label_includes_plan_code(validation_schema):
     assert results == [
         {
             'id': program_discipline.id,
-            'label': f'{program} | Б1.О.07 — Базы данных',
+            'label': f'{program.full_display_name} | Б1.О.07 — Базы данных',
         }
     ]
