@@ -114,8 +114,6 @@
         if (!select.dataset.autocompleteKind) {
             return;
         }
-        const dynamicParams = parseDynamicParams(select.dataset.autocompleteDynamicParams);
-
         select.dataset.autocompleteReady = '1';
         select.style.display = 'none';
 
@@ -328,13 +326,6 @@
                 parentField.addEventListener('autocomplete-value-cleared', resetAfterDependencyChange);
             }
         }
-        dynamicParams.forEach(item => {
-            const field = document.getElementById(item.fieldId);
-            if (field) {
-                field.addEventListener('change', resetAfterDependencyChange);
-            }
-        });
-
         setInputStateByParent();
     }
 
