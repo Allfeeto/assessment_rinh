@@ -5,7 +5,6 @@ log() {
     printf '%s %s\n' "$(date -Iseconds)" "$*"
 }
 
-
 fail() {
     log "ERROR: $*"
     exit 1
