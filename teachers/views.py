@@ -32,8 +32,11 @@ from core.view_helpers import (
     NamedListView,
     NamedUpdateView,
     get_per_page,
+    normalize_sort,
+    ordering_for_sort,
     paginate_queryset,
     query_params_without,
+    sort_link_queries,
 )
 from disciplines.models import ProgramDiscipline
 from programs.models import EducationalProgram
@@ -44,6 +47,25 @@ from .models import Department, Teacher, TeacherProgramDiscipline
 
 ASSIGNMENT_SORT_FIELDS = {'code', 'discipline'}
 ASSIGNMENT_SORT_DIRECTIONS = {'asc', 'desc'}
+TEACHER_LINK_SORT_OPTIONS = {
+    'discipline_code': (
+        'program_discipline__discipline_code',
+        'program_discipline__discipline__name',
+        'teacher__full_name',
+        'id',
+    ),
+    'discipline': (
+        'program_discipline__discipline__name',
+        'program_discipline__discipline_code',
+        'teacher__full_name',
+        'id',
+    ),
+}
+TEACHER_LINK_DEFAULT_ORDERING = (
+    'teacher__full_name',
+    'program_discipline__educational_program__program_profile__code',
+    'program_discipline__discipline__name',
+)
 
 
 def _normalize_assignment_sort(sort_by, sort_direction):
@@ -241,11 +263,7 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             'program_discipline__educational_program__program_profile',
             'program_discipline__educational_program__department',
             'program_discipline__discipline',
-        ).filter(program_discipline__educational_program__is_deleted=False).order_by(
-            'teacher__full_name',
-            'program_discipline__educational_program__program_profile__code',
-            'program_discipline__discipline__name',
-        )
+        ).filter(program_discipline__educational_program__is_deleted=False)
         if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
             teachers_qs = filter_teachers_for_assignment(self.request.user, teachers_qs)
             departments_qs = departments_qs.filter(pk__in=get_user_departments(self.request.user))
@@ -269,6 +287,20 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
                 teacher_program_disciplines_qs = teacher_program_disciplines_qs.filter(
                     teacher=active_teacher,
                 )
+
+        teacher_link_sort, teacher_link_sort_dir = normalize_sort(
+            self.request.GET.get('link_sort', ''),
+            self.request.GET.get('link_dir', 'asc'),
+            TEACHER_LINK_SORT_OPTIONS,
+        )
+        teacher_program_disciplines_qs = teacher_program_disciplines_qs.order_by(
+            *ordering_for_sort(
+                teacher_link_sort,
+                teacher_link_sort_dir,
+                TEACHER_LINK_SORT_OPTIONS,
+                TEACHER_LINK_DEFAULT_ORDERING,
+            )
+        )
 
         departments_page_obj = paginate_queryset(
             self.request,
@@ -298,6 +330,17 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
         context['departments_query_params'] = query_params_without(self.request, 'department_page')
         context['teachers_query_params'] = query_params_without(self.request, 'teacher_page')
         context['teacher_program_disciplines_query_params'] = query_params_without(self.request, 'link_page')
+        context['teacher_assignment_sort'] = teacher_link_sort
+        context['teacher_assignment_sort_dir'] = teacher_link_sort_dir
+        context['teacher_assignment_sort_links'] = sort_link_queries(
+            self.request,
+            TEACHER_LINK_SORT_OPTIONS.keys(),
+            current_sort=teacher_link_sort,
+            current_direction=teacher_link_sort_dir,
+            sort_param='link_sort',
+            direction_param='link_dir',
+            page_param='link_page',
+        )
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
 
@@ -543,8 +586,27 @@ class TeacherProgramDisciplineListView(NamedListView):
         ('ID', 'id'),
         ('Преподаватель', 'teacher.full_name'),
         ('Программа', 'program_discipline.educational_program'),
-        ('Дисциплина', 'program_discipline.discipline_display_name'),
+        ('Код', 'program_discipline.discipline_code'),
+        ('Дисциплина', 'program_discipline.discipline.name'),
     )
+    sortable_columns = {
+        'discipline_code': (
+            'program_discipline__discipline_code',
+            'program_discipline__discipline__name',
+            'teacher__full_name',
+            'id',
+        ),
+        'discipline': (
+            'program_discipline__discipline__name',
+            'program_discipline__discipline_code',
+            'teacher__full_name',
+            'id',
+        ),
+    }
+    list_column_sort_keys = {
+        'program_discipline.discipline_code': 'discipline_code',
+        'program_discipline.discipline.name': 'discipline',
+    }
     create_url_name = 'teachers_teacher_program_discipline_create'
     detail_url_name = 'teachers_teacher_program_discipline_detail'
     update_url_name = 'teachers_teacher_program_discipline_update'
@@ -586,7 +648,8 @@ class TeacherProgramDisciplineDetailView(NamedDetailView):
         ('ID', 'id'),
         ('Преподаватель', 'teacher.full_name'),
         ('Образовательная программа', 'program_discipline.educational_program'),
-        ('Дисциплина', 'program_discipline.discipline_display_name'),
+        ('Код дисциплины', 'program_discipline.discipline_code'),
+        ('Дисциплина', 'program_discipline.discipline.name'),
     )
 
     def get_queryset(self):

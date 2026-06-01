@@ -9,6 +9,7 @@ from .permissions import can_use_model_permission, is_staff_or_superuser
 
 PER_PAGE_CHOICES = (50, 100, 200)
 DEFAULT_PER_PAGE = 50
+SORT_DIRECTIONS = {'asc', 'desc'}
 
 
 def get_per_page(request, *, default=DEFAULT_PER_PAGE, choices=PER_PAGE_CHOICES):
@@ -31,6 +32,47 @@ def query_params_without(request, *keys):
     for key in keys:
         params.pop(key, None)
     return params.urlencode()
+
+
+def normalize_sort(sort_by, sort_direction, sort_options, *, default_sort='', default_direction='asc'):
+    if sort_by not in sort_options:
+        sort_by = default_sort if default_sort in sort_options else ''
+    if sort_direction not in SORT_DIRECTIONS:
+        sort_direction = default_direction if default_direction in SORT_DIRECTIONS else 'asc'
+    return sort_by, sort_direction
+
+
+def ordering_for_sort(sort_by, sort_direction, sort_options, default_ordering=()):
+    if not sort_by or sort_by not in sort_options:
+        return tuple(default_ordering)
+
+    ordering = []
+    for field_name in sort_options[sort_by]:
+        normalized_field_name = field_name[1:] if field_name.startswith('-') else field_name
+        ordering.append(f'-{normalized_field_name}' if sort_direction == 'desc' else normalized_field_name)
+    return tuple(ordering)
+
+
+def sort_link_queries(
+    request,
+    sort_keys,
+    *,
+    current_sort='',
+    current_direction='asc',
+    sort_param='sort',
+    direction_param='dir',
+    page_param='page',
+):
+    links = {}
+    for sort_key in sort_keys:
+        params = request.GET.copy()
+        params.pop(page_param, None)
+        params[sort_param] = sort_key
+        params[direction_param] = (
+            'desc' if sort_key == current_sort and current_direction == 'asc' else 'asc'
+        )
+        links[sort_key] = params.urlencode()
+    return links
 
 
 def resolve_attr(obj, path):
@@ -86,13 +128,31 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
     search_fields = ()
     list_columns = ()
     order_by = ('id',)
+    sortable_columns = {}
+    list_column_sort_keys = {}
+    sort_param = 'sort'
+    sort_direction_param = 'dir'
+    default_sort = ''
+    default_sort_direction = 'asc'
     create_url_name = ''
     detail_url_name = ''
     update_url_name = ''
     delete_url_name = ''
 
     def get_queryset(self):
-        queryset = super().get_queryset().order_by(*self.order_by)
+        queryset = super().get_queryset()
+        current_sort, current_direction = normalize_sort(
+            self.request.GET.get(self.sort_param, ''),
+            self.request.GET.get(self.sort_direction_param, 'asc'),
+            self.sortable_columns,
+            default_sort=self.default_sort,
+            default_direction=self.default_sort_direction,
+        )
+        self.current_sort = current_sort
+        self.current_sort_direction = current_direction
+        queryset = queryset.order_by(
+            *ordering_for_sort(current_sort, current_direction, self.sortable_columns, self.order_by)
+        )
         query = self.request.GET.get('q', '').strip()
         if query and self.search_fields:
             conditions = Q()
@@ -113,6 +173,28 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
         context['title'] = self.title
         context['search_query'] = self.request.GET.get('q', '')
         context['list_columns'] = self.list_columns
+        current_sort = getattr(self, 'current_sort', '')
+        current_direction = getattr(self, 'current_sort_direction', 'asc')
+        list_sort_links = sort_link_queries(
+            self.request,
+            self.sortable_columns.keys(),
+            current_sort=current_sort,
+            current_direction=current_direction,
+            sort_param=self.sort_param,
+            direction_param=self.sort_direction_param,
+            page_param='page',
+        )
+        context['display_columns'] = [
+            {
+                'label': label,
+                'path': column_path,
+                'sort_key': self.list_column_sort_keys.get(column_path, ''),
+                'sort_query': list_sort_links.get(self.list_column_sort_keys.get(column_path, ''), ''),
+                'is_sorted': bool(self.list_column_sort_keys.get(column_path, '') == current_sort),
+                'sort_direction': current_direction,
+            }
+            for label, column_path in self.list_columns
+        ]
         can_view_detail = bool(self.detail_url_name)
         can_change = self.can_use_action('change')
         can_delete = self.can_use_action('delete')

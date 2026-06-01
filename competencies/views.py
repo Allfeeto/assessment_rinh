@@ -28,13 +28,38 @@ from core.view_helpers import (
     NamedListView,
     NamedUpdateView,
     get_per_page,
+    normalize_sort,
+    ordering_for_sort,
     paginate_queryset,
+    sort_link_queries,
 )
 from disciplines.models import ProgramDiscipline
 
 from .forms import CompetenceForm, DisciplineCompetenceForm
 from .lookups import lookup_competence
 from .models import Competence, DisciplineCompetence
+
+
+MATRIX_SORT_OPTIONS = {
+    'discipline_code': (
+        'program_discipline__discipline_code',
+        'program_discipline__discipline__name',
+        'competence__code',
+        'id',
+    ),
+    'discipline': (
+        'program_discipline__discipline__name',
+        'program_discipline__discipline_code',
+        'competence__code',
+        'id',
+    ),
+}
+MATRIX_DEFAULT_ORDERING = (
+    'program_discipline__educational_program__program_profile__code',
+    'program_discipline__discipline_code',
+    'program_discipline__discipline__name',
+    'competence__code',
+)
 
 
 class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
@@ -106,11 +131,6 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         ).filter(
             program_discipline__educational_program__is_deleted=False,
             program_discipline__in=program_discipline_scope,
-        ).order_by(
-            'program_discipline__educational_program__program_profile__code',
-            'program_discipline__discipline_code',
-            'program_discipline__discipline__name',
-            'competence__code',
         )
 
         if educational_program_id:
@@ -160,6 +180,20 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
             discipline_competences_qs = discipline_competences_qs.filter(
                 program_discipline__discipline_id=discipline_id
             )
+
+        matrix_sort, matrix_sort_dir = normalize_sort(
+            self.request.GET.get('matrix_sort', ''),
+            self.request.GET.get('matrix_dir', 'asc'),
+            MATRIX_SORT_OPTIONS,
+        )
+        discipline_competences_qs = discipline_competences_qs.order_by(
+            *ordering_for_sort(
+                matrix_sort,
+                matrix_sort_dir,
+                MATRIX_SORT_OPTIONS,
+                MATRIX_DEFAULT_ORDERING,
+            )
+        )
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
@@ -269,6 +303,17 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
         context['discipline_competences_page_obj'] = discipline_competences_page_obj
         context['competences_query_params'] = competences_params.urlencode()
         context['discipline_competences_query_params'] = links_params.urlencode()
+        context['matrix_sort'] = matrix_sort
+        context['matrix_sort_dir'] = matrix_sort_dir
+        context['matrix_sort_links'] = sort_link_queries(
+            self.request,
+            MATRIX_SORT_OPTIONS.keys(),
+            current_sort=matrix_sort,
+            current_direction=matrix_sort_dir,
+            sort_param='matrix_sort',
+            direction_param='matrix_dir',
+            page_param='link_page',
+        )
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_manage_competencies'] = can_manage_competencies
@@ -365,9 +410,28 @@ class DisciplineCompetenceListView(NamedListView):
     )
     list_columns = (
         ('ID', 'id'),
-        ('Дисциплина учебного плана', 'program_discipline'),
+        ('Код дисциплины', 'program_discipline.discipline_code'),
+        ('Дисциплина', 'program_discipline.discipline.name'),
         ('Компетенция', 'competence'),
     )
+    sortable_columns = {
+        'discipline_code': (
+            'program_discipline__discipline_code',
+            'program_discipline__discipline__name',
+            'competence__code',
+            'id',
+        ),
+        'discipline': (
+            'program_discipline__discipline__name',
+            'program_discipline__discipline_code',
+            'competence__code',
+            'id',
+        ),
+    }
+    list_column_sort_keys = {
+        'program_discipline.discipline_code': 'discipline_code',
+        'program_discipline.discipline.name': 'discipline',
+    }
     create_url_name = 'competencies_discipline_competence_create'
     detail_url_name = 'competencies_discipline_competence_detail'
     update_url_name = 'competencies_discipline_competence_update'
@@ -405,7 +469,8 @@ class DisciplineCompetenceDetailView(NamedDetailView):
     delete_url_name = 'competencies_discipline_competence_delete'
     detail_fields = (
         ('ID', 'id'),
-        ('Дисциплина учебного плана', 'program_discipline'),
+        ('Код дисциплины', 'program_discipline.discipline_code'),
+        ('Дисциплина', 'program_discipline.discipline.name'),
         ('Компетенция', 'competence'),
     )
 

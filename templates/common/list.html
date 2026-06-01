@@ -35,8 +35,16 @@
     <table>
         <thead>
         <tr>
-            {% for column_name, _ in list_columns %}
-                <th>{{ column_name }}</th>
+            {% for column in display_columns %}
+                <th>
+                    {% if column.sort_query %}
+                        <a class="table-sort{% if column.is_sorted %} active{% endif %}" href="?{{ column.sort_query }}">
+                            {{ column.label }}{% if column.is_sorted %} {% if column.sort_direction == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                        </a>
+                    {% else %}
+                        {{ column.label }}
+                    {% endif %}
+                </th>
             {% endfor %}
             {% if has_row_actions %}
                 <th>Действия</th>

@@ -100,7 +100,16 @@
             <th>Тип</th>
             <th>Компетенции</th>
             <th>Программа</th>
-            <th>Дисциплина</th>
+            <th>
+                <a class="table-sort{% if item_sort == 'discipline_code' %} active{% endif %}" href="?{{ item_sort_links.discipline_code }}">
+                    Код{% if item_sort == 'discipline_code' %} {% if item_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="table-sort{% if item_sort == 'discipline' %} active{% endif %}" href="?{{ item_sort_links.discipline }}">
+                    Дисциплина{% if item_sort == 'discipline' %} {% if item_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
             <th>Действия</th>
         </tr>
         </thead>
@@ -112,7 +121,8 @@
                 <td>{{ item.item_type_ui_name|default:item.assessment_item_type.name }}</td>
                 <td>{{ item.ui_competence_codes }}</td>
                 <td>{{ item.program_discipline.educational_program }}</td>
-                <td>{{ item.program_discipline.discipline_display_name }}</td>
+                <td class="muted">{{ item.program_discipline.discipline_code|default:"—" }}</td>
+                <td>{{ item.program_discipline.discipline.name }}</td>
                 <td>
                     <div class="actions">
                         <a class="btn secondary" href="{% url 'assessment_detail' item.pk %}?next={{ request.get_full_path|urlencode }}">Открыть</a>
@@ -123,7 +133,7 @@
             </tr>
         {% empty %}
             <tr>
-                <td colspan="7" class="muted">По текущим фильтрам задания не найдены.</td>
+                <td colspan="8" class="muted">По текущим фильтрам задания не найдены.</td>
             </tr>
         {% endfor %}
         </tbody>

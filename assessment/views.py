@@ -12,7 +12,14 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView
 from competencies.models import Competence
 from core.models import AssessmentItemType, EducationLevel
 from core.permissions import is_superuser_or_platform_admin
-from core.view_helpers import PER_PAGE_CHOICES, get_per_page, paginate_queryset
+from core.view_helpers import (
+    PER_PAGE_CHOICES,
+    get_per_page,
+    normalize_sort,
+    ordering_for_sort,
+    paginate_queryset,
+    sort_link_queries,
+)
 from disciplines.models import Discipline, ProgramDiscipline
 from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
 
@@ -40,6 +47,20 @@ from .services import (
 
 
 logger = logging.getLogger(__name__)
+
+
+ASSESSMENT_LIST_SORT_OPTIONS = {
+    'discipline_code': (
+        'program_discipline__discipline_code',
+        'program_discipline__discipline__name',
+        '-id',
+    ),
+    'discipline': (
+        'program_discipline__discipline__name',
+        'program_discipline__discipline_code',
+        '-id',
+    ),
+}
 
 
 def _safe_next_url(request, fallback):
@@ -98,7 +119,6 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
                 'competence__competence_type',
             )
             .prefetch_related('competence_links__competence')
-            .order_by('-id')
         )
 
         education_level_id = self.request.GET.get('education_level')
@@ -138,6 +158,22 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         search_query = self.request.GET.get('q', '').strip()
         if search_query:
             queryset = queryset.filter(prompt_text__icontains=search_query)
+
+        item_sort, item_sort_dir = normalize_sort(
+            self.request.GET.get('item_sort', ''),
+            self.request.GET.get('item_dir', 'asc'),
+            ASSESSMENT_LIST_SORT_OPTIONS,
+        )
+        self.item_sort = item_sort
+        self.item_sort_dir = item_sort_dir
+        queryset = queryset.order_by(
+            *ordering_for_sort(
+                item_sort,
+                item_sort_dir,
+                ASSESSMENT_LIST_SORT_OPTIONS,
+                ('-id',),
+            )
+        )
 
         return _restrict_queryset_for_teacher_user(self.request, queryset)
 
@@ -277,6 +313,19 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         params = self.request.GET.copy()
         params.pop('page', None)
         context['query_params'] = params.urlencode()
+        item_sort = getattr(self, 'item_sort', '')
+        item_sort_dir = getattr(self, 'item_sort_dir', 'asc')
+        context['item_sort'] = item_sort
+        context['item_sort_dir'] = item_sort_dir
+        context['item_sort_links'] = sort_link_queries(
+            self.request,
+            ASSESSMENT_LIST_SORT_OPTIONS.keys(),
+            current_sort=item_sort,
+            current_direction=item_sort_dir,
+            sort_param='item_sort',
+            direction_param='item_dir',
+            page_param='page',
+        )
 
         for item in context['items']:
             item.ui_competence_codes = get_item_competence_codes(item)

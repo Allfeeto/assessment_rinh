@@ -315,6 +315,7 @@ th {
     font-weight: 700;
     letter-spacing: inherit;
     text-align: left;
+    text-decoration: none;
     text-transform: inherit;
     transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
 }

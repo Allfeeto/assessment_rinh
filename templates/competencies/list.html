@@ -179,7 +179,16 @@
         <tr>
             <th>ID</th>
             <th>Образовательная программа</th>
-            <th>Дисциплина учебного плана</th>
+            <th>
+                <a class="table-sort{% if matrix_sort == 'discipline_code' %} active{% endif %}" href="?{{ matrix_sort_links.discipline_code }}">
+                    Код дисциплины{% if matrix_sort == 'discipline_code' %} {% if matrix_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="table-sort{% if matrix_sort == 'discipline' %} active{% endif %}" href="?{{ matrix_sort_links.discipline }}">
+                    Дисциплина{% if matrix_sort == 'discipline' %} {% if matrix_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
             <th>Компетенция</th>
             <th>Количество заданий</th>
             {% if can_manage_competencies %}<th>Действия</th>{% endif %}
@@ -190,7 +199,8 @@
             <tr>
                 <td>{{ link.id }}</td>
                 <td>{{ link.program_discipline.educational_program }}</td>
-                <td>{{ link.program_discipline.discipline_display_name }}</td>
+                <td class="muted">{{ link.program_discipline.discipline_code|default:"—" }}</td>
+                <td>{{ link.program_discipline.discipline.name }}</td>
                 <td>{{ link.competence.code }} — {{ link.competence.name }}</td>
                 <td>{{ link.items_count }}</td>
                 {% if can_manage_competencies %}
@@ -207,7 +217,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_competencies %}6{% else %}5{% endif %}" class="muted">Связи дисциплина-компетенция не найдены.</td></tr>
+            <tr><td colspan="{% if can_manage_competencies %}7{% else %}6{% endif %}" class="muted">Связи дисциплина-компетенция не найдены.</td></tr>
         {% endfor %}
         </tbody>
     </table>

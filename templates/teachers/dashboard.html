@@ -344,7 +344,16 @@
             <th>ID</th>
             <th>Преподаватель</th>
             <th>Программа</th>
-            <th>Дисциплина</th>
+            <th>
+                <a class="table-sort{% if teacher_assignment_sort == 'discipline_code' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline_code }}">
+                    Код{% if teacher_assignment_sort == 'discipline_code' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="table-sort{% if teacher_assignment_sort == 'discipline' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline }}">
+                    Дисциплина{% if teacher_assignment_sort == 'discipline' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
+                </a>
+            </th>
             {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
         </tr>
         </thead>
@@ -354,7 +363,8 @@
                 <td>{{ link.id }}</td>
                 <td>{{ link.teacher.full_name }}</td>
                 <td>{{ link.program_discipline.educational_program }}</td>
-                <td>{{ link.program_discipline.discipline_display_name }}</td>
+                <td class="muted">{{ link.program_discipline.discipline_code|default:"—" }}</td>
+                <td>{{ link.program_discipline.discipline.name }}</td>
                 {% if can_manage_teacher_directory %}
                     <td>
                         <div class="actions">
@@ -365,7 +375,7 @@
                 {% endif %}
             </tr>
         {% empty %}
-            <tr><td colspan="{% if can_manage_teacher_directory %}5{% else %}4{% endif %}" class="muted">Назначений пока нет.</td></tr>
+            <tr><td colspan="{% if can_manage_teacher_directory %}6{% else %}5{% endif %}" class="muted">Назначений пока нет.</td></tr>
         {% endfor %}
         </tbody>
     </table>
