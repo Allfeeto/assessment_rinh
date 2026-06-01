@@ -115,11 +115,14 @@ def lookup_discipline(request, query, selected_id, limit):
         label_program_disciplines = label_program_disciplines.filter(
             educational_program_id=educational_program_id
         )
+    show_discipline_name_only = request.GET.get('discipline_label') == 'name'
     labels_by_discipline_id = {}
     for program_discipline in label_program_disciplines:
         labels_by_discipline_id.setdefault(
             program_discipline.discipline_id,
-            program_discipline.discipline_display_name,
+            program_discipline.discipline.name
+            if show_discipline_name_only
+            else program_discipline.discipline_display_name,
         )
     return unique_lookup_results(
         queryset.distinct(),

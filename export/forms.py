@@ -95,7 +95,7 @@ class WordExportForm(forms.Form):
         for program_discipline in label_scope:
             discipline_labels.setdefault(
                 program_discipline.discipline_id,
-                program_discipline.discipline_display_name,
+                program_discipline.discipline.name,
             )
         self.fields['discipline'].label_from_instance = (
             lambda obj: discipline_labels.get(obj.id, obj.name)
@@ -107,6 +107,7 @@ class WordExportForm(forms.Form):
             parent_field_id='id_educational_program',
             parent_param='educational_program_id',
             dynamic_params=(('id_competence', 'competence_id'),),
+            extra_params={'discipline_label': 'name'},
         )
 
         self.fields['assessment_item_type'].queryset = get_ui_assessment_item_types_queryset()

@@ -304,6 +304,7 @@ def build_document(program_discipline, prepared_items: list[dict]) -> Document:
     doc = Document(str(MAKET_PATH))
     _clear_document_content(doc)
     _configure_document_styles(doc)
+    discipline_name = getattr(program_discipline.discipline, 'name', '')
 
     _add_text_styled(
         doc,
@@ -320,7 +321,7 @@ def build_document(program_discipline, prepared_items: list[dict]) -> Document:
     )
     _add_text_styled(
         doc,
-        f'«{program_discipline.discipline_display_name}»',
+        f'«{discipline_name}»',
         align=WD_ALIGN_PARAGRAPH.CENTER,
         size_pt=TITLE_FONT_SIZE_PT,
     )
