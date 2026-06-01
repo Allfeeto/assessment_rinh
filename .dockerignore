@@ -4,12 +4,17 @@ __pycache__
 *.pyc
 *.pyo
 *.pyd
+
 .git
 .gitignore
 .idea
 .vscode
+
 .env
 db.sqlite3
+
 media
 staticfiles
 *.log
+
+backups/
