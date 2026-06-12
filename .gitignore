@@ -226,6 +226,7 @@ __marimo__/
 *.dump
 *.sql
 !DB_info/educational_program_trash.sql
+*DB_info/11-06-2026_15-42-45
 *.backup
 *.bak
 
