@@ -225,3 +225,40 @@ class EducationalProgram(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class ProgramPlxImportDraft(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        db_column='uploaded_by_id',
+        related_name='program_plx_import_drafts',
+        verbose_name='Пользователь',
+    )
+    existing_program = models.ForeignKey(
+        EducationalProgram,
+        on_delete=models.SET_NULL,
+        db_column='existing_program_id',
+        related_name='plx_import_drafts',
+        blank=True,
+        null=True,
+        verbose_name='Существующая программа',
+    )
+    source_filename = models.CharField(max_length=255, verbose_name='Имя PLX-файла')
+    dto_payload = models.JSONField(verbose_name='Структурированные данные PLX')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создан')
+    expires_at = models.DateTimeField(verbose_name='Действителен до')
+
+    class Meta:
+        managed = False
+        db_table = 'program_plx_import_draft'
+        verbose_name = 'Черновик импорта PLX'
+        verbose_name_plural = 'Черновики импорта PLX'
+        indexes = [
+            models.Index(fields=('uploaded_by', 'created_at'), name='plx_draft_user_created_idx'),
+            models.Index(fields=('expires_at',), name='plx_draft_expires_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.source_filename} — {self.uploaded_by}'

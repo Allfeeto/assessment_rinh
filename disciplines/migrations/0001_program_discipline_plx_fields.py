@@ -40,6 +40,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('teachers', '0001_teacher_departments'),
+        ('programs', '0001_initial'),
     ]
 
     operations = [

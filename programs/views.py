@@ -17,6 +17,7 @@ from core.view_helpers import (
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    compact_queryset_block,
     get_per_page,
     paginate_queryset,
     query_params_without,
@@ -26,8 +27,13 @@ from teachers.models import Department, TeacherProgramDiscipline
 
 from .forms import EducationalProgramForm, PlxImportUploadForm, ProgramProfileForm, TrainingDirectionForm
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
-from .services import PlxConflictError, PlxImportError, PlxImportService, PlxProgramUpdateService
-from .services.plx_dto import PlxProgramImportDTO
+from .services import (
+    PlxConflictError,
+    PlxImportDraftService,
+    PlxImportError,
+    PlxImportService,
+    PlxProgramUpdateService,
+)
 from .services.program_trash_service import ProgramTrashConflictError, ProgramTrashService
 
 
@@ -67,14 +73,54 @@ def _trash_programs_for_user(user):
 
 class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, TemplateView):
     template_name = 'programs/dashboard.html'
-    pending_session_key = 'plx_import_pending_dto'
+    fragment_templates = {
+        'directions': 'programs/includes/directions_table.html',
+        'profiles': 'programs/includes/profiles_table.html',
+        'programs': 'programs/includes/programs_block.html',
+        'indicator_imports': 'programs/includes/indicator_imports_table.html',
+    }
+    pending_session_key = 'plx_import_draft_id'
+    programs_per_page_choices = (20, 50, 100)
     import_service = PlxImportService()
     update_service = PlxProgramUpdateService(import_service=import_service)
+    draft_service = PlxImportDraftService()
+
+    def get_template_names(self):
+        fragment = self.request.GET.get('_fragment')
+        if (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            and fragment in self.fragment_templates
+        ):
+            return [self.fragment_templates[fragment]]
+        return super().get_template_names()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        per_page = get_per_page(self.request)
         can_manage_programs = is_domain_manager(self.request.user)
+        plx_import_active = bool(
+            kwargs.get('plx_import_active')
+            or kwargs.get('pending_conflict')
+            or kwargs.get('import_preview')
+        )
+        context.update(
+            {
+                'plx_import_active': plx_import_active,
+                'can_import_plx': can_manage_programs,
+                'can_import_indicators': can_manage_programs,
+                'can_manage_programs': is_superuser_or_platform_admin(self.request.user),
+                'can_view_program_trash': True,
+                'import_form': kwargs.get('import_form') or PlxImportUploadForm(),
+                'import_error': kwargs.get('import_error'),
+                'import_result': kwargs.get('import_result'),
+                'import_summary': kwargs.get('import_summary'),
+                'conflict_program': kwargs.get('conflict_program'),
+                'pending_conflict': kwargs.get('pending_conflict', False),
+                'import_preview': kwargs.get('import_preview'),
+            }
+        )
+        if plx_import_active:
+            return context
+
         directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
         profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
         programs_qs = EducationalProgram.objects.active().select_related(
@@ -93,69 +139,72 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
                 program_disciplines__in=program_discipline_scope,
             ).distinct()
 
-        directions_page_obj = paginate_queryset(
+        raw_programs_per_page = (self.request.GET.get('programs_per_page') or '').strip()
+        programs_per_page = (
+            int(raw_programs_per_page)
+            if raw_programs_per_page.isdigit()
+            and int(raw_programs_per_page) in self.programs_per_page_choices
+            else self.programs_per_page_choices[0]
+        )
+        context['directions_block'] = compact_queryset_block(
             self.request,
             directions_qs,
-            page_param='direction_page',
-            per_page=per_page,
+            prefix='directions',
         )
-        profiles_page_obj = paginate_queryset(
+        context['profiles_block'] = compact_queryset_block(
             self.request,
             profiles_qs,
-            page_param='profile_page',
-            per_page=per_page,
+            prefix='profiles',
         )
-        programs_page_obj = paginate_queryset(
+        context['programs_block'] = compact_queryset_block(
             self.request,
             programs_qs,
-            page_param='program_page',
-            per_page=per_page,
+            prefix='programs',
+            page_size=programs_per_page,
         )
-
-        context['directions'] = directions_page_obj.object_list
-        context['profiles'] = profiles_page_obj.object_list
-        context['programs'] = programs_page_obj.object_list
-        context['directions_page_obj'] = directions_page_obj
-        context['profiles_page_obj'] = profiles_page_obj
-        context['programs_page_obj'] = programs_page_obj
-        context['directions_query_params'] = query_params_without(self.request, 'direction_page')
-        context['profiles_query_params'] = query_params_without(self.request, 'profile_page')
-        context['programs_query_params'] = query_params_without(self.request, 'program_page')
-        context['per_page_choices'] = PER_PAGE_CHOICES
-        context['selected_per_page'] = per_page
-        context['can_import_plx'] = can_manage_programs
-        context['can_import_indicators'] = can_manage_programs
-        context['can_manage_programs'] = is_superuser_or_platform_admin(self.request.user)
-        context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
-        context['import_error'] = kwargs.get('import_error')
-        context['import_result'] = kwargs.get('import_result')
-        context['import_summary'] = kwargs.get('import_summary')
-        context['conflict_program'] = kwargs.get('conflict_program')
-        context['pending_conflict'] = kwargs.get('pending_conflict', False)
-        context['import_preview'] = kwargs.get('import_preview')
-        context['indicator_import_form'] = CompetenceIndicatorImportForm(request_user=self.request.user)
+        context['programs_per_page'] = programs_per_page
+        context['programs_per_page_choices'] = self.programs_per_page_choices
+        context['indicator_import_form'] = (
+            kwargs.get('indicator_import_form')
+            or CompetenceIndicatorImportForm(request_user=self.request.user)
+        )
+        context['indicator_import_error'] = kwargs.get('indicator_import_error')
+        context['indicator_import_issues'] = kwargs.get('indicator_import_issues', ())
         indicator_imports = CompetenceIndicatorImport.objects.select_related(
-            'educational_program__program_profile',
+            'educational_program__program_profile__training_direction__education_level',
             'educational_program__department',
             'uploaded_by',
-        )
+        ).order_by('-created_at')
         if not is_superuser_or_platform_admin(self.request.user):
             indicator_imports = indicator_imports.filter(
                 educational_program__department__in=get_user_departments(self.request.user),
             )
-        context['indicator_imports'] = indicator_imports.order_by('-created_at')[:10]
+        context['indicator_imports_block'] = compact_queryset_block(
+            self.request,
+            indicator_imports,
+            prefix='indicator_imports',
+            preview_size=3,
+            page_size=20,
+        )
+        result_id = (self.request.GET.get('indicator_import_result') or '').strip()
+        context['indicator_import_result'] = (
+            indicator_imports.filter(pk=result_id).first()
+            if result_id.isdigit()
+            else None
+        )
         return context
 
     def get(self, request, *args, **kwargs):
-        pending = self._load_pending_dto(request)
+        pending = self._load_pending_draft(request)
         context_kwargs = {}
         if pending:
-            dto, existing_program = pending
+            draft, dto = pending
             context_kwargs.update(
                 {
+                    'plx_import_active': True,
                     'pending_conflict': True,
                     'import_summary': dto.summary(),
-                    'conflict_program': existing_program,
+                    'conflict_program': self._active_existing_program(draft),
                 }
             )
         context = self.get_context_data(**context_kwargs)
@@ -170,7 +219,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         if action == 'apply_update':
             return self._handle_apply_update(request)
         if action == 'cancel_replace':
-            request.session.pop(self.pending_session_key, None)
+            self._clear_pending_draft(request)
             return redirect('programs_root')
         return self._handle_upload(request)
 
@@ -198,10 +247,8 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             existing_program = self.import_service.find_existing_program(dto)
 
             if existing_program:
-                request.session[self.pending_session_key] = {
-                    'dto': dto.to_dict(),
-                    'existing_program_id': existing_program.id,
-                }
+                self._store_pending_draft(request, dto, existing_program)
+                context_kwargs['plx_import_active'] = True
                 context_kwargs['pending_conflict'] = True
                 context_kwargs['conflict_program'] = existing_program
                 context_kwargs['import_error'] = (
@@ -211,25 +258,23 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
                 return render(request, self.template_name, self.get_context_data(**context_kwargs), status=409)
 
             result = self.import_service.import_program(dto, replace_existing=False, user=request.user)
-            request.session.pop(self.pending_session_key, None)
-            context_kwargs['import_form'] = PlxImportUploadForm()
-            context_kwargs['import_result'] = (
+            self._clear_pending_draft(request)
+            messages.success(
+                request,
                 f'Импорт завершен успешно. Создана программа ID={result.created_program_id}. '
                 f'Дисциплин: {result.disciplines_count}, '
                 f'компетенций: {result.competences_count}, '
-                f'связей дисциплина-компетенция: {result.links_count}.'
+                f'связей дисциплина-компетенция: {result.links_count}.',
             )
-            return render(request, self.template_name, self.get_context_data(**context_kwargs))
+            return redirect('programs_root')
         except PlxConflictError as exc:
             existing_program = None
             if exc.existing_program_id:
                 existing_program = EducationalProgram.objects.active().filter(pk=exc.existing_program_id).first()
-            request.session[self.pending_session_key] = {
-                'dto': dto.to_dict(),
-                'existing_program_id': exc.existing_program_id,
-            }
+            self._store_pending_draft(request, dto, existing_program)
             context_kwargs.update(
                 {
+                    'plx_import_active': True,
                     'pending_conflict': True,
                     'conflict_program': existing_program,
                     'import_error': str(exc),
@@ -241,55 +286,52 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             return render(request, self.template_name, self.get_context_data(**context_kwargs), status=400)
 
     def _handle_confirm_replace(self, request):
-        pending = request.session.get(self.pending_session_key)
-        if not pending:
+        pending = self._load_pending_draft(request)
+        if pending is None:
             context = self.get_context_data(
                 import_error='Не найдено отложенной операции импорта. Загрузите .plx повторно.',
             )
             return render(request, self.template_name, context, status=400)
 
-        dto = PlxProgramImportDTO.from_dict(pending['dto'])
+        draft, dto = pending
         context_kwargs = {'import_summary': dto.summary()}
         try:
             result = self.import_service.import_program(dto, replace_existing=True, user=request.user)
-            request.session.pop(self.pending_session_key, None)
+            self._clear_pending_draft(request, draft)
             replaced_part = (
                 f' (старая программа ID={result.replaced_program_id} перемещена в корзину)'
                 if result.replaced_program_id
                 else ''
             )
-            context_kwargs['import_result'] = (
+            messages.success(
+                request,
                 f'Импорт завершен успешно. Создана программа ID={result.created_program_id}{replaced_part}. '
                 f'Дисциплин: {result.disciplines_count}, '
                 f'компетенций: {result.competences_count}, '
-                f'связей дисциплина-компетенция: {result.links_count}.'
+                f'связей дисциплина-компетенция: {result.links_count}.',
             )
-            context_kwargs['import_form'] = PlxImportUploadForm()
-            return render(request, self.template_name, self.get_context_data(**context_kwargs))
+            return redirect('programs_root')
         except PlxImportError as exc:
-            existing_program = None
-            existing_program_id = pending.get('existing_program_id')
-            if existing_program_id:
-                existing_program = EducationalProgram.objects.active().filter(pk=existing_program_id).first()
             context_kwargs.update(
                 {
+                    'plx_import_active': True,
                     'pending_conflict': True,
-                    'conflict_program': existing_program,
+                    'conflict_program': self._active_existing_program(draft),
                     'import_error': str(exc),
                 }
             )
             return render(request, self.template_name, self.get_context_data(**context_kwargs), status=400)
 
     def _handle_preview_update(self, request):
-        pending = request.session.get(self.pending_session_key)
-        if not pending:
+        pending = self._load_pending_draft(request)
+        if pending is None:
             context = self.get_context_data(
                 import_error='Не найдено отложенной операции импорта. Загрузите .plx повторно.',
             )
             return render(request, self.template_name, context, status=400)
 
-        dto = PlxProgramImportDTO.from_dict(pending['dto'])
-        existing_program = self._get_pending_existing_program(pending)
+        draft, dto = pending
+        existing_program = self._active_existing_program(draft)
         if existing_program is None:
             context = self.get_context_data(
                 import_summary=dto.summary(),
@@ -299,6 +341,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
 
         preview = self.update_service.build_preview(dto, existing_program)
         context = self.get_context_data(
+            plx_import_active=True,
             pending_conflict=True,
             import_summary=dto.summary(),
             conflict_program=existing_program,
@@ -307,15 +350,15 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         return render(request, self.template_name, context, status=409 if preview.has_blocking_conflicts else 200)
 
     def _handle_apply_update(self, request):
-        pending = request.session.get(self.pending_session_key)
-        if not pending:
+        pending = self._load_pending_draft(request)
+        if pending is None:
             context = self.get_context_data(
                 import_error='Не найдено отложенной операции импорта. Загрузите .plx повторно.',
             )
             return render(request, self.template_name, context, status=400)
 
-        dto = PlxProgramImportDTO.from_dict(pending['dto'])
-        existing_program = self._get_pending_existing_program(pending)
+        draft, dto = pending
+        existing_program = self._active_existing_program(draft)
         if existing_program is None:
             context = self.get_context_data(
                 import_summary=dto.summary(),
@@ -328,6 +371,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         except PlxImportError as exc:
             preview = self.update_service.build_preview(dto, existing_program)
             context = self.get_context_data(
+                plx_import_active=True,
                 pending_conflict=True,
                 import_summary=dto.summary(),
                 conflict_program=existing_program,
@@ -336,11 +380,10 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             )
             return render(request, self.template_name, context, status=400)
 
-        request.session.pop(self.pending_session_key, None)
-        context = self.get_context_data(
-            import_form=PlxImportUploadForm(),
-            import_summary=dto.summary(),
-            import_result=(
+        self._clear_pending_draft(request, draft)
+        messages.success(
+            request,
+            (
                 f'Изменения применены к существующей программе ID={result.program_id}. '
                 f'Добавлено дисциплин: {result.created_disciplines}, '
                 f'обновлено дисциплин: {result.updated_disciplines}, '
@@ -350,33 +393,40 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
                 f'добавлено связей дисциплина-компетенция: {result.created_links}.'
             ),
         )
-        return render(request, self.template_name, context)
+        return redirect('programs_root')
+
+    def _store_pending_draft(self, request, dto, existing_program):
+        self._clear_pending_draft(request)
+        draft = self.draft_service.create(
+            dto=dto,
+            user=request.user,
+            existing_program=existing_program,
+        )
+        request.session[self.pending_session_key] = draft.id
+        return draft
+
+    def _clear_pending_draft(self, request, draft=None):
+        draft_id = request.session.pop(self.pending_session_key, None)
+        if draft is None:
+            draft = self.draft_service.get_for_user(draft_id, request.user)
+        self.draft_service.delete(draft)
+
+    def _load_pending_draft(self, request):
+        draft_id = request.session.get(self.pending_session_key)
+        if not draft_id:
+            return None
+        draft = self.draft_service.get_for_user(draft_id, request.user)
+        if draft is None:
+            request.session.pop(self.pending_session_key, None)
+            return None
+        return draft, self.draft_service.dto_from_draft(draft)
 
     @staticmethod
-    def _get_pending_existing_program(pending):
-        existing_program_id = pending.get('existing_program_id')
-        if not existing_program_id:
+    def _active_existing_program(draft):
+        program = draft.existing_program
+        if program is None or program.is_deleted:
             return None
-        return (
-            EducationalProgram.objects.active()
-            .select_related('program_profile__training_direction__education_level', 'department')
-            .filter(pk=existing_program_id)
-            .first()
-        )
-
-    def _load_pending_dto(self, request):
-        pending = request.session.get(self.pending_session_key)
-        if not pending:
-            return None
-        dto_data = pending.get('dto')
-        if not dto_data:
-            return None
-        dto = PlxProgramImportDTO.from_dict(dto_data)
-        existing_program_id = pending.get('existing_program_id')
-        existing_program = None
-        if existing_program_id:
-            existing_program = self._get_pending_existing_program(pending)
-        return dto, existing_program
+        return program
 
 
 class TrainingDirectionListView(NamedListView):

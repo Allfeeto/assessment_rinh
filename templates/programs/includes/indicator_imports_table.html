@@ -1,0 +1,37 @@
+<div class="table-wrap">
+    <table>
+        <thead>
+        <tr>
+            <th>Дата</th>
+            <th>Файл</th>
+            <th>Программа</th>
+            <th>Пользователь</th>
+            <th>Статус</th>
+            <th>Найдено</th>
+            <th>Создано</th>
+            <th>Обновлено</th>
+            <th>Пропущено</th>
+            <th>Ошибки</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for batch in indicator_imports_block.items %}
+            <tr>
+                <td>{{ batch.created_at|date:"d.m.Y H:i" }}</td>
+                <td>{{ batch.source_filename }}</td>
+                <td>{{ batch.educational_program.full_display_name }}</td>
+                <td>{{ batch.uploaded_by|default:"—" }}</td>
+                <td>{{ batch.get_status_display }}</td>
+                <td>{{ batch.total_rows }}</td>
+                <td>{{ batch.created_count }}</td>
+                <td>{{ batch.updated_count }}</td>
+                <td>{{ batch.skipped_count }}</td>
+                <td title="{{ batch.error_summary|default:'' }}">{{ batch.error_count }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="10" class="muted">Импорты индикаторов пока не выполнялись.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% include "programs/includes/compact_block_footer.html" with block=indicator_imports_block %}

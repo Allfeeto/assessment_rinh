@@ -19,7 +19,7 @@ from core.permissions import SENIOR_TEACHER_GROUP_NAME
 from core.models import AcademicDegree, AcademicTitle, AssessmentItemType, CompetenceType, EducationLevel
 from disciplines.models import Discipline, ProgramDiscipline
 from export.services import WordExportNotFoundError, generate_docx
-from programs.models import EducationalProgram, ProgramProfile, TrainingDirection
+from programs.models import EducationalProgram, ProgramPlxImportDraft, ProgramProfile, TrainingDirection
 from programs.services.program_trash_service import ProgramTrashConflictError, ProgramTrashService
 from teachers.models import Department, Teacher, TeacherProgramDiscipline
 
@@ -45,6 +45,7 @@ def trash_schema():
         TrainingDirection,
         ProgramProfile,
         EducationalProgram,
+        ProgramPlxImportDraft,
         Discipline,
         ProgramDiscipline,
         Competence,

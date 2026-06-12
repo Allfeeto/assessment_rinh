@@ -11,7 +11,7 @@ from core.lookups import (
     unique_lookup_results,
     user_can_lookup_all,
 )
-from core.permissions import is_superuser_or_platform_admin
+from core.permissions import get_user_departments, is_superuser_or_platform_admin
 
 from .models import EducationalProgram, ProgramProfile, TrainingDirection
 
@@ -103,7 +103,9 @@ def lookup_educational_program(request, query, selected_id, limit):
         'department',
     ).order_by('program_profile__code', 'admission_year')
 
-    if not is_superuser_or_platform_admin(request.user):
+    if request.GET.get('purpose') == 'indicator_import' and not is_superuser_or_platform_admin(request.user):
+        queryset = queryset.filter(department__in=get_user_departments(request.user))
+    elif not is_superuser_or_platform_admin(request.user):
         queryset = queryset.filter(
             program_disciplines__id__in=_lookup_program_discipline_ids(
                 request.user,

@@ -1,10 +1,10 @@
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -80,10 +80,7 @@ class CompetenceIndicatorImportView(LoginRequiredMixin, UserPassesTestMixin, Vie
             request_user=request.user,
         )
         if not form.is_valid():
-            for field_errors in form.errors.values():
-                for error in field_errors:
-                    messages.error(request, error)
-            return redirect('programs_root')
+            return self._render_dashboard(request, indicator_import_form=form, status=400)
 
         try:
             result = self.import_service.import_upload(
@@ -92,24 +89,33 @@ class CompetenceIndicatorImportView(LoginRequiredMixin, UserPassesTestMixin, Vie
                 user=request.user,
             )
         except IndicatorImportError as exc:
-            batch_part = f' Пакет импорта: #{exc.batch_id}.' if exc.batch_id else ''
-            messages.error(request, f'{exc}{batch_part}')
-            for issue in exc.issues[:20]:
-                messages.error(request, issue.display())
-            if len(exc.issues) > 20:
-                messages.error(request, f'Дополнительно ошибок: {len(exc.issues) - 20}.')
-            return redirect('programs_root')
-
-        messages.success(
-            request,
-            (
-                f'Импорт индикаторов завершён. Пакет #{result.batch_id}; '
-                f'таблиц: {result.tables_found}; найдено: {result.total_rows}; '
-                f'создано: {result.created_count}; обновлено: {result.updated_count}; '
-                f'пропущено: {result.skipped_count}.'
-            ),
+            if exc.batch_id:
+                return redirect(
+                    f"{reverse('programs_root')}?indicator_import_result={exc.batch_id}#indicator-import"
+                )
+            return self._render_dashboard(
+                request,
+                indicator_import_form=form,
+                indicator_import_error=str(exc),
+                indicator_import_issues=exc.issues[:20],
+                status=400,
+            )
+        return redirect(
+            f"{reverse('programs_root')}?indicator_import_result={result.batch_id}#indicator-import"
         )
-        return redirect('programs_root')
+
+    @staticmethod
+    def _render_dashboard(request, *, status, **context_kwargs):
+        from programs.views import ProgramsDashboardView
+
+        dashboard = ProgramsDashboardView()
+        dashboard.setup(request)
+        return render(
+            request,
+            dashboard.template_name,
+            dashboard.get_context_data(**context_kwargs),
+            status=status,
+        )
 
 
 class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):

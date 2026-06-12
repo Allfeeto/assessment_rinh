@@ -1,0 +1,13 @@
+<div class="compact-block-footer">
+    <span class="muted">Всего: {{ block.total_count }}</span>
+    {% if block.expanded %}
+        {% if block.can_expand %}
+            <a class="btn secondary small" href="?{{ block.collapse_query }}" data-compact-link="{{ block.prefix }}">Свернуть список</a>
+        {% endif %}
+    {% elif block.can_expand %}
+        <a class="btn secondary small" href="?{{ block.expand_query }}" data-compact-link="{{ block.prefix }}">Показать все</a>
+    {% endif %}
+</div>
+{% if block.expanded %}
+    {% include "common/pagination.html" with block=block %}
+{% endif %}

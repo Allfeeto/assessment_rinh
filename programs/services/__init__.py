@@ -7,6 +7,7 @@ from .exceptions import (
 )
 from .curriculum_replacement_service import CurriculumReplacementPolicy, CurriculumReplacementService
 from .plx_import_service import ImportResult, PlxImportService
+from .plx_import_draft_service import PlxImportDraftService
 from .plx_update_service import PlxImportPreview, PlxProgramUpdateService, PlxUpdateResult
 from .program_trash_service import ProgramTrashConflictError, ProgramTrashCounts, ProgramTrashService
 
@@ -16,6 +17,7 @@ __all__ = [
     'CurriculumReplacementService',
     'PlxConflictError',
     'PlxImportError',
+    'PlxImportDraftService',
     'PlxImportService',
     'PlxImportPreview',
     'PlxMappingError',

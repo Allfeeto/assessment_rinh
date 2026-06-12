@@ -114,6 +114,15 @@ def test_sql_schema_contract_parser_detects_required_objects():
             CONSTRAINT competence_indicator_source_table_check CHECK (source_table_number IS NULL OR source_table_number > 0),
             CONSTRAINT competence_indicator_source_row_check CHECK (source_row_number IS NULL OR source_row_number > 0)
         );
+        CREATE TABLE public.program_plx_import_draft (
+            id bigint NOT NULL,
+            uploaded_by_id integer NOT NULL,
+            existing_program_id integer,
+            source_filename character varying(255) NOT NULL,
+            dto_payload jsonb NOT NULL,
+            created_at timestamp with time zone NOT NULL,
+            expires_at timestamp with time zone NOT NULL
+        );
         CREATE TABLE public.discipline_competence (
             id integer NOT NULL,
             program_discipline_id integer NOT NULL,
@@ -175,6 +184,8 @@ def test_sql_schema_contract_parser_detects_required_objects():
         CREATE INDEX comp_ind_imp_status_idx ON public.competence_indicator_import (status);
         CREATE INDEX comp_indicator_code_idx ON public.competence_indicator (code);
         CREATE INDEX comp_indicator_competence_idx ON public.competence_indicator (competence_id);
+        CREATE INDEX plx_draft_expires_idx ON public.program_plx_import_draft (expires_at);
+        CREATE INDEX plx_draft_user_created_idx ON public.program_plx_import_draft (uploaded_by_id, created_at);
         CREATE UNIQUE INDEX teacher_departments_teacher_department_uidx ON public.teacher_departments (teacher_id, department_id);
         CREATE INDEX teacher_departments_teacher_idx ON public.teacher_departments (teacher_id);
         CREATE INDEX teacher_departments_department_idx ON public.teacher_departments (department_id);

@@ -19,6 +19,10 @@ class CompetenceIndicatorImportForm(forms.Form):
         queryset=EducationalProgram.objects.none(),
         label='Образовательная программа',
         help_text='Индикаторы будут сопоставлены только с компетенциями выбранной программы.',
+        error_messages={
+            'required': 'Выберите образовательную программу из списка подсказок.',
+            'invalid_choice': 'Выберите образовательную программу из списка подсказок.',
+        },
     )
     word_file = forms.FileField(
         label='Файл индикаторов (.doc или .docx)',
@@ -27,14 +31,21 @@ class CompetenceIndicatorImportForm(forms.Form):
 
     def __init__(self, *args, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        selected_program_id = self.data.get('educational_program') if self.is_bound else None
         queryset = EducationalProgram.objects.active().select_related(
             'program_profile__training_direction__education_level',
             'department',
         ).order_by('program_profile__code', 'admission_year', 'department__number')
         if request_user is not None and not is_superuser_or_platform_admin(request_user):
             queryset = queryset.filter(department__in=get_user_departments(request_user))
-        self.fields['educational_program'].queryset = queryset
+        self.fields['educational_program'].queryset = autocomplete_queryset(queryset, selected_program_id)
         self.fields['educational_program'].label_from_instance = lambda obj: obj.full_display_name
+        apply_autocomplete_attrs(
+            self.fields['educational_program'],
+            kind='educational_program',
+            placeholder='Введите код, название, год набора или кафедру',
+            extra_params={'purpose': 'indicator_import'},
+        )
 
     def clean_word_file(self):
         uploaded_file = self.cleaned_data['word_file']

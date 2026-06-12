@@ -1,28 +1,25 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Направления, профили, программы{% endblock %}
+{% block title %}{% if plx_import_active %}Импорт учебного плана PLX{% else %}Программы{% endif %}{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Направления, профили и образовательные программы</h1>
-
-{% if import_error %}
-    <div class="alert">{{ import_error }}</div>
-{% endif %}
-
-{% if import_result %}
-    <div class="panel" style="border-color:#9dc9a2;background:#edf9ef;color:#1d5a26;">
-        {{ import_result }}
-    </div>
-{% endif %}
+<h1 class="page-title">{% if plx_import_active %}Импорт учебного плана PLX{% else %}Программы{% endif %}</h1>
 
 {% if can_import_plx %}
     <div class="panel">
         <h2>Импорт образовательной программы из PLX</h2>
+        {% if import_error %}
+            <div class="alert">{{ import_error }}</div>
+        {% endif %}
+        {% if import_result %}
+            <div class="flash success">{{ import_result }}</div>
+        {% endif %}
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             <input type="hidden" name="action" value="upload">
-            <div class="form-row">
-                <div class="field">
+            <div class="import-form-grid">
+                <div class="field import-file-field import-file-field-wide">
                     <label for="{{ import_form.plx_file.id_for_label }}">Файл PLX</label>
                     {{ import_form.plx_file }}
                     {% if import_form.plx_file.errors %}
@@ -33,7 +30,7 @@
                         </ul>
                     {% endif %}
                 </div>
-                <div class="field" style="max-width:240px;">
+                <div class="field import-action-field">
                     <button type="submit" class="btn">Загрузить и проверить</button>
                 </div>
             </div>
@@ -82,8 +79,8 @@
     </div>
 {% endif %}
 
-{% if can_import_indicators %}
-    <div class="panel">
+{% if can_import_indicators and not plx_import_active %}
+    <div class="panel" id="indicator-import">
         <h2>Импорт индикаторов достижения компетенций из Word</h2>
         <p class="muted">
             Выберите образовательную программу и загрузите файл <strong>.doc</strong> или .docx.
@@ -92,57 +89,60 @@
         </p>
         <form method="post" enctype="multipart/form-data" action="{% url 'competencies_indicator_import' %}">
             {% csrf_token %}
-            <div class="form-row">
-                <div class="field">
+            <div class="import-form-grid">
+                <div class="field import-program-field">
                     <label for="{{ indicator_import_form.educational_program.id_for_label }}">Образовательная программа</label>
                     {{ indicator_import_form.educational_program }}
-                    <div class="muted">{{ indicator_import_form.educational_program.help_text }}</div>
+                    <span class="helptext">{{ indicator_import_form.educational_program.help_text }}</span>
+                    {% if indicator_import_form.educational_program.errors %}
+                        <ul class="errors">
+                            {% for error in indicator_import_form.educational_program.errors %}<li>{{ error }}</li>{% endfor %}
+                        </ul>
+                    {% endif %}
                 </div>
-                <div class="field">
+                <div class="field import-file-field">
                     <label for="{{ indicator_import_form.word_file.id_for_label }}">Файл Word</label>
                     {{ indicator_import_form.word_file }}
+                    {% if indicator_import_form.word_file.errors %}
+                        <ul class="errors">
+                            {% for error in indicator_import_form.word_file.errors %}<li>{{ error }}</li>{% endfor %}
+                        </ul>
+                    {% endif %}
                 </div>
-                <div class="field" style="max-width:240px;">
+                <div class="field import-action-field">
                     <button type="submit" class="btn">Импортировать индикаторы</button>
                 </div>
             </div>
         </form>
 
-        {% if indicator_imports %}
-            <div class="table-wrap" style="margin-top:16px;">
-                <h3>Последние импорты индикаторов</h3>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Пакет</th>
-                        <th>Файл</th>
-                        <th>Программа</th>
-                        <th>Статус</th>
-                        <th>Найдено</th>
-                        <th>Создано</th>
-                        <th>Обновлено</th>
-                        <th>Пропущено</th>
-                        <th>Ошибки</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for batch in indicator_imports %}
-                        <tr>
-                            <td>#{{ batch.id }}</td>
-                            <td>{{ batch.source_filename }}</td>
-                            <td>{{ batch.educational_program }}</td>
-                            <td>{{ batch.get_status_display }}</td>
-                            <td>{{ batch.total_rows }}</td>
-                            <td>{{ batch.created_count }}</td>
-                            <td>{{ batch.updated_count }}</td>
-                            <td>{{ batch.skipped_count }}</td>
-                            <td title="{{ batch.error_summary|default:'' }}">{{ batch.error_count }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        {% if indicator_import_error %}
+            <div class="alert block-message">{{ indicator_import_error }}</div>
+        {% endif %}
+        {% if indicator_import_issues %}
+            <ul class="errors block-message">
+                {% for issue in indicator_import_issues %}<li>{{ issue.display }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+        {% if indicator_import_result %}
+            <div class="flash {% if indicator_import_result.status == 'completed' %}success{% else %}error{% endif %} block-message">
+                <strong>Импорт #{{ indicator_import_result.id }}: {{ indicator_import_result.get_status_display }}.</strong>
+                Найдено: {{ indicator_import_result.total_rows }},
+                создано: {{ indicator_import_result.created_count }},
+                обновлено: {{ indicator_import_result.updated_count }},
+                пропущено: {{ indicator_import_result.skipped_count }},
+                ошибок: {{ indicator_import_result.error_count }}.
+                {% if indicator_import_result.error_summary %}
+                    <div class="message-details">{{ indicator_import_result.error_summary|linebreaksbr }}</div>
+                {% endif %}
             </div>
         {% endif %}
+
+        <div class="section-heading">
+            <h3>История импортов индикаторов</h3>
+        </div>
+        <div data-compact-block="indicator_imports">
+            {% include "programs/includes/indicator_imports_table.html" %}
+        </div>
     </div>
 {% endif %}
 
@@ -244,167 +244,60 @@
     </div>
 {% endif %}
 
-<div class="panel">
-    <form method="get" class="form-row" style="margin-bottom: 12px;">
-        <div class="field" style="max-width: 170px;">
-            <label for="id_per_page">Строк на странице</label>
-            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
-                {% for option in per_page_choices %}
-                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
+{% if not plx_import_active %}
+    <section class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Направления</h2>
+                <p class="muted">Направления подготовки, используемые профилями программ.</p>
+            </div>
+            {% if can_manage_programs %}
+                <a class="btn small" href="{% url 'programs_direction_create' %}">Создать направление</a>
+            {% endif %}
         </div>
-    </form>
-    <div class="actions">
-        {% if can_manage_programs %}
-            <a class="btn" href="{% url 'programs_direction_create' %}">Создать направление</a>
-            <a class="btn" href="{% url 'programs_profile_create' %}">Создать профиль</a>
-            <a class="btn" href="{% url 'programs_educational_program_create' %}">Создать образовательную программу</a>
-        {% endif %}
-        <a class="btn secondary" href="{% url 'programs_trash' %}">Корзина программ</a>
-    </div>
-</div>
+        <div data-compact-block="directions">
+            {% include "programs/includes/directions_table.html" %}
+        </div>
+    </section>
 
-<div class="panel table-wrap">
-    <h2>Направления</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Код</th>
-            <th>Наименование</th>
-            <th>Уровень</th>
-            {% if can_manage_programs %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for direction in directions %}
-            <tr>
-                <td>{{ direction.code }}</td>
-                <td>{{ direction.name }}</td>
-                <td>{{ direction.education_level.name }}</td>
+    <section class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Профили</h2>
+                <p class="muted">Профили внутри направлений подготовки.</p>
+            </div>
+            {% if can_manage_programs %}
+                <a class="btn small" href="{% url 'programs_profile_create' %}">Создать профиль</a>
+            {% endif %}
+        </div>
+        <div data-compact-block="profiles">
+            {% include "programs/includes/profiles_table.html" %}
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Образовательные программы</h2>
+                <p class="muted">Конкретные профили с кафедрой и годом набора.</p>
+            </div>
+            <div class="actions">
                 {% if can_manage_programs %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'programs_direction_update' direction.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'programs_direction_delete' direction.id %}">Удалить</a>
-                        </div>
-                    </td>
+                    <a class="btn small" href="{% url 'programs_educational_program_create' %}">Создать программу</a>
                 {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_programs %}4{% else %}3{% endif %}" class="muted">Направления пока не добавлены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if directions_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if directions_page_obj.has_previous %}
-                <a href="?direction_page=1{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Первая</a>
-                <a href="?direction_page={{ directions_page_obj.previous_page_number }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ directions_page_obj.number }} / {{ directions_page_obj.paginator.num_pages }}</span>
-            {% if directions_page_obj.has_next %}
-                <a href="?direction_page={{ directions_page_obj.next_page_number }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Вперёд</a>
-                <a href="?direction_page={{ directions_page_obj.paginator.num_pages }}{% if directions_query_params %}&{{ directions_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
-</div>
-
-<div class="panel table-wrap">
-    <h2>Профили</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Код</th>
-            <th>Наименование</th>
-            <th>Направление</th>
-            {% if can_manage_programs %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for profile in profiles %}
-            <tr>
-                <td>{{ profile.code }}</td>
-                <td>{{ profile.name }}</td>
-                <td>{{ profile.training_direction.code }} — {{ profile.training_direction.name }}</td>
-                {% if can_manage_programs %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'programs_profile_update' profile.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'programs_profile_delete' profile.id %}">Удалить</a>
-                        </div>
-                    </td>
+                {% if can_view_program_trash %}
+                    <a class="btn secondary small" href="{% url 'programs_trash' %}">Корзина программ</a>
                 {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_programs %}4{% else %}3{% endif %}" class="muted">Профили пока не добавлены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if profiles_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if profiles_page_obj.has_previous %}
-                <a href="?profile_page=1{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Первая</a>
-                <a href="?profile_page={{ profiles_page_obj.previous_page_number }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ profiles_page_obj.number }} / {{ profiles_page_obj.paginator.num_pages }}</span>
-            {% if profiles_page_obj.has_next %}
-                <a href="?profile_page={{ profiles_page_obj.next_page_number }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Вперёд</a>
-                <a href="?profile_page={{ profiles_page_obj.paginator.num_pages }}{% if profiles_query_params %}&{{ profiles_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
+            </div>
         </div>
-    {% endif %}
-</div>
 
-<div class="panel table-wrap">
-    <h2>Образовательные программы</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Профиль</th>
-            <th>Направление</th>
-            <th>Кафедра</th>
-            <th>Год набора</th>
-            {% if can_manage_programs %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for program in programs %}
-            <tr>
-                <td>{{ program.program_profile.code }} — {{ program.program_profile.name }}</td>
-                <td>{{ program.program_profile.training_direction.code }}</td>
-                <td>{{ program.department.short_name }}</td>
-                <td>{{ program.admission_year }}</td>
-                {% if can_manage_programs %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'programs_educational_program_update' program.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'programs_educational_program_delete' program.id %}">Удалить</a>
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_programs %}5{% else %}4{% endif %}" class="muted">Образовательные программы пока не добавлены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if programs_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if programs_page_obj.has_previous %}
-                <a href="?program_page=1{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Первая</a>
-                <a href="?program_page={{ programs_page_obj.previous_page_number }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ programs_page_obj.number }} / {{ programs_page_obj.paginator.num_pages }}</span>
-            {% if programs_page_obj.has_next %}
-                <a href="?program_page={{ programs_page_obj.next_page_number }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Вперёд</a>
-                <a href="?program_page={{ programs_page_obj.paginator.num_pages }}{% if programs_query_params %}&{{ programs_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
+        <div data-compact-block="programs">
+            {% include "programs/includes/programs_block.html" %}
         </div>
-    {% endif %}
-</div>
+    </section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/programs_dashboard.js' %}?v=programs-ux-2"></script>
 {% endblock %}

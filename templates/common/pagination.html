@@ -1,0 +1,27 @@
+{% if block.page_obj and block.page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination" aria-label="Пагинация">
+        {% if block.page_obj.has_previous %}
+            <a href="?{{ block.page_param }}={{ block.page_obj.previous_page_number }}{% if block.pagination_query %}&{{ block.pagination_query }}{% endif %}" data-compact-link="{{ block.prefix }}">Назад</a>
+        {% else %}
+            <span class="disabled" aria-disabled="true">Назад</span>
+        {% endif %}
+
+        {% for page_number in block.page_range %}
+            {% if page_number %}
+                {% if page_number == block.page_obj.number %}
+                    <span class="current" aria-current="page">{{ page_number }}</span>
+                {% else %}
+                    <a href="?{{ block.page_param }}={{ page_number }}{% if block.pagination_query %}&{{ block.pagination_query }}{% endif %}" data-compact-link="{{ block.prefix }}">{{ page_number }}</a>
+                {% endif %}
+            {% else %}
+                <span class="ellipsis" aria-hidden="true">…</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if block.page_obj.has_next %}
+            <a href="?{{ block.page_param }}={{ block.page_obj.next_page_number }}{% if block.pagination_query %}&{{ block.pagination_query }}{% endif %}" data-compact-link="{{ block.prefix }}">Вперёд</a>
+        {% else %}
+            <span class="disabled" aria-disabled="true">Вперёд</span>
+        {% endif %}
+    </nav>
+{% endif %}

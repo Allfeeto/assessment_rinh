@@ -1,0 +1,18 @@
+{% if programs_block.expanded %}
+    <form method="get" class="programs-page-size-form" data-compact-form="programs">
+        {% for key, values in request.GET.lists %}
+            {% if key != "programs_per_page" and key != "programs_page" and key != "programs_expanded" and key != "_fragment" %}
+                {% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+            {% endif %}
+        {% endfor %}
+        <input type="hidden" name="programs_expanded" value="1">
+        <label for="id_programs_per_page">Показывать программ на странице</label>
+        <select id="id_programs_per_page" name="programs_per_page">
+            {% for option in programs_per_page_choices %}
+                <option value="{{ option }}" {% if programs_per_page == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </form>
+{% endif %}
+
+{% include "programs/includes/educational_programs_table.html" %}

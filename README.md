@@ -830,6 +830,19 @@ Preview PLX update группирует изменения:
 
 Сервисы находятся в `competencies/services/indicator_*`. Пакеты импорта и индикаторы доступны в Django admin.
 
+## UX страницы программ
+
+Страница `/programs/` использует компактные серверные preview-блоки и независимые query-параметры:
+
+- `directions_expanded`, `directions_page`;
+- `profiles_expanded`, `profiles_page`;
+- `programs_expanded`, `programs_page`, `programs_per_page`;
+- `indicator_imports_expanded`, `indicator_imports_page`.
+
+В свернутом состоянии загружаются только первые 8 строк справочных блоков и 3 последних импорта индикаторов. В раскрытом состоянии используется серверная пагинация. Выбор программы для импорта индикаторов работает через generic autocomplete `/core/lookup/`.
+
+Во время PLX preview/confirm страница переходит в явный `plx_import_active`-режим. Структурированный PLX DTO хранится в таблице `program_plx_import_draft`, а в session находится только ID черновика. Черновики действуют 24 часа и удаляются при отмене или успешном применении.
+
 Валидация PLX включает диапазон года набора, соответствие кода профиля коду направления, уникальность кодов дисциплин учебного плана и корректность кафедр дисциплин.
 
 ## Reports и Word export
@@ -918,14 +931,15 @@ pytest -q -m postgres_integration
 2. Подготовить PostgreSQL: восстановить production backup или применить приватный SQL bootstrap вне Git.
 3. Если среда еще не содержит точечных DDL-изменений PLX/кафедр, выполнить `scripts/prod_apply_plx_department_changes.sh` или вручную применить migrations с `DJANGO_ENABLE_LOCAL_MIGRATIONS=1` после backup.
 4. Для добавления импорта индикаторов сначала пересобрать и перезапустить web-образ с LibreOffice (`docker compose build web && docker compose up -d web`), затем отдельно выполнить `sh scripts/prod_apply_competence_indicator_changes.sh`; скрипт создаёт backup и применяет только migration `competencies`.
-5. Запустить `python manage.py check_db_schema --live`.
-6. Запустить `python manage.py check`.
-7. Запустить `python manage.py seed_initial_data`.
-8. Запустить `python manage.py setup_teacher_group`.
-9. Создать superuser через `python manage.py createsuperuser`, если его нет.
-10. Запустить `collectstatic`.
-11. Запустить gunicorn или `docker compose up -d`.
-12. Проверить backup scheduler и выполнить тестовый backup/restore на отдельной базе или стенде.
+5. Для UX-доработки страницы программ и серверных PLX-черновиков выполнить `sh scripts/prod_apply_programs_ux_changes.sh`; скрипт создаёт backup и применяет только migration `programs.0002_plx_import_draft`.
+6. Запустить `python manage.py check_db_schema --live`.
+7. Запустить `python manage.py check`.
+8. Запустить `python manage.py seed_initial_data`.
+9. Запустить `python manage.py setup_teacher_group`.
+10. Создать superuser через `python manage.py createsuperuser`, если его нет.
+11. Запустить `collectstatic`.
+12. Запустить gunicorn или `docker compose up -d`.
+13. Проверить backup scheduler и выполнить тестовый backup/restore на отдельной базе или стенде.
 
 Для Docker:
 

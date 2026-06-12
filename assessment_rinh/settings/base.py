@@ -103,6 +103,7 @@ LOCAL_APPS_WITH_SCHEMA_MIGRATIONS = (
     'teachers',
     'disciplines',
     'competencies',
+    'programs',
 )
 DJANGO_ENABLE_LOCAL_MIGRATIONS = env_bool('DJANGO_ENABLE_LOCAL_MIGRATIONS', default=False)
 MIGRATION_MODULES = {

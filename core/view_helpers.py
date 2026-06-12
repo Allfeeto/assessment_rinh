@@ -34,6 +34,76 @@ def query_params_without(request, *keys):
     return params.urlencode()
 
 
+def query_params_with(request, *, values=None, remove=()):
+    params = request.GET.copy()
+    for key in remove:
+        params.pop(key, None)
+    for key, value in (values or {}).items():
+        if value in (None, ''):
+            params.pop(key, None)
+        else:
+            params[key] = str(value)
+    return params.urlencode()
+
+
+def compact_queryset_block(
+    request,
+    queryset,
+    *,
+    prefix,
+    preview_size=8,
+    page_size=20,
+):
+    expanded_param = f'{prefix}_expanded'
+    page_param = f'{prefix}_page'
+    expanded = request.GET.get(expanded_param) == '1'
+
+    if expanded:
+        page_obj = paginate_queryset(
+            request,
+            queryset,
+            page_param=page_param,
+            per_page=page_size,
+        )
+        items = page_obj.object_list
+        total_count = page_obj.paginator.count
+        page_range = [
+            value if isinstance(value, int) else None
+            for value in page_obj.paginator.get_elided_page_range(
+                page_obj.number,
+                on_each_side=1,
+                on_ends=1,
+            )
+        ]
+    else:
+        page_obj = None
+        page_range = []
+        total_count = queryset.count()
+        items = queryset[:preview_size]
+
+    can_expand = total_count > preview_size
+    return {
+        'prefix': prefix,
+        'items': items,
+        'page_obj': page_obj,
+        'page_range': page_range,
+        'page_param': page_param,
+        'pagination_query': query_params_without(request, page_param),
+        'total_count': total_count,
+        'expanded': expanded,
+        'can_expand': can_expand,
+        'expand_query': query_params_with(
+            request,
+            values={expanded_param: 1},
+            remove=(page_param,),
+        ),
+        'collapse_query': query_params_with(
+            request,
+            remove=(expanded_param, page_param),
+        ),
+    }
+
+
 def normalize_sort(sort_by, sort_direction, sort_options, *, default_sort='', default_direction='asc'):
     if sort_by not in sort_options:
         sort_by = default_sort if default_sort in sort_options else ''

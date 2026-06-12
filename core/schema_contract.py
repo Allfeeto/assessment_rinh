@@ -32,6 +32,8 @@ REQUIRED_INDEXES = {
     'program_disc_dept_idx',
     'program_disc_prog_active_idx',
     'program_disc_prog_code_idx',
+    'plx_draft_expires_idx',
+    'plx_draft_user_created_idx',
     'teacher_departments_department_idx',
     'teacher_departments_teacher_department_uidx',
     'teacher_departments_teacher_idx',
@@ -41,6 +43,7 @@ REQUIRED_INDEXES = {
 REQUIRED_TABLES = {
     'competence_indicator',
     'competence_indicator_import',
+    'program_plx_import_draft',
     'teacher_departments',
 }
 REQUIRED_FUNCTIONS = {
