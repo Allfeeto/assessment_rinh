@@ -141,8 +141,15 @@ case "$mode" in
     direct)
         require_command python
         require_command pg_dump
-        if ! command -v soffice >/dev/null 2>&1 && ! command -v libreoffice >/dev/null 2>&1; then
-            fail "LibreOffice is required for .doc imports in direct mode"
+        if command -v soffice >/dev/null 2>&1 || command -v libreoffice >/dev/null 2>&1; then
+            log "LibreOffice DOC converter is available"
+        elif command -v powershell.exe >/dev/null 2>&1; then
+            log "Checking Microsoft Word DOC converter"
+            powershell.exe -NoProfile -NonInteractive -Command \
+                '$word = $null; try { $word = New-Object -ComObject Word.Application; $word.Visible = $false; $word.DisplayAlerts = 0 } finally { if ($null -ne $word) { $word.Quit(); [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($word) } }' \
+                >/dev/null || fail "Microsoft Word COM converter is not available"
+        else
+            fail "LibreOffice or Microsoft Word is required for .doc imports in direct mode"
         fi
         log "Using direct host mode"
         load_env_file
