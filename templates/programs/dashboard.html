@@ -82,6 +82,70 @@
     </div>
 {% endif %}
 
+{% if can_import_indicators %}
+    <div class="panel">
+        <h2>Импорт индикаторов достижения компетенций из Word</h2>
+        <p class="muted">
+            Выберите образовательную программу и загрузите файл <strong>.doc</strong> или .docx.
+            Каждая запись вида «ПК-1.1» будет связана с уже существующей компетенцией выбранной программы.
+            Компетенции автоматически не создаются.
+        </p>
+        <form method="post" enctype="multipart/form-data" action="{% url 'competencies_indicator_import' %}">
+            {% csrf_token %}
+            <div class="form-row">
+                <div class="field">
+                    <label for="{{ indicator_import_form.educational_program.id_for_label }}">Образовательная программа</label>
+                    {{ indicator_import_form.educational_program }}
+                    <div class="muted">{{ indicator_import_form.educational_program.help_text }}</div>
+                </div>
+                <div class="field">
+                    <label for="{{ indicator_import_form.word_file.id_for_label }}">Файл Word</label>
+                    {{ indicator_import_form.word_file }}
+                </div>
+                <div class="field" style="max-width:240px;">
+                    <button type="submit" class="btn">Импортировать индикаторы</button>
+                </div>
+            </div>
+        </form>
+
+        {% if indicator_imports %}
+            <div class="table-wrap" style="margin-top:16px;">
+                <h3>Последние импорты индикаторов</h3>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Пакет</th>
+                        <th>Файл</th>
+                        <th>Программа</th>
+                        <th>Статус</th>
+                        <th>Найдено</th>
+                        <th>Создано</th>
+                        <th>Обновлено</th>
+                        <th>Пропущено</th>
+                        <th>Ошибки</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for batch in indicator_imports %}
+                        <tr>
+                            <td>#{{ batch.id }}</td>
+                            <td>{{ batch.source_filename }}</td>
+                            <td>{{ batch.educational_program }}</td>
+                            <td>{{ batch.get_status_display }}</td>
+                            <td>{{ batch.total_rows }}</td>
+                            <td>{{ batch.created_count }}</td>
+                            <td>{{ batch.updated_count }}</td>
+                            <td>{{ batch.skipped_count }}</td>
+                            <td title="{{ batch.error_summary|default:'' }}">{{ batch.error_count }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
 {% if can_import_plx and pending_conflict %}
     <div class="panel" style="border-color:#efb3b3;background:#fff7f7;">
         <h2>Найдена существующая программа</h2>

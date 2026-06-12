@@ -6,8 +6,9 @@ from django.views.generic import TemplateView
 
 from assessment.access import program_discipline_queryset_for_user
 from assessment.models import AssessmentItem
-from competencies.models import Competence, DisciplineCompetence
-from core.permissions import is_domain_manager, is_superuser_or_platform_admin
+from competencies.forms import CompetenceIndicatorImportForm
+from competencies.models import Competence, CompetenceIndicatorImport, DisciplineCompetence
+from core.permissions import get_user_departments, is_domain_manager, is_superuser_or_platform_admin
 from core.models import EducationLevel
 from core.view_helpers import (
     PER_PAGE_CHOICES,
@@ -123,6 +124,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_import_plx'] = can_manage_programs
+        context['can_import_indicators'] = can_manage_programs
         context['can_manage_programs'] = is_superuser_or_platform_admin(self.request.user)
         context['import_form'] = kwargs.get('import_form') or PlxImportUploadForm()
         context['import_error'] = kwargs.get('import_error')
@@ -131,6 +133,17 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         context['conflict_program'] = kwargs.get('conflict_program')
         context['pending_conflict'] = kwargs.get('pending_conflict', False)
         context['import_preview'] = kwargs.get('import_preview')
+        context['indicator_import_form'] = CompetenceIndicatorImportForm(request_user=self.request.user)
+        indicator_imports = CompetenceIndicatorImport.objects.select_related(
+            'educational_program__program_profile',
+            'educational_program__department',
+            'uploaded_by',
+        )
+        if not is_superuser_or_platform_admin(self.request.user):
+            indicator_imports = indicator_imports.filter(
+                educational_program__department__in=get_user_departments(self.request.user),
+            )
+        context['indicator_imports'] = indicator_imports.order_by('-created_at')[:10]
         return context
 
     def get(self, request, *args, **kwargs):

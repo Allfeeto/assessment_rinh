@@ -6,11 +6,44 @@ from core.permissions import (
     filter_program_disciplines_for_assignment,
     is_senior_teacher,
     is_superuser_or_platform_admin,
+    get_user_departments,
 )
 from disciplines.models import ProgramDiscipline
 from programs.models import EducationalProgram
 
 from .models import Competence, DisciplineCompetence
+
+
+class CompetenceIndicatorImportForm(forms.Form):
+    educational_program = forms.ModelChoiceField(
+        queryset=EducationalProgram.objects.none(),
+        label='Образовательная программа',
+        help_text='Индикаторы будут сопоставлены только с компетенциями выбранной программы.',
+    )
+    word_file = forms.FileField(
+        label='Файл индикаторов (.doc или .docx)',
+        widget=forms.ClearableFileInput(attrs={'accept': '.doc,.docx'}),
+    )
+
+    def __init__(self, *args, request_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        queryset = EducationalProgram.objects.active().select_related(
+            'program_profile__training_direction__education_level',
+            'department',
+        ).order_by('program_profile__code', 'admission_year', 'department__number')
+        if request_user is not None and not is_superuser_or_platform_admin(request_user):
+            queryset = queryset.filter(department__in=get_user_departments(request_user))
+        self.fields['educational_program'].queryset = queryset
+        self.fields['educational_program'].label_from_instance = lambda obj: obj.full_display_name
+
+    def clean_word_file(self):
+        uploaded_file = self.cleaned_data['word_file']
+        filename = (uploaded_file.name or '').strip().lower()
+        if not filename.endswith(('.doc', '.docx')):
+            raise forms.ValidationError('Поддерживаются только файлы Word с расширением .doc или .docx.')
+        if uploaded_file.size > 10 * 1024 * 1024:
+            raise forms.ValidationError('Размер файла Word не должен превышать 10 МБ.')
+        return uploaded_file
 
 
 class CompetenceForm(forms.ModelForm):

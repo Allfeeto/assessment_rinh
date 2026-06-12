@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CompetenciesDashboardView,
+    CompetenceIndicatorImportView,
     CompetenceCreateView,
     CompetenceDeleteView,
     CompetenceDetailView,
@@ -17,6 +18,7 @@ from .views import (
 
 urlpatterns = [
     path('', CompetenciesDashboardView.as_view(), name='competencies_root'),
+    path('indicators/import/', CompetenceIndicatorImportView.as_view(), name='competencies_indicator_import'),
 
     path('list/', CompetenceListView.as_view(), name='competencies_competence_list'),
     path('list/create/', CompetenceCreateView.as_view(), name='competencies_competence_create'),

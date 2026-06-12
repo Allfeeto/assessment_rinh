@@ -7,7 +7,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
-from competencies.models import Competence, DisciplineCompetence
+from competencies.models import (
+    Competence,
+    CompetenceIndicator,
+    CompetenceIndicatorImport,
+    DisciplineCompetence,
+)
 from disciplines.models import ProgramDiscipline
 from teachers.models import TeacherProgramDiscipline
 
@@ -18,6 +23,8 @@ HOME_STATS_CACHE_KEY = 'core:home_stats'
 class ProgramTrashCounts:
     program_disciplines: int
     competences: int
+    competence_indicators: int
+    competence_indicator_imports: int
     discipline_competences: int
     assessment_items: int
     assessment_item_rows: int
@@ -66,6 +73,12 @@ class ProgramTrashService:
         return ProgramTrashCounts(
             program_disciplines=program_disciplines.count(),
             competences=Competence.objects.filter(educational_program=educational_program).count(),
+            competence_indicators=CompetenceIndicator.objects.filter(
+                competence__educational_program=educational_program,
+            ).count(),
+            competence_indicator_imports=CompetenceIndicatorImport.objects.filter(
+                educational_program=educational_program,
+            ).count(),
             discipline_competences=DisciplineCompetence.objects.filter(
                 program_discipline__educational_program=educational_program
             ).count(),
@@ -124,7 +137,11 @@ class ProgramTrashService:
         AssessmentItemRow.objects.filter(assessment_item__in=assessment_items).delete()
         assessment_items.delete()
         DisciplineCompetence.objects.filter(program_discipline__in=program_disciplines).delete()
+        CompetenceIndicator.objects.filter(
+            competence__educational_program=educational_program,
+        ).delete()
         program_disciplines.delete()
         Competence.objects.filter(educational_program=educational_program).delete()
+        CompetenceIndicatorImport.objects.filter(educational_program=educational_program).delete()
         educational_program.delete()
         cache.delete(HOME_STATS_CACHE_KEY)

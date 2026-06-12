@@ -15,6 +15,8 @@ class CurriculumReplacementPolicy:
     preserves: tuple[str, ...] = (
         'program_disciplines',
         'competences',
+        'competence_indicators',
+        'competence_indicator_imports',
         'discipline_competences',
         'assessment_items',
         'assessment_item_rows',

@@ -1,8 +1,11 @@
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
+from django.shortcuts import redirect
+from django.views import View
 from django.views.generic import TemplateView
 
 from assessment.access import program_discipline_queryset_for_user
@@ -35,9 +38,10 @@ from core.view_helpers import (
 )
 from disciplines.models import ProgramDiscipline
 
-from .forms import CompetenceForm, DisciplineCompetenceForm
+from .forms import CompetenceForm, CompetenceIndicatorImportForm, DisciplineCompetenceForm
 from .lookups import lookup_competence
 from .models import Competence, DisciplineCompetence
+from .services import IndicatorImportError, IndicatorImportService
 
 
 MATRIX_SORT_OPTIONS = {
@@ -60,6 +64,52 @@ MATRIX_DEFAULT_ORDERING = (
     'program_discipline__discipline__name',
     'competence__code',
 )
+
+
+class CompetenceIndicatorImportView(LoginRequiredMixin, UserPassesTestMixin, View):
+    raise_exception = True
+    import_service = IndicatorImportService()
+
+    def test_func(self):
+        return is_domain_manager(self.request.user)
+
+    def post(self, request, *args, **kwargs):
+        form = CompetenceIndicatorImportForm(
+            request.POST,
+            request.FILES,
+            request_user=request.user,
+        )
+        if not form.is_valid():
+            for field_errors in form.errors.values():
+                for error in field_errors:
+                    messages.error(request, error)
+            return redirect('programs_root')
+
+        try:
+            result = self.import_service.import_upload(
+                form.cleaned_data['word_file'],
+                educational_program=form.cleaned_data['educational_program'],
+                user=request.user,
+            )
+        except IndicatorImportError as exc:
+            batch_part = f' Пакет импорта: #{exc.batch_id}.' if exc.batch_id else ''
+            messages.error(request, f'{exc}{batch_part}')
+            for issue in exc.issues[:20]:
+                messages.error(request, issue.display())
+            if len(exc.issues) > 20:
+                messages.error(request, f'Дополнительно ошибок: {len(exc.issues) - 20}.')
+            return redirect('programs_root')
+
+        messages.success(
+            request,
+            (
+                f'Импорт индикаторов завершён. Пакет #{result.batch_id}; '
+                f'таблиц: {result.tables_found}; найдено: {result.total_rows}; '
+                f'создано: {result.created_count}; обновлено: {result.updated_count}; '
+                f'пропущено: {result.skipped_count}.'
+            ),
+        )
+        return redirect('programs_root')
 
 
 class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
@@ -101,6 +151,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, TemplateView):
                 Subquery(competence_disciplines_count, output_field=IntegerField()),
                 0,
             ),
+            indicators_count=Count('indicators', distinct=True),
         ).order_by('educational_program__program_profile__code', 'code')
 
         if educational_program_id:

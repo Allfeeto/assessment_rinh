@@ -9,7 +9,12 @@ from django.urls import reverse
 from assessment.access import allowed_program_discipline_ids_for_user, can_access_program_discipline
 from assessment.models import AssessmentItem, AssessmentItemCompetence, AssessmentItemRow
 from assessment.services import clone_assessment_item_to_program_discipline
-from competencies.models import Competence, DisciplineCompetence
+from competencies.models import (
+    Competence,
+    CompetenceIndicator,
+    CompetenceIndicatorImport,
+    DisciplineCompetence,
+)
 from core.permissions import SENIOR_TEACHER_GROUP_NAME
 from core.models import AcademicDegree, AcademicTitle, AssessmentItemType, CompetenceType, EducationLevel
 from disciplines.models import Discipline, ProgramDiscipline
@@ -43,6 +48,8 @@ def trash_schema():
         Discipline,
         ProgramDiscipline,
         Competence,
+        CompetenceIndicatorImport,
+        CompetenceIndicator,
         DisciplineCompetence,
         TeacherProgramDiscipline,
         AssessmentItem,
@@ -105,6 +112,21 @@ def _program_bundle(*, year=2099, competence_code='ПК-1', prompt='Старое
         program_discipline=program_discipline,
         competence=competence,
     )
+    indicator_import = CompetenceIndicatorImport.objects.create(
+        educational_program=program,
+        source_filename='indicators.doc',
+        source_sha256='a' * 64,
+        status=CompetenceIndicatorImport.Status.COMPLETED,
+    )
+    indicator = CompetenceIndicator.objects.create(
+        competence=competence,
+        last_import=indicator_import,
+        code=f'{competence_code}.1',
+        text='Знает тестовые основы',
+        source_file='indicators.doc',
+        source_table_number=1,
+        source_row_number=2,
+    )
     item = AssessmentItem.objects.create(
         program_discipline=program_discipline,
         competence=competence,
@@ -135,6 +157,8 @@ def _program_bundle(*, year=2099, competence_code='ПК-1', prompt='Старое
         'program': program,
         'program_discipline': program_discipline,
         'competence': competence,
+        'indicator': indicator,
+        'indicator_import': indicator_import,
         'item': item,
         'discipline': discipline,
         'item_type': item_type,
@@ -156,6 +180,8 @@ def test_soft_delete_keeps_related_data(trash_schema):
     assert data['program'].deleted_by == data['teacher_user']
     assert ProgramDiscipline.objects.filter(pk=data['program_discipline'].pk).exists()
     assert Competence.objects.filter(pk=data['competence'].pk).exists()
+    assert CompetenceIndicator.objects.filter(pk=data['indicator'].pk).exists()
+    assert CompetenceIndicatorImport.objects.filter(pk=data['indicator_import'].pk).exists()
     assert DisciplineCompetence.objects.filter(program_discipline=data['program_discipline']).exists()
     assert AssessmentItem.objects.filter(pk=data['item'].pk).exists()
     assert AssessmentItemRow.objects.filter(assessment_item=data['item']).exists()
@@ -255,6 +281,8 @@ def test_hard_delete_removes_program_owned_data_only(trash_schema):
     assert not EducationalProgram.objects.filter(pk=data['program'].pk).exists()
     assert not ProgramDiscipline.objects.filter(pk=data['program_discipline'].pk).exists()
     assert not Competence.objects.filter(pk=data['competence'].pk).exists()
+    assert not CompetenceIndicator.objects.filter(pk=data['indicator'].pk).exists()
+    assert not CompetenceIndicatorImport.objects.filter(pk=data['indicator_import'].pk).exists()
     assert not AssessmentItem.objects.filter(pk=data['item'].pk).exists()
     assert Discipline.objects.filter(pk=data['discipline'].pk).exists()
     assert Department.objects.filter(pk=data['department'].pk).exists()

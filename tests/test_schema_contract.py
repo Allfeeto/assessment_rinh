@@ -80,6 +80,40 @@ def test_sql_schema_contract_parser_detects_required_objects():
             code text NOT NULL,
             name text NOT NULL
         );
+        CREATE TABLE public.competence_indicator_import (
+            id integer NOT NULL,
+            educational_program_id integer NOT NULL,
+            uploaded_by_id integer,
+            source_filename character varying(255) NOT NULL,
+            source_sha256 character varying(64) NOT NULL,
+            status character varying(20) NOT NULL,
+            total_rows integer NOT NULL,
+            created_count integer NOT NULL,
+            updated_count integer NOT NULL,
+            skipped_count integer NOT NULL,
+            error_count integer NOT NULL,
+            warning_count integer NOT NULL,
+            error_summary text,
+            created_at timestamp with time zone NOT NULL,
+            completed_at timestamp with time zone,
+            CONSTRAINT competence_indicator_import_counts_check CHECK (total_rows >= 0),
+            CONSTRAINT competence_indicator_import_status_check CHECK (status IN ('processing', 'completed', 'failed'))
+        );
+        CREATE TABLE public.competence_indicator (
+            id integer NOT NULL,
+            competence_id integer NOT NULL,
+            last_import_id integer,
+            code character varying(50) NOT NULL,
+            text text NOT NULL,
+            source_file character varying(255) NOT NULL,
+            source_table_number integer,
+            source_row_number integer,
+            created_at timestamp with time zone NOT NULL,
+            updated_at timestamp with time zone NOT NULL,
+            CONSTRAINT competence_indicator_competence_code_key UNIQUE (competence_id, code),
+            CONSTRAINT competence_indicator_source_table_check CHECK (source_table_number IS NULL OR source_table_number > 0),
+            CONSTRAINT competence_indicator_source_row_check CHECK (source_row_number IS NULL OR source_row_number > 0)
+        );
         CREATE TABLE public.discipline_competence (
             id integer NOT NULL,
             program_discipline_id integer NOT NULL,
@@ -136,6 +170,11 @@ def test_sql_schema_contract_parser_detects_required_objects():
         CREATE INDEX program_disc_dept_idx ON public.program_discipline (department_id);
         CREATE INDEX program_disc_prog_code_idx ON public.program_discipline (educational_program_id, discipline_code);
         CREATE INDEX program_disc_prog_active_idx ON public.program_discipline (educational_program_id, is_active_in_plan);
+        CREATE INDEX comp_ind_imp_prog_date_idx ON public.competence_indicator_import (educational_program_id, created_at);
+        CREATE INDEX comp_ind_imp_sha_idx ON public.competence_indicator_import (source_sha256);
+        CREATE INDEX comp_ind_imp_status_idx ON public.competence_indicator_import (status);
+        CREATE INDEX comp_indicator_code_idx ON public.competence_indicator (code);
+        CREATE INDEX comp_indicator_competence_idx ON public.competence_indicator (competence_id);
         CREATE UNIQUE INDEX teacher_departments_teacher_department_uidx ON public.teacher_departments (teacher_id, department_id);
         CREATE INDEX teacher_departments_teacher_idx ON public.teacher_departments (teacher_id);
         CREATE INDEX teacher_departments_department_idx ON public.teacher_departments (department_id);

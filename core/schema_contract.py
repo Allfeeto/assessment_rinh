@@ -15,8 +15,18 @@ REQUIRED_CONSTRAINTS = {
     'assessment_item_row_correct_order_check',
     'assessment_item_row_sort_order_check',
     'educational_program_admission_year_check',
+    'competence_indicator_competence_code_key',
+    'competence_indicator_import_counts_check',
+    'competence_indicator_import_status_check',
+    'competence_indicator_source_row_check',
+    'competence_indicator_source_table_check',
 }
 REQUIRED_INDEXES = {
+    'comp_ind_imp_prog_date_idx',
+    'comp_ind_imp_sha_idx',
+    'comp_ind_imp_status_idx',
+    'comp_indicator_code_idx',
+    'comp_indicator_competence_idx',
     'educational_program_active_unique_idx',
     'program_disc_code_idx',
     'program_disc_dept_idx',
@@ -29,6 +39,8 @@ REQUIRED_INDEXES = {
     'uq_assessment_item_row_sort',
 }
 REQUIRED_TABLES = {
+    'competence_indicator',
+    'competence_indicator_import',
     'teacher_departments',
 }
 REQUIRED_FUNCTIONS = {
