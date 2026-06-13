@@ -344,6 +344,44 @@
         });
     }
 
+    function initMobileNavigation() {
+        const toggle = document.querySelector('[data-mobile-nav-toggle]');
+        const menu = document.querySelector('[data-mobile-nav-menu]');
+        if (!toggle || !menu) {
+            return;
+        }
+
+        function setOpen(isOpen) {
+            menu.classList.toggle('is-open', isOpen);
+            toggle.classList.toggle('is-open', isOpen);
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            toggle.setAttribute('aria-label', isOpen ? 'Закрыть меню' : 'Открыть меню');
+        }
+
+        toggle.addEventListener('click', () => {
+            setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+        });
+
+        menu.addEventListener('click', event => {
+            if (event.target.closest('a')) {
+                setOpen(false);
+            }
+        });
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                setOpen(false);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 760) {
+                setOpen(false);
+            }
+        });
+    }
+
+    initMobileNavigation();
     document.querySelectorAll('select[data-autocomplete-kind]').forEach(initAutocomplete);
     initAutoSubmitOnChange();
 })();

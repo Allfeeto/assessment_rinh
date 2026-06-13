@@ -34,6 +34,25 @@ body {
     align-items: center;
     flex-wrap: wrap;
 }
+.topbar-primary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.topbar-menu {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.topbar-nav {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+}
 .topbar-right {
     margin-left: auto;
     display: flex;
@@ -54,6 +73,34 @@ body {
     color: var(--accent);
     text-decoration: none;
     margin-right: 6px;
+}
+.mobile-nav-toggle {
+    display: none;
+    width: 40px;
+    height: 36px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+.mobile-nav-toggle-line {
+    display: block;
+    width: 100%;
+    height: 2px;
+    margin: 4px 0;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: transform .15s ease, opacity .15s ease;
+}
+.mobile-nav-toggle.is-open .mobile-nav-toggle-line:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+}
+.mobile-nav-toggle.is-open .mobile-nav-toggle-line:nth-child(2) {
+    opacity: 0;
+}
+.mobile-nav-toggle.is-open .mobile-nav-toggle-line:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
 }
 .nav-link {
     text-decoration: none;
@@ -575,5 +622,48 @@ th {
     }
     .workspace-filter-grid label {
         min-height: 0;
+    }
+}
+
+@media (max-width: 760px) {
+    .topbar-inner {
+        display: block;
+        padding: 9px 12px;
+    }
+    .topbar-primary {
+        justify-content: space-between;
+    }
+    .mobile-nav-toggle {
+        display: block;
+    }
+    .topbar-menu {
+        display: none;
+        padding-top: 10px;
+        margin-top: 9px;
+        border-top: 1px solid var(--border);
+    }
+    .topbar-menu.is-open {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .topbar-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 3px;
+    }
+    .nav-link {
+        display: block;
+        width: 100%;
+    }
+    .topbar-right {
+        width: 100%;
+        margin-left: 0;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+        justify-content: space-between;
+    }
+    .container {
+        padding: 12px;
     }
 }

@@ -4,43 +4,64 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Система оценочных материалов{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=programs-ux-2">
+    <link rel="icon" type="image/png" href="{% static 'images/mini-logo.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/mini-logo.png' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=mobile-nav-1">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
 <header class="topbar">
     <div class="topbar-inner">
-        <a class="brand" href="/">Assessment RINH</a>
-        {% if request.user.is_authenticated %}
-            {% if can_use_teacher_workspace %}
-                <a class="nav-link {% if request.path|slice:':22' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
-                <a class="nav-link {% if request.path|slice:':28' == '/assessment/trash-workspace/' %}active{% endif %}" href="{% url 'assessment_trash_workspace' %}">Корзина заданий</a>
-                <a class="nav-link {% if request.path|slice:':12' == '/assessment/' and request.path|slice:':22' != '/assessment/workspace/' and request.path|slice:':28' != '/assessment/trash-workspace/' %}active{% endif %}" href="/assessment/">Задания</a>
-                <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
-                <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
-            {% endif %}
-            {% if is_domain_manager %}
-                <a class="nav-link {% if request.path|slice:':10' == '/teachers/' %}active{% endif %}" href="/teachers/">Кафедры и преподаватели</a>
-                <a class="nav-link {% if request.path|slice:':10' == '/programs/' %}active{% endif %}" href="/programs/">Программы</a>
-                <a class="nav-link {% if request.path|slice:':13' == '/disciplines/' %}active{% endif %}" href="/disciplines/">Дисциплины</a>
-                <a class="nav-link {% if request.path|slice:':14' == '/competencies/' %}active{% endif %}" href="/competencies/">Компетенции</a>
-                <a class="nav-link {% if request.path|slice:':6' == '/core/' %}active{% endif %}" href="/core/education-levels/">Справочники</a>
-            {% endif %}
-            {% if request.user.is_superuser %}
-                <a class="nav-link" href="/admin/">Админка</a>
-            {% endif %}
-        {% endif %}
+        <div class="topbar-primary">
+            <a class="brand" href="/">Assessment RINH</a>
+            <button
+                class="mobile-nav-toggle"
+                type="button"
+                aria-controls="topbar-menu"
+                aria-expanded="false"
+                aria-label="Открыть меню"
+                data-mobile-nav-toggle
+            >
+                <span class="mobile-nav-toggle-line"></span>
+                <span class="mobile-nav-toggle-line"></span>
+                <span class="mobile-nav-toggle-line"></span>
+            </button>
+        </div>
 
-        <div class="topbar-right">
+        <div class="topbar-menu" id="topbar-menu" data-mobile-nav-menu>
             {% if request.user.is_authenticated %}
-                <span class="user-chip">{{ request.user.username }}</span>
-                <form method="post" action="{% url 'logout' %}" style="margin:0;">
-                    {% csrf_token %}
-                    <button class="btn secondary small" type="submit">Выйти</button>
-                </form>
-            {% else %}
-                <a class="btn secondary small" href="{% url 'login' %}">Войти</a>
+                <nav class="topbar-nav" aria-label="Основная навигация">
+                {% if can_use_teacher_workspace %}
+                    <a class="nav-link {% if request.path|slice:':22' == '/assessment/workspace/' %}active{% endif %}" href="{% url 'assessment_workspace' %}">Рабочее место</a>
+                    <a class="nav-link {% if request.path|slice:':28' == '/assessment/trash-workspace/' %}active{% endif %}" href="{% url 'assessment_trash_workspace' %}">Корзина заданий</a>
+                    <a class="nav-link {% if request.path|slice:':12' == '/assessment/' and request.path|slice:':22' != '/assessment/workspace/' and request.path|slice:':28' != '/assessment/trash-workspace/' %}active{% endif %}" href="/assessment/">Задания</a>
+                    <a class="nav-link {% if request.path|slice:':9' == '/reports/' %}active{% endif %}" href="/reports/">Отчёты</a>
+                    <a class="nav-link {% if request.path|slice:':13' == '/export/word/' %}active{% endif %}" href="/export/word/">Экспорт Word</a>
+                {% endif %}
+                {% if is_domain_manager %}
+                    <a class="nav-link {% if request.path|slice:':10' == '/teachers/' %}active{% endif %}" href="/teachers/">Кафедры и преподаватели</a>
+                    <a class="nav-link {% if request.path|slice:':10' == '/programs/' %}active{% endif %}" href="/programs/">Программы</a>
+                    <a class="nav-link {% if request.path|slice:':13' == '/disciplines/' %}active{% endif %}" href="/disciplines/">Дисциплины</a>
+                    <a class="nav-link {% if request.path|slice:':14' == '/competencies/' %}active{% endif %}" href="/competencies/">Компетенции</a>
+                    <a class="nav-link {% if request.path|slice:':6' == '/core/' %}active{% endif %}" href="/core/education-levels/">Справочники</a>
+                {% endif %}
+                {% if request.user.is_superuser %}
+                    <a class="nav-link" href="/admin/">Админка</a>
+                {% endif %}
+                </nav>
             {% endif %}
+
+            <div class="topbar-right">
+                {% if request.user.is_authenticated %}
+                    <span class="user-chip">{{ request.user.username }}</span>
+                    <form method="post" action="{% url 'logout' %}" style="margin:0;">
+                        {% csrf_token %}
+                        <button class="btn secondary small" type="submit">Выйти</button>
+                    </form>
+                {% else %}
+                    <a class="btn secondary small" href="{% url 'login' %}">Войти</a>
+                {% endif %}
+            </div>
         </div>
     </div>
 </header>
@@ -54,7 +75,7 @@
     {% endif %}
     {% block content %}{% endblock %}
 </main>
-<script src="{% static 'js/base.js' %}?v=programs-ux-2"></script>
+<script src="{% static 'js/base.js' %}?v=mobile-nav-1"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>
