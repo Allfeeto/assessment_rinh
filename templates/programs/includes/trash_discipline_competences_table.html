@@ -1,0 +1,9 @@
+<table>
+    <thead><tr><th>Дисциплина</th><th>Компетенция</th></tr></thead>
+    <tbody>
+    {% for link in trash_discipline_competences_block.items %}
+        <tr><td>{{ link.program_discipline.discipline_display_name }}</td><td>{{ link.competence.code }} — {{ link.competence.name }}</td></tr>
+    {% empty %}<tr><td colspan="2" class="muted">Связи не найдены.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=trash_discipline_competences_block %}

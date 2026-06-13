@@ -339,7 +339,11 @@
                 if ((form.method || 'get').toLowerCase() !== 'get') {
                     return;
                 }
-                form.submit();
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
             });
         });
     }

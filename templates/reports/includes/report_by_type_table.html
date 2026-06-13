@@ -1,0 +1,9 @@
+<table>
+    <thead><tr><th>Тип задания</th><th>Количество</th></tr></thead>
+    <tbody>
+    {% for row in report_by_type_block.items %}
+        <tr><td>{{ row.ui_name|default:row.name }}</td><td>{{ row.total }}</td></tr>
+    {% empty %}<tr><td colspan="2" class="muted">Нет данных.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=report_by_type_block %}

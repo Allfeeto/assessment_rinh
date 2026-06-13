@@ -1,0 +1,19 @@
+<table>
+    <thead>
+    <tr>
+        <th>ID</th><th>Преподаватель</th><th>Программа</th>
+        <th><a class="table-sort{% if teacher_assignment_sort == 'discipline_code' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline_code }}" data-compact-link="teacher_program_disciplines">Код{% if teacher_assignment_sort == 'discipline_code' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}</a></th>
+        <th><a class="table-sort{% if teacher_assignment_sort == 'discipline' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline }}" data-compact-link="teacher_program_disciplines">Дисциплина{% if teacher_assignment_sort == 'discipline' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}</a></th>
+        {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
+    </tr>
+    </thead>
+    <tbody>
+    {% for link in teacher_program_disciplines_block.items %}
+        <tr>
+            <td>{{ link.id }}</td><td>{{ link.teacher.full_name }}</td><td>{{ link.program_discipline.educational_program }}</td><td class="muted">{{ link.program_discipline.discipline_code|default:"—" }}</td><td>{{ link.program_discipline.discipline.name }}</td>
+            {% if can_manage_teacher_directory %}<td><div class="actions"><a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_update' link.id %}">Изменить</a><a class="btn danger" href="{% url 'teachers_teacher_program_discipline_delete' link.id %}">Удалить</a></div></td>{% endif %}
+        </tr>
+    {% empty %}<tr><td colspan="{% if can_manage_teacher_directory %}6{% else %}5{% endif %}" class="muted">Назначений пока нет.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=teacher_program_disciplines_block %}

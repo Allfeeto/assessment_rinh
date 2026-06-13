@@ -74,4 +74,15 @@
         {% endfor %}
         </tbody>
     </table>
+    {% if assignment_page_obj.paginator.num_pages > 1 %}
+        <nav class="pagination" aria-label="Страницы дисциплин назначения">
+            {% if assignment_page_obj.has_previous %}
+                <button type="button" class="js-assignment-page" data-assignment-page="{{ assignment_page_obj.previous_page_number }}">Назад</button>
+            {% else %}<span class="disabled">Назад</span>{% endif %}
+            <span class="current">Страница {{ assignment_page_obj.number }} / {{ assignment_page_obj.paginator.num_pages }}</span>
+            {% if assignment_page_obj.has_next %}
+                <button type="button" class="js-assignment-page" data-assignment-page="{{ assignment_page_obj.next_page_number }}">Вперёд</button>
+            {% else %}<span class="disabled">Вперёд</span>{% endif %}
+        </nav>
+    {% endif %}
 {% endif %}

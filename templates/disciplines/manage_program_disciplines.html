@@ -34,7 +34,7 @@
         </div>
         <div class="field">
             <label for="id_filter_discipline">Дисциплина</label>
-            <select id="id_filter_discipline" name="discipline" data-auto-submit-change="1">
+            <select id="id_filter_discipline" name="discipline" data-autocomplete-kind="discipline" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите название дисциплины" data-autocomplete-parent="id_filter_program" data-autocomplete-parent-param="educational_program_id" data-auto-submit-change="1">
                 <option value="">Все дисциплины программы</option>
                 {% for option in discipline_filter_options %}
                     <option value="{{ option.discipline_id }}" {% if selected_discipline_id == option.discipline_id|stringformat:"s" %}selected{% endif %}>
@@ -126,7 +126,7 @@
     </form>
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-async-block="manager-program-disciplines">
     <h2>Уже добавленные дисциплины{% if selected_program %}: {{ selected_program }}{% endif %}</h2>
     <table>
         <thead>
@@ -175,13 +175,18 @@
     {% if pd_page_obj.paginator.num_pages > 1 %}
         <div class="pagination">
             {% if pd_page_obj.has_previous %}
-                <a href="?pd_page=1{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Первая</a>
-                <a href="?pd_page={{ pd_page_obj.previous_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Назад</a>
+                <a href="?pd_page=1{% if pd_query_params %}&{{ pd_query_params }}{% endif %}" data-async-link="manager-program-disciplines">Первая</a>
+                <a href="?pd_page={{ pd_page_obj.previous_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}" data-async-link="manager-program-disciplines">Назад</a>
             {% endif %}
-            <span class="current">Страница {{ pd_page_obj.number }} / {{ pd_page_obj.paginator.num_pages }}</span>
+            {% for page_number in pd_page_range %}
+                {% if page_number %}
+                    {% if page_number == pd_page_obj.number %}<span class="current">{{ page_number }}</span>
+                    {% else %}<a href="?pd_page={{ page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}" data-async-link="manager-program-disciplines">{{ page_number }}</a>{% endif %}
+                {% else %}<span class="ellipsis">…</span>{% endif %}
+            {% endfor %}
             {% if pd_page_obj.has_next %}
-                <a href="?pd_page={{ pd_page_obj.next_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Вперёд</a>
-                <a href="?pd_page={{ pd_page_obj.paginator.num_pages }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Последняя</a>
+                <a href="?pd_page={{ pd_page_obj.next_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}" data-async-link="manager-program-disciplines">Вперёд</a>
+                <a href="?pd_page={{ pd_page_obj.paginator.num_pages }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}" data-async-link="manager-program-disciplines">Последняя</a>
             {% endif %}
         </div>
     {% endif %}
@@ -194,33 +199,6 @@
             «{{ selected_program_discipline.discipline_display_name }}»
         {% endif %}
     </h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Код</th>
-            <th>Компетенция</th>
-            <th>Тип</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for link in discipline_competence_links %}
-            <tr>
-                <td>{{ link.competence.code }}</td>
-                <td>{{ link.competence.name }}</td>
-                <td>{{ link.competence.competence_type.name }}</td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="3" class="muted">
-                    {% if selected_program_discipline %}
-                        Для выбранной дисциплины компетенции пока не связаны.
-                    {% else %}
-                        Выберите программу и дисциплину, чтобы увидеть компетенции.
-                    {% endif %}
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="manager_competences">{% include "disciplines/includes/manager_competences_table.html" %}</div>
 </div>
 {% endblock %}

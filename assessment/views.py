@@ -14,6 +14,7 @@ from core.models import AssessmentItemType, EducationLevel
 from core.permissions import is_superuser_or_platform_admin
 from core.view_helpers import (
     PER_PAGE_CHOICES,
+    elided_page_range,
     get_per_page,
     normalize_sort,
     ordering_for_sort,
@@ -121,6 +122,7 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
                 'program_discipline__educational_program__program_profile__training_direction',
                 'program_discipline__educational_program__program_profile',
                 'program_discipline__educational_program',
+                'program_discipline__educational_program__department',
                 'assessment_item_type',
                 'competence__competence_type',
             )
@@ -276,6 +278,14 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
             Competence,
             self.request.GET.get('competence'),
         )
+        # Autocomplete-поля должны содержать только выбранные записи.
+        # Полные варианты подгружаются через /core/lookup/ по мере ввода.
+        directions = directions.filter(pk=selected_training_direction) if selected_training_direction else directions.none()
+        profiles = profiles.filter(pk=selected_program_profile) if selected_program_profile else profiles.none()
+        programs = programs.filter(pk=selected_educational_program) if selected_educational_program else programs.none()
+        disciplines = disciplines.filter(pk=selected_discipline) if selected_discipline else disciplines.none()
+        selected_competence = self.request.GET.get('competence', '')
+        competences = competences.filter(pk=selected_competence) if selected_competence else competences.none()
         discipline_labels = {}
         label_scope = program_discipline_scope.select_related('discipline').order_by(
             'discipline__name',
@@ -319,6 +329,7 @@ class AssessmentItemListView(LoginRequiredMixin, ListView):
         params = self.request.GET.copy()
         params.pop('page', None)
         context['query_params'] = params.urlencode()
+        context['page_range'] = elided_page_range(context['page_obj'])
         item_sort = getattr(self, 'item_sort', '')
         item_sort_dir = getattr(self, 'item_sort_dir', 'asc')
         context['item_sort'] = item_sort

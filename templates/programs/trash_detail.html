@@ -53,62 +53,21 @@
 
 <div class="panel table-wrap">
     <h2>Дисциплины учебного плана</h2>
-    <table>
-        <thead><tr><th>ID</th><th>Код дисциплины</th><th>Дисциплина</th><th>Статус PLX</th></tr></thead>
-        <tbody>
-        {% for pd in program_disciplines %}
-            <tr>
-                <td>{{ pd.id }}</td>
-                <td>{{ pd.discipline_code|default:"—" }}</td>
-                <td>{{ pd.discipline.name }}</td>
-                <td>{{ pd.plan_status_label }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="4" class="muted">Дисциплины не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="trash_program_disciplines">{% include "programs/includes/trash_program_disciplines_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Компетенции</h2>
-    <table>
-        <thead><tr><th>Код</th><th>Тип</th><th>Наименование</th></tr></thead>
-        <tbody>
-        {% for competence in competences %}
-            <tr><td>{{ competence.code }}</td><td>{{ competence.competence_type.name }}</td><td>{{ competence.name }}</td></tr>
-        {% empty %}
-            <tr><td colspan="3" class="muted">Компетенции не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="trash_competences">{% include "programs/includes/trash_competences_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Матрица дисциплина-компетенция</h2>
-    <table>
-        <thead><tr><th>Дисциплина</th><th>Компетенция</th></tr></thead>
-        <tbody>
-        {% for link in discipline_competences %}
-            <tr><td>{{ link.program_discipline.discipline_display_name }}</td><td>{{ link.competence.code }} — {{ link.competence.name }}</td></tr>
-        {% empty %}
-            <tr><td colspan="2" class="muted">Связи не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="trash_discipline_competences">{% include "programs/includes/trash_discipline_competences_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Назначения преподавателей</h2>
-    <table>
-        <thead><tr><th>Преподаватель</th><th>Дисциплина</th></tr></thead>
-        <tbody>
-        {% for link in teacher_assignments %}
-            <tr><td>{{ link.teacher.full_name }}</td><td>{{ link.program_discipline.discipline_display_name }}</td></tr>
-        {% empty %}
-            <tr><td colspan="2" class="muted">Назначения не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="trash_teacher_assignments">{% include "programs/includes/trash_teacher_assignments_table.html" %}</div>
 </div>
 {% endblock %}

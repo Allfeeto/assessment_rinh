@@ -79,6 +79,10 @@ class ReportFilterForm(forms.Form):
         label_scope = program_discipline_scope.select_related('discipline').order_by('discipline__name', 'discipline_code')
         if program_id:
             label_scope = label_scope.filter(educational_program_id=program_id)
+        if discipline_id:
+            label_scope = label_scope.filter(discipline_id=discipline_id)
+        else:
+            label_scope = label_scope.none()
         discipline_labels = {}
         for program_discipline in label_scope:
             discipline_labels.setdefault(
@@ -139,7 +143,10 @@ class ReportFilterForm(forms.Form):
                 educational_program__program_disciplines__in=program_discipline_scope,
             ) | competence_qs
 
-        self.fields['competence'].queryset = competence_qs
+        self.fields['competence'].queryset = autocomplete_queryset(
+            competence_qs,
+            selected_competence_id,
+        )
         apply_autocomplete_attrs(
             self.fields['competence'],
             kind='competence',

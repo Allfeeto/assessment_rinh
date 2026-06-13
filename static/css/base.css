@@ -487,6 +487,19 @@ th {
     flex-wrap: wrap;
     margin-top: 12px;
 }
+.compact-block-footer form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.compact-block-footer label {
+    margin: 0;
+}
+.compact-block-footer select {
+    width: auto;
+    min-width: 76px;
+}
 .compact-block-loading {
     opacity: .55;
     pointer-events: none;
@@ -533,13 +546,18 @@ th {
     flex-wrap: wrap;
 }
 .pagination a,
-.pagination span {
+.pagination span,
+.pagination button {
     padding: 6px 9px;
     border: 1px solid var(--border);
     border-radius: 8px;
     text-decoration: none;
     color: var(--text);
     background: #fff;
+}
+.pagination button {
+    font: inherit;
+    cursor: pointer;
 }
 .pagination .current {
     color: var(--accent);

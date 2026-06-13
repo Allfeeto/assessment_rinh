@@ -7,7 +7,7 @@
 
 <div class="panel">
     <div class="title-row">
-        <form method="get" class="form-row" style="margin: 0; width: 100%;">
+        <form method="get" class="form-row" style="margin: 0; width: 100%;" data-async-form="list">
             <div class="field" style="min-width: 280px;">
                 <label for="id_q">Поиск</label>
                 <input type="text" id="id_q" name="q" value="{{ search_query }}" placeholder="Введите строку для поиска">
@@ -31,14 +31,14 @@
     </div>
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-async-block="list">
     <table>
         <thead>
         <tr>
             {% for column in display_columns %}
                 <th>
                     {% if column.sort_query %}
-                        <a class="table-sort{% if column.is_sorted %} active{% endif %}" href="?{{ column.sort_query }}">
+                        <a class="table-sort{% if column.is_sorted %} active{% endif %}" href="?{{ column.sort_query }}" data-async-link="list">
                             {{ column.label }}{% if column.is_sorted %} {% if column.sort_direction == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
                         </a>
                     {% else %}
@@ -84,13 +84,18 @@
     {% if is_paginated %}
         <div class="pagination">
             {% if page_obj.has_previous %}
-                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}">Первая</a>
-                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Назад</a>
+                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="list">Первая</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="list">Назад</a>
             {% endif %}
-            <span class="current">Страница {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            {% for page_number in page_range %}
+                {% if page_number %}
+                    {% if page_number == page_obj.number %}<span class="current">{{ page_number }}</span>
+                    {% else %}<a href="?page={{ page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="list">{{ page_number }}</a>{% endif %}
+                {% else %}<span class="ellipsis">…</span>{% endif %}
+            {% endfor %}
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Вперёд</a>
-                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}">Последняя</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="list">Вперёд</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="list">Последняя</a>
             {% endif %}
         </div>
     {% endif %}

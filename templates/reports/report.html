@@ -7,30 +7,10 @@
 
 <div class="panel">
     <form method="get" class="form-row">
-        <div class="field">
-            <label for="{{ form.educational_program.id_for_label }}">{{ form.educational_program.label }}</label>
-            {{ form.educational_program }}
-        </div>
-        <div class="field">
-            <label for="{{ form.discipline.id_for_label }}">{{ form.discipline.label }}</label>
-            {{ form.discipline }}
-        </div>
-        <div class="field">
-            <label for="{{ form.competence.id_for_label }}">{{ form.competence.label }}</label>
-            {{ form.competence }}
-        </div>
-        <div class="field">
-            <label for="{{ form.assessment_item_type.id_for_label }}">{{ form.assessment_item_type.label }}</label>
-            {{ form.assessment_item_type }}
-        </div>
-        <div class="field" style="max-width: 170px;">
-            <label for="id_per_page">Строк на странице</label>
-            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
-                {% for option in per_page_choices %}
-                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <div class="field"><label for="{{ form.educational_program.id_for_label }}">{{ form.educational_program.label }}</label>{{ form.educational_program }}</div>
+        <div class="field"><label for="{{ form.discipline.id_for_label }}">{{ form.discipline.label }}</label>{{ form.discipline }}</div>
+        <div class="field"><label for="{{ form.competence.id_for_label }}">{{ form.competence.label }}</label>{{ form.competence }}</div>
+        <div class="field"><label for="{{ form.assessment_item_type.id_for_label }}">{{ form.assessment_item_type.label }}</label>{{ form.assessment_item_type }}</div>
         <div class="actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="/reports/">Сбросить</a>
@@ -38,201 +18,30 @@
     </form>
 </div>
 
-<div class="panel">
-    <h2>Всего заданий по фильтру: {{ assessment_items_count }}</h2>
-</div>
+<div class="panel"><h2>Всего заданий по фильтру: {{ assessment_items_count }}</h2></div>
 
 <div class="panel table-wrap">
     <h2>Покрытие компетенций заданиями (по образовательной программе)</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Программа</th>
-            <th>Код компетенции</th>
-            <th>Компетенция</th>
-            <th>Тип</th>
-            <th>Количество заданий</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in competence_coverage %}
-            <tr>
-                <td>{{ row.educational_program__program_profile__code }}</td>
-                <td>{{ row.code }}</td>
-                <td>{{ row.name }}</td>
-                <td>{{ row.competence_type__name }}</td>
-                <td>{{ row.items_count }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="5" class="muted">Нет данных.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if competence_coverage_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if competence_coverage_page_obj.has_previous %}
-                <a href="?competence_page=1{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Первая</a>
-                <a href="?competence_page={{ competence_coverage_page_obj.previous_page_number }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ competence_coverage_page_obj.number }} / {{ competence_coverage_page_obj.paginator.num_pages }}</span>
-            {% if competence_coverage_page_obj.has_next %}
-                <a href="?competence_page={{ competence_coverage_page_obj.next_page_number }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Вперёд</a>
-                <a href="?competence_page={{ competence_coverage_page_obj.paginator.num_pages }}{% if competence_coverage_query_params %}&{{ competence_coverage_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="competence_coverage">{% include "reports/includes/competence_coverage_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Дисциплина → компетенция → количество заданий</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Дисциплина</th>
-            <th>Код компетенции</th>
-            <th>Компетенция</th>
-            <th>Количество заданий</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in discipline_competence_report %}
-            <tr>
-                <td>{{ row.discipline_label }}</td>
-                <td>{{ row.competence__code }}</td>
-                <td>{{ row.competence__name }}</td>
-                <td>{{ row.items_count }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="4" class="muted">Нет данных.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if discipline_competence_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if discipline_competence_page_obj.has_previous %}
-                <a href="?matrix_page=1{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Первая</a>
-                <a href="?matrix_page={{ discipline_competence_page_obj.previous_page_number }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ discipline_competence_page_obj.number }} / {{ discipline_competence_page_obj.paginator.num_pages }}</span>
-            {% if discipline_competence_page_obj.has_next %}
-                <a href="?matrix_page={{ discipline_competence_page_obj.next_page_number }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Вперёд</a>
-                <a href="?matrix_page={{ discipline_competence_page_obj.paginator.num_pages }}{% if discipline_competence_query_params %}&{{ discipline_competence_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="discipline_competence">{% include "reports/includes/discipline_competence_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Количество заданий по типам</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Тип задания</th>
-            <th>Количество</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in report_by_type %}
-            <tr>
-                <td>{{ row.ui_name|default:row.name }}</td>
-                <td>{{ row.total }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="2" class="muted">Нет данных.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if report_by_type_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if report_by_type_page_obj.has_previous %}
-                <a href="?type_page=1{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Первая</a>
-                <a href="?type_page={{ report_by_type_page_obj.previous_page_number }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ report_by_type_page_obj.number }} / {{ report_by_type_page_obj.paginator.num_pages }}</span>
-            {% if report_by_type_page_obj.has_next %}
-                <a href="?type_page={{ report_by_type_page_obj.next_page_number }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Вперёд</a>
-                <a href="?type_page={{ report_by_type_page_obj.paginator.num_pages }}{% if report_by_type_query_params %}&{{ report_by_type_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="report_by_type">{% include "reports/includes/report_by_type_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Количество заданий по программам</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Профиль</th>
-            <th>Кафедра</th>
-            <th>Год набора</th>
-            <th>Количество</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in report_by_program %}
-            <tr>
-                <td>{{ row.program_profile__code }} — {{ row.program_profile__name }}</td>
-                <td>{{ row.department__short_name }}</td>
-                <td>{{ row.admission_year }}</td>
-                <td>{{ row.total }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="4" class="muted">Нет данных.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if report_by_program_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if report_by_program_page_obj.has_previous %}
-                <a href="?program_page=1{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Первая</a>
-                <a href="?program_page={{ report_by_program_page_obj.previous_page_number }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ report_by_program_page_obj.number }} / {{ report_by_program_page_obj.paginator.num_pages }}</span>
-            {% if report_by_program_page_obj.has_next %}
-                <a href="?program_page={{ report_by_program_page_obj.next_page_number }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Вперёд</a>
-                <a href="?program_page={{ report_by_program_page_obj.paginator.num_pages }}{% if report_by_program_query_params %}&{{ report_by_program_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="report_by_program">{% include "reports/includes/report_by_program_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Количество заданий по дисциплинам</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Дисциплина</th>
-            <th>Количество</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in report_by_discipline %}
-            <tr>
-                <td>{{ row.name }}</td>
-                <td>{{ row.total }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="2" class="muted">Нет данных.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if report_by_discipline_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if report_by_discipline_page_obj.has_previous %}
-                <a href="?discipline_page=1{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Первая</a>
-                <a href="?discipline_page={{ report_by_discipline_page_obj.previous_page_number }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ report_by_discipline_page_obj.number }} / {{ report_by_discipline_page_obj.paginator.num_pages }}</span>
-            {% if report_by_discipline_page_obj.has_next %}
-                <a href="?discipline_page={{ report_by_discipline_page_obj.next_page_number }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Вперёд</a>
-                <a href="?discipline_page={{ report_by_discipline_page_obj.paginator.num_pages }}{% if report_by_discipline_query_params %}&{{ report_by_discipline_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="report_by_discipline">{% include "reports/includes/report_by_discipline_table.html" %}</div>
 </div>
 {% endblock %}

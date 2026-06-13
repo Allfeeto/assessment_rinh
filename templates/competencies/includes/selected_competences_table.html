@@ -1,0 +1,17 @@
+<table>
+    <thead>
+    <tr><th>Код</th><th>Компетенция</th><th>Тип</th></tr>
+    </thead>
+    <tbody>
+    {% for item in selected_competences_block.items %}
+        <tr>
+            <td>{{ item.competence__code }}</td>
+            <td>{{ item.competence__name }}</td>
+            <td>{{ item.competence__competence_type__name }}</td>
+        </tr>
+    {% empty %}
+        <tr><td colspan="3" class="muted">Выберите программу и дисциплину, чтобы увидеть связанные компетенции.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=selected_competences_block %}

@@ -1,0 +1,9 @@
+<table>
+    <thead><tr><th>ID</th><th>Код дисциплины</th><th>Дисциплина</th><th>Статус PLX</th></tr></thead>
+    <tbody>
+    {% for pd in trash_program_disciplines_block.items %}
+        <tr><td>{{ pd.id }}</td><td>{{ pd.discipline_code|default:"—" }}</td><td>{{ pd.discipline.name }}</td><td>{{ pd.plan_status_label }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">Дисциплины не найдены.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=trash_program_disciplines_block %}

@@ -6,7 +6,7 @@
 <h1 class="page-title">Корзина программ</h1>
 
 <div class="panel">
-    <form method="get" class="form-row">
+    <form method="get" class="form-row" data-async-form="program-trash-list">
         <div class="field">
             <label for="id_education_level">Уровень образования</label>
             <select id="id_education_level" name="education_level" data-auto-submit-change="1">
@@ -18,7 +18,7 @@
         </div>
         <div class="field">
             <label for="id_training_direction">Направление</label>
-            <select id="id_training_direction" name="training_direction" data-auto-submit-change="1">
+            <select id="id_training_direction" name="training_direction" data-autocomplete-kind="training_direction" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название направления" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for direction in training_directions %}
                     <option value="{{ direction.id }}" {% if selected.training_direction == direction.id|stringformat:"s" %}selected{% endif %}>{{ direction.code }} — {{ direction.name }}</option>
@@ -27,7 +27,7 @@
         </div>
         <div class="field">
             <label for="id_program_profile">Профиль</label>
-            <select id="id_program_profile" name="program_profile" data-auto-submit-change="1">
+            <select id="id_program_profile" name="program_profile" data-autocomplete-kind="program_profile" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите код или название профиля" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for profile in program_profiles %}
                     <option value="{{ profile.id }}" {% if selected.program_profile == profile.id|stringformat:"s" %}selected{% endif %}>{{ profile.code }} — {{ profile.name }}</option>
@@ -36,7 +36,7 @@
         </div>
         <div class="field">
             <label for="id_department">Кафедра</label>
-            <select id="id_department" name="department" data-auto-submit-change="1">
+            <select id="id_department" name="department" data-autocomplete-kind="department" data-autocomplete-url="/core/lookup/" data-autocomplete-placeholder="Введите номер или название кафедры" data-auto-submit-change="1">
                 <option value="">Все</option>
                 {% for department in departments %}
                     <option value="{{ department.id }}" {% if selected.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.number }} — {{ department.short_name }}</option>
@@ -67,7 +67,7 @@
     </form>
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-async-block="program-trash-list">
     <table>
         <thead>
         <tr>
@@ -119,13 +119,18 @@
     {% if page_obj.paginator.num_pages > 1 %}
         <div class="pagination">
             {% if page_obj.has_previous %}
-                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}">Первая</a>
-                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Назад</a>
+                <a href="?page=1{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="program-trash-list">Первая</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="program-trash-list">Назад</a>
             {% endif %}
-            <span class="current">Страница {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            {% for page_number in page_range %}
+                {% if page_number %}
+                    {% if page_number == page_obj.number %}<span class="current">{{ page_number }}</span>
+                    {% else %}<a href="?page={{ page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="program-trash-list">{{ page_number }}</a>{% endif %}
+                {% else %}<span class="ellipsis">…</span>{% endif %}
+            {% endfor %}
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}">Вперёд</a>
-                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}">Последняя</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="program-trash-list">Вперёд</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}" data-async-link="program-trash-list">Последняя</a>
             {% endif %}
         </div>
     {% endif %}

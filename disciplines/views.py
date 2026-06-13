@@ -21,14 +21,18 @@ from programs.models import EducationalProgram
 
 from core.view_helpers import (
     PER_PAGE_CHOICES,
+    FragmentTemplateMixin,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
     StaffOrModelPermissionRequiredMixin,
+    compact_queryset_block,
+    elided_page_range,
     get_per_page,
     paginate_queryset,
+    requested_fragment,
 )
 
 from .forms import DisciplineForm, ProgramDisciplineForm, ProgramDisciplineManageForm
@@ -40,6 +44,9 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
     model = ProgramDiscipline
     permission_action = 'change'
     template_name = 'disciplines/manage_program_disciplines.html'
+    fragment_templates = {
+        'manager_competences': 'disciplines/includes/manager_competences_table.html',
+    }
 
     @staticmethod
     def _get_selected_program_id(request, form=None):
@@ -82,19 +89,17 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
                 educational_program__is_deleted=False,
             ).order_by('discipline_code', 'discipline__name')
 
-            discipline_filter_options = []
-            seen_discipline_ids = set()
-            for program_discipline in existing_program_disciplines_qs:
-                if program_discipline.discipline_id in seen_discipline_ids:
-                    continue
-                seen_discipline_ids.add(program_discipline.discipline_id)
-                discipline_filter_options.append({
-                    'discipline_id': program_discipline.discipline_id,
-                    'label': program_discipline.discipline_display_name,
-                })
-            valid_discipline_ids = {str(option['discipline_id']) for option in discipline_filter_options}
-            if selected_discipline_id and selected_discipline_id not in valid_discipline_ids:
-                selected_discipline_id = ''
+            if selected_discipline_id:
+                selected_filter_pd = existing_program_disciplines_qs.filter(
+                    discipline_id=selected_discipline_id
+                ).first()
+                if selected_filter_pd:
+                    discipline_filter_options = [{
+                        'discipline_id': selected_filter_pd.discipline_id,
+                        'label': selected_filter_pd.discipline_display_name,
+                    }]
+                else:
+                    selected_discipline_id = ''
 
             if selected_discipline_id:
                 existing_program_disciplines_qs = existing_program_disciplines_qs.filter(
@@ -107,6 +112,13 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
                     ).filter(
                         program_discipline=selected_program_discipline
                     ).order_by('competence__code')
+
+        manager_competences_block = compact_queryset_block(
+            request,
+            discipline_competence_links,
+            prefix='manager_competences',
+            page_size=per_page,
+        )
 
         pd_page_obj = paginate_queryset(
             request,
@@ -132,8 +144,10 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
             'discipline_filter_options': discipline_filter_options,
             'selected_program_discipline': selected_program_discipline,
             'discipline_competence_links': discipline_competence_links,
+            'manager_competences_block': manager_competences_block,
             'existing_program_disciplines': pd_page_obj.object_list,
             'pd_page_obj': pd_page_obj,
+            'pd_page_range': elided_page_range(pd_page_obj),
             'pd_query_params': params.urlencode(),
             'per_page_choices': PER_PAGE_CHOICES,
             'selected_per_page': per_page,
@@ -144,7 +158,9 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
         selected_program_id = self._get_selected_program_id(request)
         initial = {'educational_program': selected_program_id} if selected_program_id else None
         form = ProgramDisciplineManageForm(initial=initial, request_user=request.user)
-        return render(request, self.template_name, self._build_context(request, form))
+        fragment = requested_fragment(request, self.fragment_templates)
+        template_name = self.fragment_templates.get(fragment, self.template_name)
+        return render(request, template_name, self._build_context(request, form))
 
     def post(self, request, *args, **kwargs):
         form = ProgramDisciplineManageForm(request.POST, request_user=request.user)
@@ -171,8 +187,12 @@ class ProgramDisciplineManagerView(StaffOrModelPermissionRequiredMixin, View):
         return render(request, self.template_name, self._build_context(request, form))
 
 
-class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
+class DisciplinesDashboardView(LoginRequiredMixin, FragmentTemplateMixin, TemplateView):
     template_name = 'disciplines/list.html'
+    fragment_templates = {
+        'disciplines': 'disciplines/includes/disciplines_table.html',
+        'program_disciplines': 'disciplines/includes/program_disciplines_table.html',
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -180,6 +200,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
         educational_program_id = self.request.GET.get('educational_program', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
+        fragment = self.get_requested_fragment()
         can_manage_disciplines = is_domain_manager(self.request.user)
         program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
@@ -207,25 +228,32 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             .values('total')
         )
 
-        disciplines_base_qs = Discipline.objects.all()
-        if not can_manage_disciplines:
-            disciplines_base_qs = disciplines_base_qs.filter(
-                program_disciplines__in=program_discipline_scope,
-            ).distinct()
+        if fragment in {'', 'disciplines'}:
+            disciplines_base_qs = Discipline.objects.all()
+            if not can_manage_disciplines:
+                disciplines_base_qs = disciplines_base_qs.filter(
+                    program_disciplines__in=program_discipline_scope,
+                ).distinct()
 
-        disciplines_qs = disciplines_base_qs.annotate(
-            programs_count=Coalesce(
-                Subquery(discipline_programs_count, output_field=IntegerField()),
-                0,
-            ),
-            items_count=Coalesce(
-                Subquery(discipline_items_count, output_field=IntegerField()),
-                0,
-            ),
-        ).order_by('name')
+            disciplines_qs = disciplines_base_qs.annotate(
+                programs_count=Coalesce(
+                    Subquery(discipline_programs_count, output_field=IntegerField()),
+                    0,
+                ),
+                items_count=Coalesce(
+                    Subquery(discipline_items_count, output_field=IntegerField()),
+                    0,
+                ),
+            ).order_by('name')
 
-        if search:
-            disciplines_qs = disciplines_qs.filter(name__icontains=search)
+            if search:
+                disciplines_qs = disciplines_qs.filter(name__icontains=search)
+            context['disciplines_block'] = compact_queryset_block(
+                self.request,
+                disciplines_qs,
+                prefix='disciplines',
+                page_size=per_page,
+            )
 
         program_discipline_competences_count = (
             DisciplineCompetence.objects.filter(
@@ -248,47 +276,41 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             .values('total')
         )
 
-        program_disciplines_qs = program_discipline_scope.select_related(
-            'educational_program__program_profile',
-            'educational_program__department',
-            'discipline',
-            'department',
-        ).annotate(
-            competences_count=Coalesce(
-                Subquery(program_discipline_competences_count, output_field=IntegerField()),
-                0,
-            ),
-            items_count=Coalesce(
-                Subquery(program_discipline_items_count, output_field=IntegerField()),
-                0,
-            ),
-        ).order_by(
-            'educational_program__program_profile__code',
-            'educational_program__admission_year',
-            'discipline__name',
-        )
-
-        if educational_program_id:
-            program_disciplines_qs = program_disciplines_qs.filter(educational_program_id=educational_program_id)
-
-        d_page_obj = paginate_queryset(
-            self.request,
-            disciplines_qs,
-            page_param='d_page',
-            per_page=per_page,
-        )
-
-        pd_page_obj = paginate_queryset(
-            self.request,
-            program_disciplines_qs,
-            page_param='pd_page',
-            per_page=per_page,
-        )
-        for program_discipline in pd_page_obj.object_list:
-            program_discipline.can_manage = can_manage_program_discipline(
-                self.request.user,
-                program_discipline,
+        if fragment in {'', 'program_disciplines'}:
+            program_disciplines_qs = program_discipline_scope.select_related(
+                'educational_program__program_profile',
+                'educational_program__department',
+                'discipline',
+                'department',
+            ).annotate(
+                competences_count=Coalesce(
+                    Subquery(program_discipline_competences_count, output_field=IntegerField()),
+                    0,
+                ),
+                items_count=Coalesce(
+                    Subquery(program_discipline_items_count, output_field=IntegerField()),
+                    0,
+                ),
+            ).order_by(
+                'educational_program__program_profile__code',
+                'educational_program__admission_year',
+                'discipline__name',
             )
+
+            if educational_program_id:
+                program_disciplines_qs = program_disciplines_qs.filter(educational_program_id=educational_program_id)
+
+            context['program_disciplines_block'] = compact_queryset_block(
+                self.request,
+                program_disciplines_qs,
+                prefix='program_disciplines',
+                page_size=per_page,
+            )
+            for program_discipline in context['program_disciplines_block']['items']:
+                program_discipline.can_manage = can_manage_program_discipline(
+                    self.request.user,
+                    program_discipline,
+                )
 
         selected_program = (
             EducationalProgram.objects.select_related('program_profile', 'department')
@@ -299,7 +321,7 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             )
             .distinct()
             .first()
-            if educational_program_id
+            if educational_program_id and not fragment
             else None
         )
         educational_program_options = (
@@ -308,21 +330,9 @@ class DisciplinesDashboardView(LoginRequiredMixin, TemplateView):
             else EducationalProgram.objects.none()
         )
 
-        params = self.request.GET.copy()
-        d_params = params.copy()
-        d_params.pop('d_page', None)
-        pd_params = params.copy()
-        pd_params.pop('pd_page', None)
-
         context['educational_programs'] = educational_program_options
         context['selected_program'] = educational_program_id
         context['search_query'] = search
-        context['disciplines'] = d_page_obj.object_list
-        context['program_disciplines'] = pd_page_obj.object_list
-        context['d_page_obj'] = d_page_obj
-        context['pd_page_obj'] = pd_page_obj
-        context['d_query_params'] = d_params.urlencode()
-        context['pd_query_params'] = pd_params.urlencode()
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_manage_disciplines'] = can_manage_disciplines

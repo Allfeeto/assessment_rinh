@@ -12,15 +12,18 @@ from core.permissions import get_user_departments, is_domain_manager, is_superus
 from core.models import EducationLevel
 from core.view_helpers import (
     PER_PAGE_CHOICES,
+    FragmentTemplateMixin,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
     compact_queryset_block,
+    elided_page_range,
     get_per_page,
     paginate_queryset,
     query_params_without,
+    requested_fragment,
 )
 from disciplines.models import ProgramDiscipline
 from teachers.models import Department, TeacherProgramDiscipline
@@ -120,6 +123,7 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
         )
         if plx_import_active:
             return context
+        fragment = requested_fragment(self.request, self.fragment_templates)
 
         directions_qs = TrainingDirection.objects.select_related('education_level').order_by('code')
         profiles_qs = ProgramProfile.objects.select_related('training_direction').order_by('code')
@@ -146,30 +150,35 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             and int(raw_programs_per_page) in self.programs_per_page_choices
             else self.programs_per_page_choices[0]
         )
-        context['directions_block'] = compact_queryset_block(
-            self.request,
-            directions_qs,
-            prefix='directions',
-        )
-        context['profiles_block'] = compact_queryset_block(
-            self.request,
-            profiles_qs,
-            prefix='profiles',
-        )
-        context['programs_block'] = compact_queryset_block(
-            self.request,
-            programs_qs,
-            prefix='programs',
-            page_size=programs_per_page,
-        )
+        if fragment in {'', 'directions'}:
+            context['directions_block'] = compact_queryset_block(
+                self.request,
+                directions_qs,
+                prefix='directions',
+            )
+        if fragment in {'', 'profiles'}:
+            context['profiles_block'] = compact_queryset_block(
+                self.request,
+                profiles_qs,
+                prefix='profiles',
+            )
+        if fragment in {'', 'programs'}:
+            context['programs_block'] = compact_queryset_block(
+                self.request,
+                programs_qs,
+                prefix='programs',
+                page_size=programs_per_page,
+                page_size_choices=self.programs_per_page_choices,
+            )
         context['programs_per_page'] = programs_per_page
         context['programs_per_page_choices'] = self.programs_per_page_choices
-        context['indicator_import_form'] = (
-            kwargs.get('indicator_import_form')
-            or CompetenceIndicatorImportForm(request_user=self.request.user)
-        )
-        context['indicator_import_error'] = kwargs.get('indicator_import_error')
-        context['indicator_import_issues'] = kwargs.get('indicator_import_issues', ())
+        if not fragment:
+            context['indicator_import_form'] = (
+                kwargs.get('indicator_import_form')
+                or CompetenceIndicatorImportForm(request_user=self.request.user)
+            )
+            context['indicator_import_error'] = kwargs.get('indicator_import_error')
+            context['indicator_import_issues'] = kwargs.get('indicator_import_issues', ())
         indicator_imports = CompetenceIndicatorImport.objects.select_related(
             'educational_program__program_profile__training_direction__education_level',
             'educational_program__department',
@@ -179,19 +188,21 @@ class ProgramsDashboardView(LoginRequiredMixin, StaffRequiredPostMixin, Template
             indicator_imports = indicator_imports.filter(
                 educational_program__department__in=get_user_departments(self.request.user),
             )
-        context['indicator_imports_block'] = compact_queryset_block(
-            self.request,
-            indicator_imports,
-            prefix='indicator_imports',
-            preview_size=3,
-            page_size=20,
-        )
-        result_id = (self.request.GET.get('indicator_import_result') or '').strip()
-        context['indicator_import_result'] = (
-            indicator_imports.filter(pk=result_id).first()
-            if result_id.isdigit()
-            else None
-        )
+        if fragment in {'', 'indicator_imports'}:
+            context['indicator_imports_block'] = compact_queryset_block(
+                self.request,
+                indicator_imports,
+                prefix='indicator_imports',
+                preview_size=3,
+                page_size=20,
+            )
+        if not fragment:
+            result_id = (self.request.GET.get('indicator_import_result') or '').strip()
+            context['indicator_import_result'] = (
+                indicator_imports.filter(pk=result_id).first()
+                if result_id.isdigit()
+                else None
+            )
         return context
 
     def get(self, request, *args, **kwargs):
@@ -713,20 +724,36 @@ class ProgramTrashListView(LoginRequiredMixin, TemplateView):
                 'page_obj': page_obj,
                 'selected': selected,
                 'education_levels': EducationLevel.objects.order_by('name'),
-                'training_directions': TrainingDirection.objects.order_by('code'),
-                'program_profiles': ProgramProfile.objects.order_by('code'),
-                'departments': Department.objects.order_by('number'),
+                'training_directions': (
+                    TrainingDirection.objects.filter(pk=selected['training_direction'])
+                    if selected['training_direction'].isdigit() else TrainingDirection.objects.none()
+                ),
+                'program_profiles': (
+                    ProgramProfile.objects.filter(pk=selected['program_profile'])
+                    if selected['program_profile'].isdigit() else ProgramProfile.objects.none()
+                ),
+                'departments': (
+                    Department.objects.filter(pk=selected['department'])
+                    if selected['department'].isdigit() else Department.objects.none()
+                ),
                 'per_page_choices': PER_PAGE_CHOICES,
                 'selected_per_page': per_page,
                 'query_params': query_params_without(self.request, 'page'),
+                'page_range': elided_page_range(page_obj),
                 'can_manage_trash': is_superuser_or_platform_admin(self.request.user),
             }
         )
         return context
 
 
-class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
+class ProgramTrashDetailView(LoginRequiredMixin, FragmentTemplateMixin, TemplateView):
     template_name = 'programs/trash_detail.html'
+    fragment_templates = {
+        'trash_program_disciplines': 'programs/includes/trash_program_disciplines_table.html',
+        'trash_competences': 'programs/includes/trash_competences_table.html',
+        'trash_discipline_competences': 'programs/includes/trash_discipline_competences_table.html',
+        'trash_teacher_assignments': 'programs/includes/trash_teacher_assignments_table.html',
+    }
 
     def get_program(self):
         return get_object_or_404(
@@ -737,6 +764,7 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         program = self.get_program()
+        fragment = self.get_requested_fragment()
         program_disciplines = ProgramDiscipline.objects.filter(
             educational_program=program
         ).select_related('discipline', 'department').order_by('discipline_code', 'discipline__name')
@@ -757,20 +785,26 @@ class ProgramTrashDetailView(LoginRequiredMixin, TemplateView):
             'program_discipline__discipline',
         ).order_by('teacher__full_name', 'program_discipline__discipline_code', 'program_discipline__discipline__name')
 
-        context.update(
-            {
-                'program': program,
-                'counts': ProgramTrashService().get_counts(program),
-                'program_disciplines': program_disciplines,
-                'competences': competences,
-                'discipline_competences': discipline_competences,
-                'teacher_assignments': teacher_assignments,
-                'assessment_items_count': AssessmentItem.objects.filter(
-                    program_discipline__educational_program=program
-                ).count(),
-                'can_manage_trash': is_superuser_or_platform_admin(self.request.user),
-            }
-        )
+        context['program'] = program
+        context['can_manage_trash'] = is_superuser_or_platform_admin(self.request.user)
+        if not fragment:
+            context['counts'] = ProgramTrashService().get_counts(program)
+        if fragment in {'', 'trash_program_disciplines'}:
+            context['trash_program_disciplines_block'] = compact_queryset_block(
+                self.request, program_disciplines, prefix='trash_program_disciplines'
+            )
+        if fragment in {'', 'trash_competences'}:
+            context['trash_competences_block'] = compact_queryset_block(
+                self.request, competences, prefix='trash_competences'
+            )
+        if fragment in {'', 'trash_discipline_competences'}:
+            context['trash_discipline_competences_block'] = compact_queryset_block(
+                self.request, discipline_competences, prefix='trash_discipline_competences'
+            )
+        if fragment in {'', 'trash_teacher_assignments'}:
+            context['trash_teacher_assignments_block'] = compact_queryset_block(
+                self.request, teacher_assignments, prefix='trash_teacher_assignments'
+            )
         return context
 
 

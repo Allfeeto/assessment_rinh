@@ -1,0 +1,12 @@
+<table>
+    <thead><tr><th>ID</th><th>Номер</th><th>Краткое название</th><th>Заведующий</th>{% if can_manage_departments %}<th>Действия</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for department in departments_block.items %}
+        <tr>
+            <td>{{ department.id }}</td><td>{{ department.number }}</td><td>{{ department.short_name }}</td><td>{{ department.head_teacher.full_name|default:"—" }}</td>
+            {% if can_manage_departments %}<td><div class="actions"><a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a><a class="btn danger" href="{% url 'teachers_department_delete' department.id %}">Удалить</a></div></td>{% endif %}
+        </tr>
+    {% empty %}<tr><td colspan="{% if can_manage_departments %}5{% else %}4{% endif %}" class="muted">Кафедры пока не добавлены.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=departments_block %}

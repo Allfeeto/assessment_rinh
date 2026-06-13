@@ -1,0 +1,9 @@
+<table>
+    <thead><tr><th>Профиль</th><th>Кафедра</th><th>Год набора</th><th>Количество</th></tr></thead>
+    <tbody>
+    {% for row in report_by_program_block.items %}
+        <tr><td>{{ row.program_profile__code }} — {{ row.program_profile__name }}</td><td>{{ row.department__short_name }}</td><td>{{ row.admission_year }}</td><td>{{ row.total }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">Нет данных.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=report_by_program_block %}

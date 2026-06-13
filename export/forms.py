@@ -92,6 +92,10 @@ class WordExportForm(forms.Form):
         self.fields['discipline'].queryset = autocomplete_queryset(base_discipline_qs, discipline_id)
         discipline_labels = {}
         label_scope = linked_disciplines_qs.select_related('discipline').order_by('discipline__name', 'discipline_code')
+        if discipline_id:
+            label_scope = label_scope.filter(discipline_id=discipline_id)
+        else:
+            label_scope = label_scope.none()
         for program_discipline in label_scope:
             discipline_labels.setdefault(
                 program_discipline.discipline_id,
@@ -137,7 +141,10 @@ class WordExportForm(forms.Form):
             ).values_list('competence_id', flat=True)
             competence_qs = competence_qs.filter(id__in=linked_ids)
 
-        self.fields['competence'].queryset = competence_qs
+        self.fields['competence'].queryset = autocomplete_queryset(
+            competence_qs,
+            selected_competence_id,
+        )
         apply_autocomplete_attrs(
             self.fields['competence'],
             kind='competence',

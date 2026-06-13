@@ -6,16 +6,6 @@
 <h1 class="page-title">Кафедры и преподаватели</h1>
 
 <div class="panel">
-    <form method="get" class="form-row" style="margin-bottom: 12px;">
-        <div class="field" style="max-width: 170px;">
-            <label for="id_per_page">Строк на странице</label>
-            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
-                {% for option in per_page_choices %}
-                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
-        </div>
-    </form>
     {% if can_manage_teacher_directory %}
         <div class="actions">
             {% if can_manage_departments %}
@@ -60,7 +50,10 @@
         {% if assignment_can_change_teacher %}
             <div class="field">
                 <label for="assignment-teacher">Преподаватель</label>
-                <select id="assignment-teacher" name="teacher" class="js-assignment-control">
+                <select id="assignment-teacher" name="teacher" class="js-assignment-control"
+                        data-autocomplete-kind="teacher"
+                        data-autocomplete-url="/core/lookup/"
+                        data-autocomplete-placeholder="Введите ФИО преподавателя">
                     {% for teacher in assignment_teachers %}
                         <option value="{{ teacher.id }}"
                             {% if assignment_active_teacher and teacher.id == assignment_active_teacher.id %}selected{% endif %}>
@@ -134,6 +127,9 @@
         }
         params.set('assignment_sort', panel.dataset.assignmentSort || 'code');
         params.set('assignment_dir', panel.dataset.assignmentDir || 'asc');
+        if (panel.dataset.assignmentPage) {
+            params.set('assignment_page', panel.dataset.assignmentPage);
+        }
         return params;
     }
 
@@ -209,6 +205,16 @@
                 panel.dataset.assignmentDir = (
                     requestedSort === currentSort && currentDir === 'asc'
                 ) ? 'desc' : 'asc';
+                delete panel.dataset.assignmentPage;
+                reloadTable();
+            });
+        });
+    }
+
+    function bindPageButtons() {
+        tableWrap.querySelectorAll('.js-assignment-page').forEach(button => {
+            button.addEventListener('click', () => {
+                panel.dataset.assignmentPage = button.dataset.assignmentPage || '1';
                 reloadTable();
             });
         });
@@ -217,13 +223,20 @@
     function bindTableActions() {
         bindCheckboxes();
         bindSortButtons();
+        bindPageButtons();
     }
 
     if (teacherSelect) {
-        teacherSelect.addEventListener('change', reloadTable);
+        teacherSelect.addEventListener('change', () => {
+            delete panel.dataset.assignmentPage;
+            reloadTable();
+        });
     }
     if (programSelect) {
-        programSelect.addEventListener('change', reloadTable);
+        programSelect.addEventListener('change', () => {
+            delete panel.dataset.assignmentPage;
+            reloadTable();
+        });
     }
     if (searchInput) {
         let timer = null;
@@ -231,7 +244,10 @@
             if (timer) {
                 clearTimeout(timer);
             }
-            timer = setTimeout(reloadTable, 250);
+            timer = setTimeout(() => {
+                delete panel.dataset.assignmentPage;
+                reloadTable();
+            }, 250);
         });
     }
     bindTableActions();
@@ -240,158 +256,16 @@
 
 <div class="panel table-wrap">
     <h2>Кафедры</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Номер</th>
-            <th>Краткое название</th>
-            <th>Заведующий</th>
-            {% if can_manage_departments %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for department in departments %}
-            <tr>
-                <td>{{ department.id }}</td>
-                <td>{{ department.number }}</td>
-                <td>{{ department.short_name }}</td>
-                <td>{{ department.head_teacher.full_name|default:"—" }}</td>
-                {% if can_manage_departments %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'teachers_department_update' department.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'teachers_department_delete' department.id %}">Удалить</a>
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_departments %}5{% else %}4{% endif %}" class="muted">Кафедры пока не добавлены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if departments_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if departments_page_obj.has_previous %}
-                <a href="?department_page=1{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Первая</a>
-                <a href="?department_page={{ departments_page_obj.previous_page_number }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ departments_page_obj.number }} / {{ departments_page_obj.paginator.num_pages }}</span>
-            {% if departments_page_obj.has_next %}
-                <a href="?department_page={{ departments_page_obj.next_page_number }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Вперёд</a>
-                <a href="?department_page={{ departments_page_obj.paginator.num_pages }}{% if departments_query_params %}&{{ departments_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="departments">{% include "teachers/includes/departments_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Преподаватели</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>ФИО</th>
-            <th>Кафедры</th>
-            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for teacher in teachers %}
-            <tr>
-                <td>{{ teacher.id }}</td>
-                <td>{{ teacher.full_name }}</td>
-                <td>{{ teacher.departments_display|default:"—" }}</td>
-                {% if can_manage_teacher_directory %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>
-                            {% if can_delete_teachers %}
-                                <a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>
-                            {% endif %}
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_teacher_directory %}4{% else %}3{% endif %}" class="muted">Преподаватели пока не добавлены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if teachers_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if teachers_page_obj.has_previous %}
-                <a href="?teacher_page=1{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Первая</a>
-                <a href="?teacher_page={{ teachers_page_obj.previous_page_number }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ teachers_page_obj.number }} / {{ teachers_page_obj.paginator.num_pages }}</span>
-            {% if teachers_page_obj.has_next %}
-                <a href="?teacher_page={{ teachers_page_obj.next_page_number }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Вперёд</a>
-                <a href="?teacher_page={{ teachers_page_obj.paginator.num_pages }}{% if teachers_query_params %}&{{ teachers_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="teachers">{% include "teachers/includes/teachers_table.html" %}</div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Назначения преподавателей на дисциплины учебных планов</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Преподаватель</th>
-            <th>Программа</th>
-            <th>
-                <a class="table-sort{% if teacher_assignment_sort == 'discipline_code' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline_code }}">
-                    Код{% if teacher_assignment_sort == 'discipline_code' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
-                </a>
-            </th>
-            <th>
-                <a class="table-sort{% if teacher_assignment_sort == 'discipline' %} active{% endif %}" href="?{{ teacher_assignment_sort_links.discipline }}">
-                    Дисциплина{% if teacher_assignment_sort == 'discipline' %} {% if teacher_assignment_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
-                </a>
-            </th>
-            {% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for link in teacher_program_disciplines %}
-            <tr>
-                <td>{{ link.id }}</td>
-                <td>{{ link.teacher.full_name }}</td>
-                <td>{{ link.program_discipline.educational_program }}</td>
-                <td class="muted">{{ link.program_discipline.discipline_code|default:"—" }}</td>
-                <td>{{ link.program_discipline.discipline.name }}</td>
-                {% if can_manage_teacher_directory %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'teachers_teacher_program_discipline_update' link.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'teachers_teacher_program_discipline_delete' link.id %}">Удалить</a>
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_teacher_directory %}6{% else %}5{% endif %}" class="muted">Назначений пока нет.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if teacher_program_disciplines_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if teacher_program_disciplines_page_obj.has_previous %}
-                <a href="?link_page=1{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Первая</a>
-                <a href="?link_page={{ teacher_program_disciplines_page_obj.previous_page_number }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ teacher_program_disciplines_page_obj.number }} / {{ teacher_program_disciplines_page_obj.paginator.num_pages }}</span>
-            {% if teacher_program_disciplines_page_obj.has_next %}
-                <a href="?link_page={{ teacher_program_disciplines_page_obj.next_page_number }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Вперёд</a>
-                <a href="?link_page={{ teacher_program_disciplines_page_obj.paginator.num_pages }}{% if teacher_program_disciplines_query_params %}&{{ teacher_program_disciplines_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="teacher_program_disciplines">{% include "teachers/includes/teacher_program_disciplines_table.html" %}</div>
 </div>
 {% endblock %}

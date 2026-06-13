@@ -2,6 +2,7 @@ import json
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseBadRequest, JsonResponse
@@ -26,11 +27,13 @@ from core.permissions import (
 )
 from core.view_helpers import (
     PER_PAGE_CHOICES,
+    FragmentTemplateMixin,
     NamedCreateView,
     NamedDeleteView,
     NamedDetailView,
     NamedListView,
     NamedUpdateView,
+    compact_queryset_block,
     get_per_page,
     normalize_sort,
     ordering_for_sort,
@@ -247,12 +250,22 @@ def _build_assignment_rows(
     return rows
 
 
-class TeachersDashboardView(LoginRequiredMixin, TemplateView):
+def _paginate_assignment_rows(request, rows):
+    return Paginator(rows, 20).get_page(request.GET.get('assignment_page') or 1)
+
+
+class TeachersDashboardView(LoginRequiredMixin, FragmentTemplateMixin, TemplateView):
     template_name = 'teachers/dashboard.html'
+    fragment_templates = {
+        'departments': 'teachers/includes/departments_table.html',
+        'teachers': 'teachers/includes/teachers_table.html',
+        'teacher_program_disciplines': 'teachers/includes/teacher_program_disciplines_table.html',
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         per_page = get_per_page(self.request)
+        fragment = self.get_requested_fragment()
         active_teacher, can_change_active = _resolve_active_teacher(self.request)
         can_manage_directory = is_staff_or_superuser(self.request.user)
 
@@ -302,34 +315,21 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             )
         )
 
-        departments_page_obj = paginate_queryset(
-            self.request,
-            departments_qs,
-            page_param='department_page',
-            per_page=per_page,
-        )
-        teachers_page_obj = paginate_queryset(
-            self.request,
-            teachers_qs,
-            page_param='teacher_page',
-            per_page=per_page,
-        )
-        teacher_program_disciplines_page_obj = paginate_queryset(
-            self.request,
-            teacher_program_disciplines_qs,
-            page_param='link_page',
-            per_page=per_page,
-        )
-
-        context['departments'] = departments_page_obj.object_list
-        context['teachers'] = teachers_page_obj.object_list
-        context['teacher_program_disciplines'] = teacher_program_disciplines_page_obj.object_list
-        context['departments_page_obj'] = departments_page_obj
-        context['teachers_page_obj'] = teachers_page_obj
-        context['teacher_program_disciplines_page_obj'] = teacher_program_disciplines_page_obj
-        context['departments_query_params'] = query_params_without(self.request, 'department_page')
-        context['teachers_query_params'] = query_params_without(self.request, 'teacher_page')
-        context['teacher_program_disciplines_query_params'] = query_params_without(self.request, 'link_page')
+        if fragment in {'', 'departments'}:
+            context['departments_block'] = compact_queryset_block(
+                self.request, departments_qs, prefix='departments', page_size=per_page
+            )
+        if fragment in {'', 'teachers'}:
+            context['teachers_block'] = compact_queryset_block(
+                self.request, teachers_qs, prefix='teachers', page_size=per_page
+            )
+        if fragment in {'', 'teacher_program_disciplines'}:
+            context['teacher_program_disciplines_block'] = compact_queryset_block(
+                self.request,
+                teacher_program_disciplines_qs,
+                prefix='teacher_program_disciplines',
+                page_size=per_page,
+            )
         context['teacher_assignment_sort'] = teacher_link_sort
         context['teacher_assignment_sort_dir'] = teacher_link_sort_dir
         context['teacher_assignment_sort_links'] = sort_link_queries(
@@ -339,10 +339,16 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
             current_direction=teacher_link_sort_dir,
             sort_param='link_sort',
             direction_param='link_dir',
-            page_param='link_page',
+            page_param='teacher_program_disciplines_page',
         )
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
+        context['can_manage_teacher_directory'] = can_manage_directory
+        context['can_manage_departments'] = is_superuser_or_platform_admin(self.request.user)
+        context['can_delete_teachers'] = is_superuser_or_platform_admin(self.request.user)
+
+        if fragment:
+            return context
 
         program_id_raw = self.request.GET.get('assignment_program', '').strip()
         active_program = None
@@ -357,34 +363,30 @@ class TeachersDashboardView(LoginRequiredMixin, TemplateView):
 
         assignment_query = self.request.GET.get('assignment_q', '').strip()
         assignment_sort, assignment_sort_dir = _assignment_sort_from_request(self.request)
-        assignment_rows = _build_assignment_rows(
+        assignment_page_obj = _paginate_assignment_rows(self.request, _build_assignment_rows(
             active_teacher,
             active_program,
             assignment_query,
             self.request.user,
             assignment_sort,
             assignment_sort_dir,
-        )
+        ))
 
-        teachers_picker_qs = Teacher.objects.select_related('department').prefetch_related('departments').order_by('full_name')
-        if can_change_active:
-            teachers_picker_qs = filter_teachers_for_assignment(self.request.user, teachers_picker_qs)
-        elif active_teacher is not None:
-            teachers_picker_qs = teachers_picker_qs.filter(pk=active_teacher.id)
+        teachers_picker_qs = Teacher.objects.select_related('department').prefetch_related('departments').none()
+        if active_teacher is not None:
+            teachers_picker_qs = Teacher.objects.filter(pk=active_teacher.id).select_related('department').prefetch_related('departments')
 
         context['assignment_active_teacher'] = active_teacher
         context['assignment_can_change_teacher'] = can_change_active
         context['assignment_can_edit'] = _user_can_assign(self.request.user, active_teacher)
-        context['can_manage_teacher_directory'] = can_manage_directory
-        context['can_manage_departments'] = is_superuser_or_platform_admin(self.request.user)
-        context['can_delete_teachers'] = is_superuser_or_platform_admin(self.request.user)
         context['assignment_teachers'] = teachers_picker_qs
         context['assignment_active_program'] = active_program
         context['assignment_active_program_id'] = active_program.id if active_program else ''
         context['assignment_query'] = assignment_query
         context['assignment_sort'] = assignment_sort
         context['assignment_sort_dir'] = assignment_sort_dir
-        context['assignment_rows'] = assignment_rows
+        context['assignment_rows'] = assignment_page_obj.object_list
+        context['assignment_page_obj'] = assignment_page_obj
         return context
 
 
@@ -743,19 +745,20 @@ class TeacherAssignmentPanelView(LoginRequiredMixin, View):
                 )
         query = request.GET.get('assignment_q', '').strip()
         assignment_sort, assignment_sort_dir = _assignment_sort_from_request(request)
-        rows = _build_assignment_rows(
+        page_obj = _paginate_assignment_rows(request, _build_assignment_rows(
             active_teacher,
             active_program,
             query,
             request.user,
             assignment_sort,
             assignment_sort_dir,
-        )
+        ))
         return render(
             request,
             self.template_name,
             {
-                'assignment_rows': rows,
+                'assignment_rows': page_obj.object_list,
+                'assignment_page_obj': page_obj,
                 'assignment_active_program': active_program,
                 'assignment_active_teacher': active_teacher,
                 'assignment_can_edit': _user_can_assign(request.user, active_teacher),

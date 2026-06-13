@@ -10,6 +10,30 @@ from .permissions import can_use_model_permission, is_staff_or_superuser
 PER_PAGE_CHOICES = (50, 100, 200)
 DEFAULT_PER_PAGE = 50
 SORT_DIRECTIONS = {'asc', 'desc'}
+COMPACT_PER_PAGE_CHOICES = (20, 50, 100)
+
+
+def requested_fragment(request, allowed_fragments):
+    fragment = (request.GET.get('_fragment') or '').strip()
+    if (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        and fragment in allowed_fragments
+    ):
+        return fragment
+    return ''
+
+
+class FragmentTemplateMixin:
+    fragment_templates = {}
+
+    def get_requested_fragment(self):
+        return requested_fragment(self.request, self.fragment_templates)
+
+    def get_template_names(self):
+        fragment = self.get_requested_fragment()
+        if fragment:
+            return [self.fragment_templates[fragment]]
+        return super().get_template_names()
 
 
 def get_per_page(request, *, default=DEFAULT_PER_PAGE, choices=PER_PAGE_CHOICES):
@@ -25,6 +49,17 @@ def paginate_queryset(request, queryset, *, page_param='page', per_page=None):
     page_size = per_page or get_per_page(request)
     paginator = Paginator(queryset, page_size)
     return paginator.get_page(request.GET.get(page_param) or 1)
+
+
+def elided_page_range(page_obj):
+    return [
+        value if isinstance(value, int) else None
+        for value in page_obj.paginator.get_elided_page_range(
+            page_obj.number,
+            on_each_side=1,
+            on_ends=1,
+        )
+    ]
 
 
 def query_params_without(request, *keys):
@@ -53,10 +88,15 @@ def compact_queryset_block(
     prefix,
     preview_size=8,
     page_size=20,
+    page_size_choices=COMPACT_PER_PAGE_CHOICES,
 ):
     expanded_param = f'{prefix}_expanded'
     page_param = f'{prefix}_page'
+    per_page_param = f'{prefix}_per_page'
     expanded = request.GET.get(expanded_param) == '1'
+    raw_page_size = (request.GET.get(per_page_param) or '').strip()
+    if raw_page_size.isdigit() and int(raw_page_size) in page_size_choices:
+        page_size = int(raw_page_size)
 
     if expanded:
         page_obj = paginate_queryset(
@@ -67,14 +107,7 @@ def compact_queryset_block(
         )
         items = page_obj.object_list
         total_count = page_obj.paginator.count
-        page_range = [
-            value if isinstance(value, int) else None
-            for value in page_obj.paginator.get_elided_page_range(
-                page_obj.number,
-                on_each_side=1,
-                on_ends=1,
-            )
-        ]
+        page_range = elided_page_range(page_obj)
     else:
         page_obj = None
         page_range = []
@@ -88,6 +121,9 @@ def compact_queryset_block(
         'page_obj': page_obj,
         'page_range': page_range,
         'page_param': page_param,
+        'per_page_param': per_page_param,
+        'page_size': page_size,
+        'page_size_choices': page_size_choices,
         'pagination_query': query_params_without(request, page_param),
         'total_count': total_count,
         'expanded': expanded,
@@ -293,6 +329,7 @@ class NamedListView(StaffOrModelPermissionRequiredMixin, ListView):
         )
 
         context['query_params'] = query_params_without(self.request, 'page')
+        context['page_range'] = elided_page_range(context['page_obj'])
         return context
 
     def can_change_object(self, obj):

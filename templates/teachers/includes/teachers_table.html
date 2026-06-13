@@ -1,0 +1,12 @@
+<table>
+    <thead><tr><th>ID</th><th>ФИО</th><th>Кафедры</th>{% if can_manage_teacher_directory %}<th>Действия</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for teacher in teachers_block.items %}
+        <tr>
+            <td>{{ teacher.id }}</td><td>{{ teacher.full_name }}</td><td>{{ teacher.departments_display|default:"—" }}</td>
+            {% if can_manage_teacher_directory %}<td><div class="actions"><a class="btn secondary" href="{% url 'teachers_teacher_update' teacher.id %}">Изменить</a>{% if can_delete_teachers %}<a class="btn danger" href="{% url 'teachers_teacher_delete' teacher.id %}">Удалить</a>{% endif %}</div></td>{% endif %}
+        </tr>
+    {% empty %}<tr><td colspan="{% if can_manage_teacher_directory %}4{% else %}3{% endif %}" class="muted">Преподаватели пока не добавлены.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=teachers_block %}

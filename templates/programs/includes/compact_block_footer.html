@@ -1,6 +1,17 @@
 <div class="compact-block-footer">
     <span class="muted">Всего: {{ block.total_count }}</span>
     {% if block.expanded %}
+        {% if block.page_size_choices %}
+            <form method="get" data-compact-form="{{ block.prefix }}" data-compact-page-param="{{ block.page_param }}">
+                <input type="hidden" name="{{ block.prefix }}_expanded" value="1">
+                <label for="id_{{ block.per_page_param }}">{% if block.prefix == "programs" %}Показывать программ на странице{% else %}Строк:{% endif %}</label>
+                <select id="id_{{ block.per_page_param }}" name="{{ block.per_page_param }}">
+                    {% for option in block.page_size_choices %}
+                        <option value="{{ option }}" {% if block.page_size == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        {% endif %}
         {% if block.can_expand %}
             <a class="btn secondary small" href="?{{ block.collapse_query }}" data-compact-link="{{ block.prefix }}">Свернуть список</a>
         {% endif %}

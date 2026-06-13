@@ -62,14 +62,6 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="field" style="max-width: 160px;">
-            <label for="id_per_page">Строк на странице</label>
-            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
-                {% for option in per_page_choices %}
-                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="/competencies/">Сбросить</a>
@@ -82,26 +74,9 @@
         Компетенции выбранной дисциплины
         {% if selected_discipline_name %}«{{ selected_discipline_name }}»{% endif %}
     </h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Код</th>
-            <th>Компетенция</th>
-            <th>Тип</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for item in discipline_competence_competences %}
-            <tr>
-                <td>{{ item.competence__code }}</td>
-                <td>{{ item.competence__name }}</td>
-                <td>{{ item.competence__competence_type__name }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="3" class="muted">Выберите программу и дисциплину, чтобы увидеть связанные компетенции.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div data-compact-block="selected_competences">
+        {% include "competencies/includes/selected_competences_table.html" %}
+    </div>
 </div>
 
 {% if can_manage_competencies %}
@@ -119,123 +94,15 @@
 
 <div class="panel table-wrap">
     <h2>Компетенции программ</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Код</th>
-            <th>Наименование</th>
-            <th>Тип</th>
-            <th>Программа</th>
-            <th>Связей с дисциплинами</th>
-            <th>Индикаторов</th>
-            <th>Заданий</th>
-            {% if can_manage_competence_directory %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for competence in competences %}
-            <tr>
-                <td>{{ competence.id }}</td>
-                <td>{{ competence.code }}</td>
-                <td>{{ competence.name }}</td>
-                <td>{{ competence.competence_type.name }}</td>
-                <td>{{ competence.educational_program }}</td>
-                <td>{{ competence.disciplines_count }}</td>
-                <td>{{ competence.indicators_count }}</td>
-                <td>{{ competence.items_count }}</td>
-                {% if can_manage_competence_directory %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_competence_directory %}9{% else %}8{% endif %}" class="muted">Компетенции не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if competences_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if competences_page_obj.has_previous %}
-                <a href="?comp_page=1{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Первая</a>
-                <a href="?comp_page={{ competences_page_obj.previous_page_number }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ competences_page_obj.number }} / {{ competences_page_obj.paginator.num_pages }}</span>
-            {% if competences_page_obj.has_next %}
-                <a href="?comp_page={{ competences_page_obj.next_page_number }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Вперёд</a>
-                <a href="?comp_page={{ competences_page_obj.paginator.num_pages }}{% if competences_query_params %}&{{ competences_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="competences">
+        {% include "competencies/includes/competences_table.html" %}
+    </div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Матрица дисциплина → компетенция</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Образовательная программа</th>
-            <th>
-                <a class="table-sort{% if matrix_sort == 'discipline_code' %} active{% endif %}" href="?{{ matrix_sort_links.discipline_code }}">
-                    Код дисциплины{% if matrix_sort == 'discipline_code' %} {% if matrix_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
-                </a>
-            </th>
-            <th>
-                <a class="table-sort{% if matrix_sort == 'discipline' %} active{% endif %}" href="?{{ matrix_sort_links.discipline }}">
-                    Дисциплина{% if matrix_sort == 'discipline' %} {% if matrix_sort_dir == 'desc' %}▼{% else %}▲{% endif %}{% endif %}
-                </a>
-            </th>
-            <th>Компетенция</th>
-            <th>Количество заданий</th>
-            {% if can_manage_competencies %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for link in discipline_competences %}
-            <tr>
-                <td>{{ link.id }}</td>
-                <td>{{ link.program_discipline.educational_program }}</td>
-                <td class="muted">{{ link.program_discipline.discipline_code|default:"—" }}</td>
-                <td>{{ link.program_discipline.discipline.name }}</td>
-                <td>{{ link.competence.code }} — {{ link.competence.name }}</td>
-                <td>{{ link.items_count }}</td>
-                {% if can_manage_competencies %}
-                    <td>
-                        <div class="actions">
-                            {% if link.can_manage %}
-                                <a class="btn secondary" href="{% url 'competencies_discipline_competence_update' link.id %}">Изменить</a>
-                                <a class="btn danger" href="{% url 'competencies_discipline_competence_delete' link.id %}">Удалить</a>
-                            {% else %}
-                                <span class="muted">Нет прав изменения</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_competencies %}7{% else %}6{% endif %}" class="muted">Связи дисциплина-компетенция не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if discipline_competences_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if discipline_competences_page_obj.has_previous %}
-                <a href="?link_page=1{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Первая</a>
-                <a href="?link_page={{ discipline_competences_page_obj.previous_page_number }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ discipline_competences_page_obj.number }} / {{ discipline_competences_page_obj.paginator.num_pages }}</span>
-            {% if discipline_competences_page_obj.has_next %}
-                <a href="?link_page={{ discipline_competences_page_obj.next_page_number }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Вперёд</a>
-                <a href="?link_page={{ discipline_competences_page_obj.paginator.num_pages }}{% if discipline_competences_query_params %}&{{ discipline_competences_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="discipline_competences">
+        {% include "competencies/includes/discipline_competences_table.html" %}
+    </div>
 </div>
 {% endblock %}

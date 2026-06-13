@@ -1,0 +1,9 @@
+<table>
+    <thead><tr><th>Код</th><th>Тип</th><th>Наименование</th></tr></thead>
+    <tbody>
+    {% for competence in trash_competences_block.items %}
+        <tr><td>{{ competence.code }}</td><td>{{ competence.competence_type.name }}</td><td>{{ competence.name }}</td></tr>
+    {% empty %}<tr><td colspan="3" class="muted">Компетенции не найдены.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=trash_competences_block %}

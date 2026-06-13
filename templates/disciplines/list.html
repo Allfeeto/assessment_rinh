@@ -27,14 +27,6 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="field" style="max-width: 160px;">
-            <label for="id_per_page">Строк на странице</label>
-            <select id="id_per_page" name="per_page" data-auto-submit-change="1">
-                {% for option in per_page_choices %}
-                    <option value="{{ option }}" {% if selected_per_page == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="actions">
             <button class="btn" type="submit">Применить</button>
             <a class="btn secondary" href="/disciplines/">Сбросить</a>
@@ -57,111 +49,15 @@
 
 <div class="panel table-wrap">
     <h2>Справочник дисциплин</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Дисциплина</th>
-            <th>В учебных планах</th>
-            <th>Заданий</th>
-            {% if can_manage_global_disciplines %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for discipline in disciplines %}
-            <tr>
-                <td>{{ discipline.id }}</td>
-                <td>{{ discipline.name }}</td>
-                <td>{{ discipline.programs_count }}</td>
-                <td>{{ discipline.items_count }}</td>
-                {% if can_manage_global_disciplines %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn secondary" href="{% url 'disciplines_discipline_update' discipline.id %}">Изменить</a>
-                            <a class="btn danger" href="{% url 'disciplines_discipline_delete' discipline.id %}">Удалить</a>
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_global_disciplines %}5{% else %}4{% endif %}" class="muted">Дисциплины не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if d_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if d_page_obj.has_previous %}
-                <a href="?d_page=1{% if d_query_params %}&{{ d_query_params }}{% endif %}">Первая</a>
-                <a href="?d_page={{ d_page_obj.previous_page_number }}{% if d_query_params %}&{{ d_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ d_page_obj.number }} / {{ d_page_obj.paginator.num_pages }}</span>
-            {% if d_page_obj.has_next %}
-                <a href="?d_page={{ d_page_obj.next_page_number }}{% if d_query_params %}&{{ d_query_params }}{% endif %}">Вперёд</a>
-                <a href="?d_page={{ d_page_obj.paginator.num_pages }}{% if d_query_params %}&{{ d_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="disciplines">
+        {% include "disciplines/includes/disciplines_table.html" %}
+    </div>
 </div>
 
 <div class="panel table-wrap">
     <h2>Дисциплины учебных планов</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Образовательная программа</th>
-            <th>Код</th>
-            <th>Дисциплина</th>
-            <th>Кафедра дисциплины</th>
-            <th>Статус PLX</th>
-            <th>Компетенций в матрице</th>
-            <th>Заданий</th>
-            {% if can_manage_disciplines %}<th>Действия</th>{% endif %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for pd in program_disciplines %}
-            <tr>
-                <td>{{ pd.id }}</td>
-                <td>{{ pd.educational_program }}</td>
-                <td>{{ pd.discipline_code|default:"—" }}</td>
-                <td>{{ pd.discipline.name }}</td>
-                <td>{{ pd.department.short_name|default:"—" }}</td>
-                <td>{{ pd.plan_status_label }}</td>
-                <td>{{ pd.competences_count }}</td>
-                <td>{{ pd.items_count }}</td>
-                {% if can_manage_disciplines %}
-                    <td>
-                        <div class="actions">
-                            {% if pd.can_manage %}
-                                <a class="btn secondary" href="{% url 'disciplines_program_discipline_update' pd.id %}">Изменить</a>
-                                <a class="btn danger" href="{% url 'disciplines_program_discipline_delete' pd.id %}">Удалить</a>
-                            {% else %}
-                                <span class="muted">Нет прав изменения</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                {% endif %}
-            </tr>
-        {% empty %}
-            <tr><td colspan="{% if can_manage_disciplines %}9{% else %}8{% endif %}" class="muted">Связи дисциплин с учебными планами не найдены.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% if pd_page_obj.paginator.num_pages > 1 %}
-        <div class="pagination">
-            {% if pd_page_obj.has_previous %}
-                <a href="?pd_page=1{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Первая</a>
-                <a href="?pd_page={{ pd_page_obj.previous_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Назад</a>
-            {% endif %}
-            <span class="current">Страница {{ pd_page_obj.number }} / {{ pd_page_obj.paginator.num_pages }}</span>
-            {% if pd_page_obj.has_next %}
-                <a href="?pd_page={{ pd_page_obj.next_page_number }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Вперёд</a>
-                <a href="?pd_page={{ pd_page_obj.paginator.num_pages }}{% if pd_query_params %}&{{ pd_query_params }}{% endif %}">Последняя</a>
-            {% endif %}
-        </div>
-    {% endif %}
+    <div data-compact-block="program_disciplines">
+        {% include "disciplines/includes/program_disciplines_table.html" %}
+    </div>
 </div>
 {% endblock %}

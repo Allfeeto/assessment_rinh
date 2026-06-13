@@ -1,0 +1,32 @@
+<table>
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Дисциплина</th>
+        <th>В учебных планах</th>
+        <th>Заданий</th>
+        {% if can_manage_global_disciplines %}<th>Действия</th>{% endif %}
+    </tr>
+    </thead>
+    <tbody>
+    {% for discipline in disciplines_block.items %}
+        <tr>
+            <td>{{ discipline.id }}</td>
+            <td>{{ discipline.name }}</td>
+            <td>{{ discipline.programs_count }}</td>
+            <td>{{ discipline.items_count }}</td>
+            {% if can_manage_global_disciplines %}
+                <td>
+                    <div class="actions">
+                        <a class="btn secondary" href="{% url 'disciplines_discipline_update' discipline.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'disciplines_discipline_delete' discipline.id %}">Удалить</a>
+                    </div>
+                </td>
+            {% endif %}
+        </tr>
+    {% empty %}
+        <tr><td colspan="{% if can_manage_global_disciplines %}5{% else %}4{% endif %}" class="muted">Дисциплины не найдены.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=disciplines_block %}

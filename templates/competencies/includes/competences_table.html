@@ -1,0 +1,32 @@
+<table>
+    <thead>
+    <tr>
+        <th>ID</th><th>Код</th><th>Наименование</th><th>Тип</th><th>Программа</th>
+        <th>Связей с дисциплинами</th><th>Индикаторов</th><th>Заданий</th>
+        {% if can_manage_competence_directory %}<th>Действия</th>{% endif %}
+    </tr>
+    </thead>
+    <tbody>
+    {% for competence in competences_block.items %}
+        <tr>
+            <td>{{ competence.id }}</td>
+            <td>{{ competence.code }}</td>
+            <td>{{ competence.name }}</td>
+            <td>{{ competence.competence_type.name }}</td>
+            <td>{{ competence.educational_program }}</td>
+            <td>{{ competence.disciplines_count }}</td>
+            <td>{{ competence.indicators_count }}</td>
+            <td>{{ competence.items_count }}</td>
+            {% if can_manage_competence_directory %}
+                <td><div class="actions">
+                    <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
+                    <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
+                </div></td>
+            {% endif %}
+        </tr>
+    {% empty %}
+        <tr><td colspan="{% if can_manage_competence_directory %}9{% else %}8{% endif %}" class="muted">Компетенции не найдены.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% include "programs/includes/compact_block_footer.html" with block=competences_block %}
