@@ -231,6 +231,7 @@ def _render_open(doc: Document, prepared: dict):
 
 
 def _render_task_block(doc: Document, prepared: dict):
+    type_code = prepared['type_code']
     _add_text(doc, f'Задание {prepared["number"]}')
     _add_type_line(doc, prepared['type_name'])
     _add_text(doc, '')
@@ -240,9 +241,13 @@ def _render_task_block(doc: Document, prepared: dict):
         _add_text(doc, prepared['task_intro'])
         _add_text(doc, '')
     if prepared['prompt_text']:
-        _add_text(doc, prepared['prompt_text'], align=WD_ALIGN_PARAGRAPH.JUSTIFY)
+        prompt_alignment = (
+            WD_ALIGN_PARAGRAPH.LEFT
+            if type_code == TYPE_OPEN
+            else WD_ALIGN_PARAGRAPH.JUSTIFY
+        )
+        _add_text(doc, prepared['prompt_text'], align=prompt_alignment)
 
-    type_code = prepared['type_code']
     if type_code == TYPE_MATCHING:
         _render_matching(doc, prepared)
     elif type_code == TYPE_SEQUENCE:

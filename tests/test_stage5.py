@@ -4,9 +4,12 @@ from types import SimpleNamespace
 import pytest
 from django.test import RequestFactory
 from django.utils.http import content_disposition_header
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from assessment import services as assessment_services
 from assessment import views as assessment_views
+from export import docx_renderer
 from export import views as export_views
 from export import services as export_services
 
@@ -262,6 +265,32 @@ def test_build_numbered_items_assigns_numbers_after_sort(monkeypatch):
         {'item_id': 3, 'number': 2},
         {'item_id': 1, 'number': 3},
     ]
+
+
+@pytest.mark.parametrize(
+    ('type_code', 'expected_alignment'),
+    [
+        (assessment_services.TYPE_OPEN, WD_ALIGN_PARAGRAPH.LEFT),
+        (assessment_services.TYPE_SINGLE, WD_ALIGN_PARAGRAPH.JUSTIFY),
+    ],
+)
+def test_task_prompt_alignment_is_left_only_for_open_tasks(type_code, expected_alignment):
+    document = Document()
+    prompt_text = 'Развёрнутый текст условия задания'
+    prepared = {
+        'number': 1,
+        'type_name': 'Тип задания',
+        'type_code': type_code,
+        'task_intro': '',
+        'prompt_text': prompt_text,
+        'answer_instruction': '',
+        'payload': {'options': []} if type_code == assessment_services.TYPE_SINGLE else {},
+    }
+
+    docx_renderer._render_task_block(document, prepared)
+
+    prompt_paragraph = next(paragraph for paragraph in document.paragraphs if paragraph.text == prompt_text)
+    assert prompt_paragraph.alignment == expected_alignment
 
 
 def test_prepare_export_item_adds_indicators_for_linked_competences():
