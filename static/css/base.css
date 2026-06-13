@@ -471,6 +471,22 @@ th {
 }
 .table-wrap { overflow-x: auto; }
 .muted { color: var(--muted); }
+.competence-indicators {
+    display: grid;
+    gap: 7px;
+    min-width: 300px;
+    max-width: 560px;
+}
+.competence-indicator {
+    display: grid;
+    grid-template-columns: 62px auto;
+    gap: 2px 8px;
+    align-items: baseline;
+    white-space: normal;
+}
+.competence-indicator > span:last-child {
+    grid-column: 1 / -1;
+}
 .block-message {
     margin-top: 12px;
     margin-bottom: 12px;

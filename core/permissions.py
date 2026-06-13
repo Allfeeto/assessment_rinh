@@ -166,6 +166,36 @@ def can_manage_department(user, department):
     return department_id in set(get_user_departments(user).values_list('id', flat=True))
 
 
+def can_manage_department_scoped_records(user):
+    if is_superuser_or_platform_admin(user):
+        return True
+    return bool(is_senior_teacher(user) and get_user_departments(user).exists())
+
+
+def can_manage_competence(user, competence):
+    if is_superuser_or_platform_admin(user):
+        return True
+    if competence is None or not is_senior_teacher(user):
+        return False
+    educational_program = getattr(competence, 'educational_program', None)
+    department_id = getattr(educational_program, 'department_id', None)
+    if department_id is None:
+        department_id = getattr(competence, 'educational_program__department_id', None)
+    return can_manage_department(user, department_id)
+
+
+def filter_competences_for_management(user, queryset):
+    if is_superuser_or_platform_admin(user):
+        return queryset
+    if not is_senior_teacher(user):
+        return queryset.none()
+
+    department_ids = set(get_user_departments(user).values_list('id', flat=True))
+    if not department_ids:
+        return queryset.none()
+    return queryset.filter(educational_program__department_id__in=department_ids)
+
+
 def can_manage_teacher(user, teacher):
     if is_superuser_or_platform_admin(user):
         return True

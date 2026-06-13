@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -15,8 +15,12 @@ from assessment.selectors import (
     count_items_by_program_discipline_competence,
 )
 from core.permissions import (
+    can_manage_competence,
+    can_manage_department_scoped_records,
     can_manage_program_discipline,
+    filter_competences_for_management,
     filter_program_disciplines_for_assignment,
+    get_user_departments,
     is_domain_manager,
     is_senior_teacher,
     is_superuser_or_platform_admin,
@@ -42,7 +46,7 @@ from disciplines.models import ProgramDiscipline
 
 from .forms import CompetenceForm, CompetenceIndicatorImportForm, DisciplineCompetenceForm
 from .lookups import lookup_competence
-from .models import Competence, DisciplineCompetence
+from .models import Competence, CompetenceIndicator, DisciplineCompetence
 from .services import IndicatorImportError, IndicatorImportService
 
 
@@ -66,6 +70,27 @@ MATRIX_DEFAULT_ORDERING = (
     'program_discipline__discipline__name',
     'competence__code',
 )
+INDICATOR_SLOTS = (
+    ('1', 'Знать'),
+    ('2', 'Уметь'),
+    ('3', 'Владеть'),
+)
+
+
+def _build_indicator_slots(indicators):
+    by_suffix = {}
+    for indicator in indicators:
+        code = (indicator.code or '').strip()
+        suffix = code.rsplit('.', 1)[-1] if '.' in code else ''
+        if suffix in {'1', '2', '3'} and suffix not in by_suffix:
+            by_suffix[suffix] = indicator
+    return [
+        {
+            'label': label,
+            'indicator': by_suffix.get(suffix),
+        }
+        for suffix, label in INDICATOR_SLOTS
+    ]
 
 
 class CompetenceIndicatorImportView(LoginRequiredMixin, UserPassesTestMixin, View):
@@ -136,7 +161,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, FragmentTemplateMixin, Templ
         competence_id = self.request.GET.get('competence', '').strip()
         search = self.request.GET.get('q', '').strip()
         per_page = get_per_page(self.request)
-        can_manage_competencies = is_domain_manager(self.request.user)
+        can_manage_competencies = can_manage_department_scoped_records(self.request.user)
         program_discipline_scope = program_discipline_queryset_for_user(self.request.user)
 
         discipline_competences_qs = DisciplineCompetence.objects.select_related(
@@ -199,8 +224,17 @@ class CompetenciesDashboardView(LoginRequiredMixin, FragmentTemplateMixin, Templ
                 'competence_type',
                 'educational_program__program_profile',
                 'educational_program__department',
+            ).prefetch_related(
+                Prefetch(
+                    'indicators',
+                    queryset=CompetenceIndicator.objects.order_by('code', 'id'),
+                ),
             ).filter(educational_program__is_deleted=False)
-            if not can_manage_competencies:
+            if is_senior_teacher(self.request.user) and not is_superuser_or_platform_admin(self.request.user):
+                competences_qs = competences_qs.filter(
+                    educational_program__department__in=get_user_departments(self.request.user),
+                )
+            elif not is_superuser_or_platform_admin(self.request.user):
                 competences_qs = competences_qs.filter(
                     educational_program__program_disciplines__in=program_discipline_scope,
                 ).distinct()
@@ -243,6 +277,8 @@ class CompetenciesDashboardView(LoginRequiredMixin, FragmentTemplateMixin, Templ
                 [competence.id for competence in competences_page],
             )
             for competence in competences_page:
+                competence.can_manage = can_manage_competence(self.request.user, competence)
+                competence.indicator_slots = _build_indicator_slots(competence.indicators.all())
                 competence.items_count = competence_counts.get(competence.id, 0)
             competences_block['items'] = competences_page
             context['competences_block'] = competences_block
@@ -351,7 +387,7 @@ class CompetenciesDashboardView(LoginRequiredMixin, FragmentTemplateMixin, Templ
         context['per_page_choices'] = PER_PAGE_CHOICES
         context['selected_per_page'] = per_page
         context['can_manage_competencies'] = can_manage_competencies
-        context['can_manage_competence_directory'] = is_superuser_or_platform_admin(self.request.user)
+        context['can_manage_competence_directory'] = can_manage_competencies
         return context
 
 
@@ -373,11 +409,18 @@ class CompetenceListView(NamedListView):
 
     def can_use_action(self, action):
         if action in {'add', 'change', 'delete'}:
-            return is_superuser_or_platform_admin(self.request.user)
+            return can_manage_department_scoped_records(self.request.user)
         return super().can_use_action(action)
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        return filter_competences_for_management(self.request.user, queryset)
+
+    def can_change_object(self, obj):
+        return can_manage_competence(self.request.user, obj)
+
+    def can_delete_object(self, obj):
+        return can_manage_competence(self.request.user, obj)
 
 
 class CompetenceDetailView(NamedDetailView):
@@ -395,7 +438,13 @@ class CompetenceDetailView(NamedDetailView):
     )
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        return filter_competences_for_management(self.request.user, queryset)
+
+    def can_use_action(self, action):
+        if action in {'change', 'delete'}:
+            return can_manage_competence(self.request.user, self.object)
+        return super().can_use_action(action)
 
 
 class CompetenceCreateView(NamedCreateView):
@@ -405,7 +454,12 @@ class CompetenceCreateView(NamedCreateView):
     list_url_name = 'competencies_competence_list'
 
     def has_permission(self):
-        return is_superuser_or_platform_admin(self.request.user)
+        return can_manage_department_scoped_records(self.request.user)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class CompetenceUpdateView(NamedUpdateView):
@@ -415,10 +469,16 @@ class CompetenceUpdateView(NamedUpdateView):
     list_url_name = 'competencies_competence_list'
 
     def has_permission(self):
-        return is_superuser_or_platform_admin(self.request.user)
+        return can_manage_department_scoped_records(self.request.user)
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        return filter_competences_for_management(self.request.user, queryset)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
 
 
 class CompetenceDeleteView(NamedDeleteView):
@@ -427,10 +487,11 @@ class CompetenceDeleteView(NamedDeleteView):
     list_url_name = 'competencies_competence_list'
 
     def has_permission(self):
-        return is_superuser_or_platform_admin(self.request.user)
+        return can_manage_department_scoped_records(self.request.user)
 
     def get_queryset(self):
-        return super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        return filter_competences_for_management(self.request.user, queryset)
 
 
 class DisciplineCompetenceListView(NamedListView):
@@ -470,6 +531,11 @@ class DisciplineCompetenceListView(NamedListView):
     detail_url_name = 'competencies_discipline_competence_detail'
     update_url_name = 'competencies_discipline_competence_update'
     delete_url_name = 'competencies_discipline_competence_delete'
+
+    def can_use_action(self, action):
+        if action in {'add', 'change', 'delete'}:
+            return can_manage_department_scoped_records(self.request.user)
+        return super().can_use_action(action)
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
@@ -519,12 +585,20 @@ class DisciplineCompetenceDetailView(NamedDetailView):
             )
         return queryset
 
+    def can_use_action(self, action):
+        if action in {'change', 'delete'}:
+            return can_manage_program_discipline(self.request.user, self.object.program_discipline)
+        return super().can_use_action(action)
+
 
 class DisciplineCompetenceCreateView(NamedCreateView):
     model = DisciplineCompetence
     form_class = DisciplineCompetenceForm
     title = 'Создать связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
+
+    def has_permission(self):
+        return can_manage_department_scoped_records(self.request.user)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -537,6 +611,9 @@ class DisciplineCompetenceUpdateView(NamedUpdateView):
     form_class = DisciplineCompetenceForm
     title = 'Редактировать связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
+
+    def has_permission(self):
+        return can_manage_department_scoped_records(self.request.user)
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)
@@ -559,6 +636,9 @@ class DisciplineCompetenceDeleteView(NamedDeleteView):
     model = DisciplineCompetence
     title = 'Удалить связь дисциплины и компетенции'
     list_url_name = 'competencies_discipline_competence_list'
+
+    def has_permission(self):
+        return can_manage_department_scoped_records(self.request.user)
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(program_discipline__educational_program__is_deleted=False)

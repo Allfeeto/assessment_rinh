@@ -2,6 +2,7 @@ from django import forms
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.permissions import (
+    can_manage_department,
     can_manage_program_discipline,
     filter_program_disciplines_for_assignment,
     is_senior_teacher,
@@ -62,7 +63,8 @@ class CompetenceForm(forms.ModelForm):
         model = Competence
         fields = ('educational_program', 'competence_type', 'code', 'name')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request_user=None, **kwargs):
+        self.request_user = request_user
         super().__init__(*args, **kwargs)
         selected_program_id = None
         if self.is_bound:
@@ -74,6 +76,10 @@ class CompetenceForm(forms.ModelForm):
             'program_profile',
             'department',
         ).filter(is_deleted=False).order_by('program_profile__code', 'admission_year')
+        if self.request_user is not None and not is_superuser_or_platform_admin(self.request_user):
+            base_program_qs = base_program_qs.filter(
+                department__in=get_user_departments(self.request_user),
+            )
         self.fields['educational_program'].queryset = autocomplete_queryset(base_program_qs, selected_program_id)
         apply_autocomplete_attrs(
             self.fields['educational_program'],
@@ -81,6 +87,14 @@ class CompetenceForm(forms.ModelForm):
             placeholder='Введите профиль, кафедру или год набора',
         )
         self.fields['competence_type'].queryset = self.fields['competence_type'].queryset.order_by('name')
+
+    def clean_educational_program(self):
+        educational_program = self.cleaned_data['educational_program']
+        if self.request_user is None or is_superuser_or_platform_admin(self.request_user):
+            return educational_program
+        if not can_manage_department(self.request_user, educational_program.department_id):
+            raise forms.ValidationError('Нельзя менять компетенции программы чужой кафедры.')
+        return educational_program
 
 
 class DisciplineCompetenceForm(forms.ModelForm):

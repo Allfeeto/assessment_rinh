@@ -2,7 +2,7 @@
     <thead>
     <tr>
         <th>ID</th><th>Код</th><th>Наименование</th><th>Тип</th><th>Программа</th>
-        <th>Связей с дисциплинами</th><th>Индикаторов</th><th>Заданий</th>
+        <th>Связей с дисциплинами</th><th>Индикаторы: Знать / Уметь / Владеть</th><th>Заданий</th>
         {% if can_manage_competence_directory %}<th>Действия</th>{% endif %}
     </tr>
     </thead>
@@ -15,12 +15,30 @@
             <td>{{ competence.competence_type.name }}</td>
             <td>{{ competence.educational_program }}</td>
             <td>{{ competence.disciplines_count }}</td>
-            <td>{{ competence.indicators_count }}</td>
+            <td>
+                <div class="competence-indicators">
+                    {% for slot in competence.indicator_slots %}
+                        <div class="competence-indicator">
+                            <strong>{{ slot.label }}:</strong>
+                            {% if slot.indicator %}
+                                <span class="muted">{{ slot.indicator.code }}</span>
+                                <span>{{ slot.indicator.text }}</span>
+                            {% else %}
+                                <span class="muted">—</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </td>
             <td>{{ competence.items_count }}</td>
             {% if can_manage_competence_directory %}
                 <td><div class="actions">
-                    <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
-                    <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
+                    {% if competence.can_manage %}
+                        <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
+                        <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
+                    {% else %}
+                        <span class="muted">Нет прав изменения</span>
+                    {% endif %}
                 </div></td>
             {% endif %}
         </tr>
