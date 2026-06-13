@@ -34,7 +34,7 @@
             {% if can_manage_competence_directory %}
                 <td><div class="actions">
                     {% if competence.can_manage %}
-                        <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить</a>
+                        <a class="btn secondary" href="{% url 'competencies_competence_update' competence.id %}">Изменить компетенцию и индикаторы</a>
                         <a class="btn danger" href="{% url 'competencies_competence_delete' competence.id %}">Удалить</a>
                     {% else %}
                         <span class="muted">Нет прав изменения</span>

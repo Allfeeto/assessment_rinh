@@ -8,8 +8,13 @@ from django.http import Http404
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 
-from competencies.forms import CompetenceForm, DisciplineCompetenceForm
-from competencies.models import Competence, DisciplineCompetence
+from competencies.forms import MANUAL_INDICATOR_SOURCE, CompetenceForm, DisciplineCompetenceForm
+from competencies.models import (
+    Competence,
+    CompetenceIndicator,
+    CompetenceIndicatorImport,
+    DisciplineCompetence,
+)
 from competencies.views import (
     CompetenceDetailView,
     CompetenceListView,
@@ -51,6 +56,8 @@ def competencies_permissions_schema():
         Discipline,
         ProgramDiscipline,
         Competence,
+        CompetenceIndicatorImport,
+        CompetenceIndicator,
         DisciplineCompetence,
     ]
     with connection.schema_editor() as schema_editor:
@@ -151,6 +158,12 @@ def _request(user, path='/'):
     return request
 
 
+def _post_request(user, path, data):
+    request = RequestFactory().post(path, data=data)
+    request.user = user
+    return request
+
+
 def test_competence_and_matrix_use_their_respective_departments(competencies_permissions_schema):
     ctx = _context()
 
@@ -186,6 +199,12 @@ def test_competence_detail_actions_and_direct_update_match_department(
         pk=ctx.competence_a.id,
     )
     assert own_update.status_code == 200
+    own_update.render()
+    own_update_html = own_update.content.decode()
+    assert 'Индикаторы достижения компетенции' in own_update_html
+    assert 'name="indicator_know"' in own_update_html
+    assert 'name="indicator_can"' in own_update_html
+    assert 'name="indicator_master"' in own_update_html
 
     with pytest.raises(Http404):
         CompetenceDetailView.as_view()(
@@ -197,6 +216,32 @@ def test_competence_detail_actions_and_direct_update_match_department(
             _request(ctx.senior_b, f'/competencies/list/{ctx.competence_a.id}/edit/'),
             pk=ctx.competence_a.id,
         )
+
+
+def test_senior_teacher_and_platform_admin_can_save_indicators_through_update_view(
+    competencies_permissions_schema,
+):
+    ctx = _context()
+    admin = User.objects.create_user(username='platform-admin', is_staff=True)
+    update_path = f'/competencies/list/{ctx.competence_a.id}/edit/'
+    data = _competence_form_data(ctx)
+
+    response = CompetenceUpdateView.as_view()(
+        _post_request(ctx.senior_a, update_path, data),
+        pk=ctx.competence_a.id,
+    )
+    assert response.status_code == 302
+    assert set(ctx.competence_a.indicators.values_list('code', flat=True)) == {
+        'ПК-1.1',
+        'ПК-1.2',
+        'ПК-1.3',
+    }
+
+    admin_response = CompetenceUpdateView.as_view()(
+        _request(admin, f'/competencies/list/{ctx.competence_b.id}/edit/'),
+        pk=ctx.competence_b.id,
+    )
+    assert admin_response.status_code == 200
 
 
 def test_forms_reject_foreign_competence_program_and_foreign_discipline(
@@ -276,3 +321,138 @@ def test_indicator_slots_and_template_show_roles_and_missing_dash():
     assert 'Владеть:' in html
     assert 'ПК-1.1' in html
     assert '—' in html
+
+
+def _create_indicators(competence, *, source_file='indicators.docx'):
+    return [
+        CompetenceIndicator.objects.create(
+            competence=competence,
+            code=f'{competence.code}.{suffix}',
+            text=text,
+            source_file=source_file,
+        )
+        for suffix, text in (
+            ('1', 'Знает основы'),
+            ('2', 'Умеет применять'),
+            ('3', 'Владеет методами'),
+        )
+    ]
+
+
+def _competence_form_data(ctx, **overrides):
+    data = {
+        'educational_program': ctx.program_a.id,
+        'competence_type': ctx.competence_type.id,
+        'code': ctx.competence_a.code,
+        'name': ctx.competence_a.name,
+        'indicator_know': 'Знает основы',
+        'indicator_can': 'Умеет применять',
+        'indicator_master': 'Владеет методами',
+    }
+    data.update(overrides)
+    return data
+
+
+def test_competence_form_updates_complete_indicator_set_transactionally(
+    competencies_permissions_schema,
+):
+    ctx = _context()
+    _create_indicators(ctx.competence_a)
+
+    form = CompetenceForm(
+        data=_competence_form_data(
+            ctx,
+            indicator_can='Умеет применять на практике',
+        ),
+        instance=ctx.competence_a,
+        request_user=ctx.senior_a,
+    )
+
+    assert form.is_valid(), form.errors
+    form.save()
+
+    indicators = {
+        item.code: item
+        for item in CompetenceIndicator.objects.filter(competence=ctx.competence_a)
+    }
+    assert set(indicators) == {'ПК-1.1', 'ПК-1.2', 'ПК-1.3'}
+    assert indicators['ПК-1.1'].source_file == 'indicators.docx'
+    assert indicators['ПК-1.2'].text == 'Умеет применять на практике'
+    assert indicators['ПК-1.2'].source_file == MANUAL_INDICATOR_SOURCE
+    assert indicators['ПК-1.2'].last_import_id is None
+
+
+def test_competence_form_rebuilds_indicator_codes_when_competence_code_changes(
+    competencies_permissions_schema,
+):
+    ctx = _context()
+    _create_indicators(ctx.competence_a)
+
+    form = CompetenceForm(
+        data=_competence_form_data(ctx, code='ПК-9'),
+        instance=ctx.competence_a,
+        request_user=ctx.senior_a,
+    )
+
+    assert form.is_valid(), form.errors
+    competence = form.save()
+
+    assert competence.code == 'ПК-9'
+    assert set(competence.indicators.values_list('code', flat=True)) == {
+        'ПК-9.1',
+        'ПК-9.2',
+        'ПК-9.3',
+    }
+
+
+def test_competence_form_allows_empty_set_but_rejects_partial_or_wrong_roles(
+    competencies_permissions_schema,
+):
+    ctx = _context()
+    _create_indicators(ctx.competence_a)
+
+    partial_form = CompetenceForm(
+        data=_competence_form_data(ctx, indicator_can=''),
+        instance=ctx.competence_a,
+        request_user=ctx.senior_a,
+    )
+    assert not partial_form.is_valid()
+    assert 'indicator_can' in partial_form.errors
+
+    wrong_role_form = CompetenceForm(
+        data=_competence_form_data(ctx, indicator_master='Знает вместо владения'),
+        instance=ctx.competence_a,
+        request_user=ctx.senior_a,
+    )
+    assert not wrong_role_form.is_valid()
+    assert 'indicator_master' in wrong_role_form.errors
+
+    empty_form = CompetenceForm(
+        data=_competence_form_data(
+            ctx,
+            indicator_know='',
+            indicator_can='',
+            indicator_master='',
+        ),
+        instance=ctx.competence_a,
+        request_user=ctx.senior_a,
+    )
+    assert empty_form.is_valid(), empty_form.errors
+    empty_form.save()
+    assert not CompetenceIndicator.objects.filter(competence=ctx.competence_a).exists()
+
+
+def test_competence_indicator_summary_has_all_three_roles(competencies_permissions_schema):
+    ctx = _context()
+    CompetenceIndicator.objects.create(
+        competence=ctx.competence_a,
+        code='ПК-1.1',
+        text='Знает основы',
+        source_file='indicators.docx',
+    )
+
+    summary = ctx.competence_a.indicator_summary
+
+    assert 'Знать: ПК-1.1 — Знает основы' in summary
+    assert 'Уметь: —' in summary
+    assert 'Владеть: —' in summary

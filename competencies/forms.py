@@ -1,4 +1,6 @@
 from django import forms
+from django.db import transaction
+from django.utils import timezone
 
 from core.forms import apply_autocomplete_attrs, autocomplete_queryset
 from core.permissions import (
@@ -12,7 +14,17 @@ from core.permissions import (
 from disciplines.models import ProgramDiscipline
 from programs.models import EducationalProgram
 
-from .models import Competence, DisciplineCompetence
+from .models import Competence, CompetenceIndicator, DisciplineCompetence
+from .services.indicator_parser import normalize_code, normalize_text
+from .services.indicator_validator import EXPECTED_INDICATOR_ROLES
+
+
+MANUAL_INDICATOR_SOURCE = 'Ручное редактирование'
+INDICATOR_FORM_FIELDS = (
+    ('indicator_know', '1', 'Знать'),
+    ('indicator_can', '2', 'Уметь'),
+    ('indicator_master', '3', 'Владеть'),
+)
 
 
 class CompetenceIndicatorImportForm(forms.Form):
@@ -59,9 +71,29 @@ class CompetenceIndicatorImportForm(forms.Form):
 
 
 class CompetenceForm(forms.ModelForm):
+    indicator_know = forms.CharField(
+        required=False,
+        label='Знать',
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+    indicator_can = forms.CharField(
+        required=False,
+        label='Уметь',
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+    indicator_master = forms.CharField(
+        required=False,
+        label='Владеть',
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+
     class Meta:
         model = Competence
         fields = ('educational_program', 'competence_type', 'code', 'name')
+        widgets = {
+            'code': forms.TextInput(),
+            'name': forms.Textarea(attrs={'rows': 3}),
+        }
 
     def __init__(self, *args, request_user=None, **kwargs):
         self.request_user = request_user
@@ -87,6 +119,27 @@ class CompetenceForm(forms.ModelForm):
             placeholder='Введите профиль, кафедру или год набора',
         )
         self.fields['competence_type'].queryset = self.fields['competence_type'].queryset.order_by('name')
+        self._configure_indicator_fields()
+
+    def _configure_indicator_fields(self):
+        raw_code = self.data.get('code') if self.is_bound else getattr(self.instance, 'code', '')
+        competence_code = normalize_code(raw_code) or 'КОД'
+        existing_by_suffix = {}
+        if self.instance and self.instance.pk:
+            for indicator in self.instance.indicators.all():
+                suffix = normalize_code(indicator.code).rsplit('.', 1)[-1]
+                if suffix in EXPECTED_INDICATOR_ROLES and suffix not in existing_by_suffix:
+                    existing_by_suffix[suffix] = indicator
+
+        for field_name, suffix, label in INDICATOR_FORM_FIELDS:
+            expected_role = EXPECTED_INDICATOR_ROLES[suffix]
+            self.fields[field_name].label = f'{label} ({competence_code}.{suffix})'
+            self.fields[field_name].help_text = (
+                f'Текст должен начинаться со слова «{expected_role}». '
+                'Заполните все три позиции либо оставьте все три пустыми.'
+            )
+            if not self.is_bound and suffix in existing_by_suffix:
+                self.initial[field_name] = existing_by_suffix[suffix].text
 
     def clean_educational_program(self):
         educational_program = self.cleaned_data['educational_program']
@@ -95,6 +148,103 @@ class CompetenceForm(forms.ModelForm):
         if not can_manage_department(self.request_user, educational_program.department_id):
             raise forms.ValidationError('Нельзя менять компетенции программы чужой кафедры.')
         return educational_program
+
+    def clean(self):
+        cleaned_data = super().clean()
+        indicator_values = {}
+        for field_name, suffix, _label in INDICATOR_FORM_FIELDS:
+            value = normalize_text(cleaned_data.get(field_name))
+            cleaned_data[field_name] = value
+            indicator_values[suffix] = value
+
+        filled_count = sum(bool(value) for value in indicator_values.values())
+        if filled_count == 0:
+            return cleaned_data
+        if filled_count != len(INDICATOR_FORM_FIELDS):
+            for field_name, suffix, _label in INDICATOR_FORM_FIELDS:
+                if not indicator_values[suffix]:
+                    self.add_error(field_name, 'Заполните эту позицию или очистите все три индикатора.')
+            self.add_error(None, 'Индикаторы должны быть заполнены полным набором: Знать, Уметь, Владеть.')
+            return cleaned_data
+
+        for field_name, suffix, _label in INDICATOR_FORM_FIELDS:
+            expected_role = EXPECTED_INDICATOR_ROLES[suffix]
+            if not indicator_values[suffix].casefold().startswith(expected_role.casefold()):
+                self.add_error(
+                    field_name,
+                    f'Текст индикатора должен начинаться со слова «{expected_role}».',
+                )
+        return cleaned_data
+
+    def save(self, commit=True):
+        if not commit:
+            return super().save(commit=False)
+
+        with transaction.atomic():
+            instance = super().save(commit=True)
+            self._save_indicators(instance)
+        return instance
+
+    def _save_indicators(self, competence):
+        competence_code = normalize_code(competence.code)
+        desired = {
+            f'{competence_code}.{suffix}': self.cleaned_data[field_name]
+            for field_name, suffix, _label in INDICATOR_FORM_FIELDS
+            if self.cleaned_data.get(field_name)
+        }
+        existing_queryset = CompetenceIndicator.objects.select_for_update().filter(
+            competence=competence,
+        )
+        if not desired:
+            existing_queryset.delete()
+            return
+
+        existing = {
+            indicator.code: indicator
+            for indicator in existing_queryset
+        }
+        existing_queryset.exclude(code__in=desired).delete()
+
+        now = timezone.now()
+        to_create = []
+        to_update = []
+        for code, text in desired.items():
+            current = existing.get(code)
+            if current is None:
+                to_create.append(
+                    CompetenceIndicator(
+                        competence=competence,
+                        code=code,
+                        text=text,
+                        source_file=MANUAL_INDICATOR_SOURCE,
+                    )
+                )
+                continue
+            if normalize_text(current.text) == text:
+                continue
+
+            current.text = text
+            current.last_import = None
+            current.source_file = MANUAL_INDICATOR_SOURCE
+            current.source_table_number = None
+            current.source_row_number = None
+            current.updated_at = now
+            to_update.append(current)
+
+        if to_create:
+            CompetenceIndicator.objects.bulk_create(to_create)
+        if to_update:
+            CompetenceIndicator.objects.bulk_update(
+                to_update,
+                fields=(
+                    'text',
+                    'last_import',
+                    'source_file',
+                    'source_table_number',
+                    'source_row_number',
+                    'updated_at',
+                ),
+            )
 
 
 class DisciplineCompetenceForm(forms.ModelForm):

@@ -401,6 +401,7 @@ class CompetenceListView(NamedListView):
         ('Наименование', 'name'),
         ('Тип', 'competence_type.name'),
         ('Программа', 'educational_program'),
+        ('Индикаторы: Знать / Уметь / Владеть', 'indicator_summary'),
     )
     create_url_name = 'competencies_competence_create'
     detail_url_name = 'competencies_competence_detail'
@@ -413,7 +414,9 @@ class CompetenceListView(NamedListView):
         return super().can_use_action(action)
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(
+            educational_program__is_deleted=False,
+        ).prefetch_related('indicators')
         return filter_competences_for_management(self.request.user, queryset)
 
     def can_change_object(self, obj):
@@ -435,10 +438,13 @@ class CompetenceDetailView(NamedDetailView):
         ('Наименование', 'name'),
         ('Тип', 'competence_type.name'),
         ('Программа', 'educational_program'),
+        ('Индикаторы: Знать / Уметь / Владеть', 'indicator_summary'),
     )
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(educational_program__is_deleted=False)
+        queryset = super().get_queryset().filter(
+            educational_program__is_deleted=False,
+        ).prefetch_related('indicators')
         return filter_competences_for_management(self.request.user, queryset)
 
     def can_use_action(self, action):
@@ -450,6 +456,7 @@ class CompetenceDetailView(NamedDetailView):
 class CompetenceCreateView(NamedCreateView):
     model = Competence
     form_class = CompetenceForm
+    template_name = 'competencies/form.html'
     title = 'Создать компетенцию'
     list_url_name = 'competencies_competence_list'
 
@@ -465,6 +472,7 @@ class CompetenceCreateView(NamedCreateView):
 class CompetenceUpdateView(NamedUpdateView):
     model = Competence
     form_class = CompetenceForm
+    template_name = 'competencies/form.html'
     title = 'Редактировать компетенцию'
     list_url_name = 'competencies_competence_list'
 

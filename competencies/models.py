@@ -38,6 +38,22 @@ class Competence(models.Model):
     def __str__(self):
         return f'{self.code} — {self.name}'
 
+    @property
+    def indicator_summary(self):
+        indicators_by_suffix = {}
+        for indicator in self.indicators.all():
+            code = (indicator.code or '').strip()
+            suffix = code.rsplit('.', 1)[-1] if '.' in code else ''
+            if suffix in {'1', '2', '3'} and suffix not in indicators_by_suffix:
+                indicators_by_suffix[suffix] = indicator
+
+        parts = []
+        for suffix, label in (('1', 'Знать'), ('2', 'Уметь'), ('3', 'Владеть')):
+            indicator = indicators_by_suffix.get(suffix)
+            value = f'{indicator.code} — {indicator.text}' if indicator else '—'
+            parts.append(f'{label}: {value}')
+        return ' | '.join(parts)
+
 
 class DisciplineCompetence(models.Model):
     id = models.AutoField(primary_key=True)

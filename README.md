@@ -10,7 +10,7 @@ Assessment RINH - Django-приложение для ведения банка �
 - кафедры, преподаватели и назначения преподавателей на дисциплины учебных планов;
 - направления подготовки, профили и образовательные программы;
 - импорт образовательных программ из `.plx`;
-- импорт индикаторов достижения компетенций из бинарных `.doc` и `.docx`;
+- импорт индикаторов достижения компетенций из файлов Word `.doc` и `.docx`;
 - предпросмотр и безопасное обновление существующей образовательной программы из `.plx` без потери заданий и назначений;
 - корзина образовательных программ с восстановлением, просмотром состава и окончательным удалением;
 - дисциплины учебных планов с кодами PLX, кафедрами дисциплин и статусом присутствия в актуальном учебном плане;
@@ -37,7 +37,8 @@ Assessment RINH - Django-приложение для ведения банка �
 - `psycopg2-binary` для PostgreSQL;
 - `gunicorn` для WSGI-запуска в контейнере;
 - `whitenoise` для отдачи собранной статики;
-- `python-docx` для генерации Word-документов;
+- `python-docx` для чтения импортируемых `.docx` и генерации Word-документов;
+- LibreOffice Writer в Docker/Linux и Microsoft Word COM при прямом запуске на Windows для временного преобразования бинарных `.doc` в `.docx`;
 - HTML templates, CSS и vanilla JavaScript без отдельного frontend build step;
 - shell-скрипты `pg_dump`/`pg_restore` для backup/restore.
 
@@ -71,7 +72,7 @@ assessment_rinh/
 ├─ teachers/              # кафедры, преподаватели, назначения
 ├─ programs/              # направления, профили, программы, PLX import/update, корзина программ
 ├─ disciplines/           # дисциплины, коды/кафедры PLX и дисциплины учебных планов
-├─ competencies/          # компетенции и матрица дисциплина-компетенция
+├─ competencies/          # компетенции, индикаторы, Word import и матрица дисциплина-компетенция
 ├─ assessment/            # задания, строки, clipboard, cloning, рабочие области
 │  └─ services/           # item types, competence sync, clipboard, cloning, DB error formatting
 ├─ reports/               # отчеты
@@ -99,16 +100,16 @@ assessment_rinh/
 | --- | --- |
 | `core` | Справочники `EducationLevel`, `CompetenceType`, `AssessmentItemType`, `AcademicDegree`, `AcademicTitle`; главная страница; lookup registry; auth rate limit middleware; shared CRUD classes. |
 | `teachers` | `Department`, `Teacher`, `TeacherProgramDiscipline`; dashboard кафедр и преподавателей; управление назначениями; несколько кафедр преподавателя; lookup builders преподавателей и кафедр. |
-| `programs` | `TrainingDirection`, `ProgramProfile`, `EducationalProgram`; dashboard программ; PLX import/update; корзина программ; lookup builders направлений, профилей и программ. |
+| `programs` | `TrainingDirection`, `ProgramProfile`, `EducationalProgram`, `ProgramPlxImportDraft`; dashboard программ; PLX import/update; корзина программ; lookup builders направлений, профилей и программ. |
 | `disciplines` | `Discipline`, `ProgramDiscipline`; управление дисциплинами учебного плана, кодами PLX, кафедрами дисциплин и статусом актуальности; lookup builders дисциплин и дисциплин учебных планов. |
-| `competencies` | `Competence`, `DisciplineCompetence`; dashboard компетенций и матрицы; deprecated compatibility endpoint для формы задания; lookup builder компетенций. |
+| `competencies` | `Competence`, `CompetenceIndicator`, `CompetenceIndicatorImport`, `DisciplineCompetence`; dashboard компетенций и матрицы; импорт индикаторов из Word; lookup builder компетенций. |
 | `assessment` | `AssessmentItem`, `AssessmentItemRow`, `AssessmentItemCompetence`; формы заданий; рабочее место; trash workspace; clipboard; cloning; sync компетенций. |
 | `reports` | Фильтры и selectors для отчетов, без собственных предметных моделей. |
 | `export` | Форма, selectors, preparers и renderer для `.docx`, без собственных предметных моделей. |
 
 ## Модель данных и схема БД
 
-Предметные модели объявлены с `managed = False`. Django не создает и не изменяет предметные таблицы через migrations.
+Предметные модели объявлены с `managed = False`, поэтому обычный migration flow не создает предметную схему целиком. Исключение составляют явно включаемые ручные точечные migrations, описанные ниже.
 
 Основная цепочка:
 
@@ -132,6 +133,7 @@ EducationLevel
 - `Competence` принадлежит одной образовательной программе.
 - `CompetenceIndicator` хранит отдельный индикатор вида `ПК-1.1` и связан с программной `Competence`.
 - `CompetenceIndicatorImport` хранит audit-результат загрузки Word-файла без сохранения файла или строк в session.
+- Для импортируемой компетенции обязателен полный набор `КОД.1`, `КОД.2`, `КОД.3`: тексты должны начинаться с `Знает`, `Умеет`, `Владеет`. Компетенция, для которой индикаторы еще не импортировались, может иметь нулевой набор; UI и Word export показывают прочерк без ошибки.
 - `DisciplineCompetence` задает допустимые компетенции для дисциплины учебного плана.
 - `AssessmentItem` связан с `ProgramDiscipline`, типом задания и legacy-полем `competence`.
 - Фактический набор компетенций задания хранится в `AssessmentItemCompetence`.
@@ -143,7 +145,8 @@ EducationLevel
 
 - `EducationalProgram.department` - кафедра, ответственная за образовательную программу;
 - `ProgramDiscipline.department` - кафедра дисциплины из строки учебного плана PLX;
-- права старшего преподавателя на назначения и дисциплины учебного плана проверяются по `ProgramDiscipline.department`, а фильтр "Кафедра образовательной программы" в рабочей области фильтрует именно `EducationalProgram.department`.
+- право старшего преподавателя создавать и изменять компетенции проверяется по `EducationalProgram.department`;
+- права старшего преподавателя на матрицу, назначения и дисциплины учебного плана проверяются по `ProgramDiscipline.department`, а фильтр "Кафедра образовательной программы" в рабочей области фильтрует именно `EducationalProgram.department`.
 
 В `core/schema_contract.py` зафиксированы обязательные DB-объекты, которые должны существовать в PostgreSQL: таблицы связей, constraints/indexes, функции и триггеры проверки связей, типа строк задания, префикса профиля и года набора.
 
@@ -190,13 +193,15 @@ python manage.py check_db_schema --sql C:\secure\private_schema.sql
 - `reports`;
 - `export`.
 
-Исключение: для безопасных точечных DDL-изменений есть ручные migrations в приложениях `teachers` и `disciplines`. Они включаются только при `DJANGO_ENABLE_LOCAL_MIGRATIONS=1`.
+Исключение: для безопасных точечных DDL-изменений есть ручные migrations в приложениях `teachers`, `disciplines`, `competencies` и `programs`. Они включаются только при `DJANGO_ENABLE_LOCAL_MIGRATIONS=1`.
 
 Сейчас такие migrations добавляют:
 
 - таблицу `teacher_departments` для нескольких кафедр преподавателя;
 - поля `ProgramDiscipline.discipline_code`, `ProgramDiscipline.department`, `ProgramDiscipline.is_active_in_plan`;
-- индексы для поиска по коду дисциплины, кафедре и статусу актуальности учебного плана.
+- индексы для поиска по коду дисциплины, кафедре и статусу актуальности учебного плана;
+- таблицы `competence_indicator`, `competence_indicator_import` и их constraints/indexes;
+- таблицу `program_plx_import_draft` для серверного хранения структурированного PLX preview.
 
 Обычный `python manage.py migrate` без env-флага не поднимет предметную схему проекта. Он может применить только стандартные Django migrations для `auth`, `admin`, `contenttypes`, `sessions` и других managed-приложений. Предметная схема должна быть восстановлена из production backup, применена из приватного SQL-артефакта развертывания или обновлена точечными migrations через `DJANGO_ENABLE_LOCAL_MIGRATIONS=1`.
 
@@ -217,7 +222,7 @@ python manage.py check_db_schema --sql C:\secure\private_schema.sql
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Origin-ы для CSRF через запятую, если приложение работает за HTTPS-доменом/proxy. |
 | `DJANGO_LOG_LEVEL` | Уровень root-логгера, по умолчанию `INFO`. |
 | `DB_SCHEMA_SQL_PATH` | Локальный путь к приватному SQL-файлу для `check_db_schema --sql`. |
-| `DJANGO_ENABLE_LOCAL_MIGRATIONS` | Включает ручные local migrations для `teachers` и `disciplines`; по умолчанию `False`. |
+| `DJANGO_ENABLE_LOCAL_MIGRATIONS` | Включает ручные local migrations для `teachers`, `disciplines`, `competencies` и `programs`; по умолчанию `False`. |
 
 ### База данных
 
@@ -488,7 +493,7 @@ docker compose exec web python manage.py check
 docker compose exec web python manage.py check_db_schema --live
 ```
 
-## Production schema update helper
+## Production schema update helpers
 
 `scripts/prod_apply_plx_department_changes.sh` предназначен для аккуратного применения точечных изменений схемы, связанных с кафедрами дисциплин PLX и несколькими кафедрами преподавателя.
 
@@ -507,6 +512,11 @@ docker compose exec web python manage.py check_db_schema --live
 sh scripts/prod_apply_plx_department_changes.sh
 ```
 
+Дополнительные точечные helpers:
+
+- `scripts/prod_apply_competence_indicator_changes.sh` проверяет наличие конвертера `.doc`, создает backup, применяет migration `competencies` для таблиц индикаторов и проверяет итоговую схему;
+- `scripts/prod_apply_programs_ux_changes.sh` создает backup, применяет migration `programs.0002_plx_import_draft` и проверяет таблицу серверных PLX-черновиков.
+
 ## Авторизация и permissions
 
 Используются стандартные `django.contrib.auth`, `sessions`, `admin`.
@@ -522,6 +532,8 @@ Admin site дополнительно ограничен в `assessment_rinh/url
 - `get_user_departments` - кафедры, которыми пользователь может управлять;
 - `can_use_teacher_workspace` - domain manager или пользователь со связанным `Teacher`;
 - `can_manage_teacher_assignments` - platform admin, старший преподаватель с кафедрами управления или пользователь с permissions на `TeacherProgramDiscipline`;
+- `can_manage_competence` - проверка права на компетенцию по кафедре ее образовательной программы;
+- `can_manage_program_discipline` - проверка права на дисциплину учебного плана и матрицу по кафедре конкретной дисциплины;
 - `can_assign_teacher_to_program_discipline` - проверка, что преподаватель и дисциплина относятся к допустимой кафедре.
 
 Команда настройки групп:
@@ -545,6 +557,8 @@ python manage.py setup_teacher_group
 - старший преподаватель может создавать и редактировать преподавателей только в своих кафедрах, при редактировании чужие кафедральные связи преподавателя сохраняются;
 - удаление преподавателей доступно только superuser/staff;
 - назначение преподавателя на дисциплину разрешено только если кафедра дисциплины входит в кафедры управления пользователя и преподаватель относится к этой кафедре;
+- компетенции можно создавать и изменять только для образовательных программ своих кафедр; чужие компетенции не показываются в управляемом списке и недоступны по прямой ссылке;
+- связи матрицы можно создавать и изменять только для дисциплин учебного плана своих кафедр;
 - дисциплина без указанной кафедры не может быть назначена старшим преподавателем;
 - в панели назначений уже назначенные или чужие дисциплины могут оставаться видимыми, но checkbox отключается с причиной запрета.
 
@@ -653,8 +667,10 @@ Deprecated compatibility endpoint:
 
 Frontend построен на Django templates, CSS и vanilla JavaScript:
 
-- `templates/base.html` - общая навигация, flash messages, подключение `static/js/base.js`;
+- `templates/base.html` - общая навигация, flash messages, адаптивное верхнее меню и подключение общих JS-модулей;
 - `static/js/base.js` - autocomplete, dependent selects, auto-submit GET-фильтров;
+- `static/js/compact_blocks.js` - раскрытие, сворачивание и пагинация независимых dashboard-блоков без полной перезагрузки страницы;
+- `static/js/async_blocks.js` - поиск, сортировка и пагинация обычных списков с заменой только соответствующего блока;
 - `templates/assessment/form.html` - динамическая видимость строк задания по типу и обновление чекбоксов компетенций;
 - `templates/teachers/dashboard.html` - AJAX panel/toggle назначений преподавателей;
 - `templates/programs/includes/plx_preview_group.html` - группы предпросмотра изменений при безопасном PLX update;
@@ -680,6 +696,7 @@ Frontend построен на Django templates, CSS и vanilla JavaScript:
 | `/teachers/assignments/panel/` | AJAX panel назначений преподавателей. |
 | `/teachers/assignments/toggle/` | JSON toggle назначения преподавателя. |
 | `/programs/` | Dashboard программ и PLX import. |
+| `/competencies/indicators/import/` | POST endpoint импорта индикаторов выбранной образовательной программы из `.doc`/`.docx`. |
 | `/programs/trash/` | Корзина образовательных программ. |
 | `/disciplines/` | Управление дисциплинами выбранной программы. |
 | `/disciplines/overview/` | Обзор дисциплин и дисциплин учебных планов. |
@@ -819,20 +836,29 @@ Preview PLX update группирует изменения:
 Отдельный блок импорта находится на `/programs/` и не связан с PLX pipeline.
 
 - пользователь явно выбирает активную образовательную программу;
+- platform admin может выбрать любую активную программу, старший преподаватель - только программу своей кафедры;
 - принимаются бинарные Word-файлы `.doc` из фактического источника и `.docx`;
-- `.doc` временно преобразуется в `.docx` через LibreOffice в Docker/Linux; при прямом запуске на Windows таблицы читаются Microsoft Word в read-only режиме;
+- максимальный размер загружаемого файла - 10 МБ;
+- `.doc` временно преобразуется в `.docx` через LibreOffice в Docker/Linux; при прямом запуске на Windows используется Microsoft Word COM, причем исходный `.doc` открывается read-only; затем общий parser читает полученный `.docx`;
+- временные файлы конвертации удаляются после обработки;
 - таблицы находятся по смысловому заголовку `Индикаторы достижения компетенции`;
 - ячейка с несколькими кодами (`ПК-1.1`, `ПК-1.2`, `ПК-1.3`) разбивается на отдельные записи;
+- для каждой представленной в файле компетенции требуется ровно три индикатора: `.1` - `Знает`, `.2` - `Умеет`, `.3` - `Владеет`; неполный набор, лишний код или неверная роль блокируют импорт;
 - компетенции сопоставляются по нормализованному коду только внутри выбранной программы и автоматически не создаются;
 - неизвестная или неоднозначная компетенция блокирует импорт индикаторов;
 - повторный импорт пропускает точные дубли и обновляет текст существующего `(competence, code)`;
-- импорт выполняется транзакционно, исходный файл и строки не сохраняются в session.
+- импорт выполняется транзакционно, исходный файл и строки не сохраняются в session;
+- `CompetenceIndicatorImport` сохраняет имя и SHA-256 файла, пользователя, программу, статус, счетчики и отчет об ошибках; `CompetenceIndicator` хранит код, текст, файл-источник и номера таблицы/строки;
+- platform admin и старший преподаватель в пределах кафедры программы могут вручную редактировать полный набор индикаторов в форме компетенции; коды `.1`, `.2`, `.3` формируются автоматически, а частичный набор не сохраняется;
+- страница `/competencies/` показывает для каждой компетенции позиции `Знать`, `Уметь`, `Владеть`; отсутствующие индикаторы отображаются прочерками.
 
 Сервисы находятся в `competencies/services/indicator_*`. Пакеты импорта и индикаторы доступны в Django admin.
 
-## UX страницы программ
+## UX и загрузка больших списков
 
-Страница `/programs/` использует компактные серверные preview-блоки и независимые query-параметры:
+Dashboard-страницы и большие списки используют компактные серверные preview-блоки, серверную пагинацию и частичное обновление HTML-фрагментов. Кнопки раскрытия/сворачивания, переходы между страницами, поиск и сортировка заменяют только нужный блок, поэтому страница не прыгает в начало и не загружает все строки из БД.
+
+Страница `/programs/` использует независимые query-параметры:
 
 - `directions_expanded`, `directions_page`;
 - `profiles_expanded`, `profiles_page`;
@@ -865,6 +891,7 @@ Selectors учитывают как legacy `AssessmentItem.competence`, так �
 - связка программы и дисциплины должна быть активной;
 - максимум `1000` заданий за один экспорт;
 - шаблон документа - `templates/export/maket.docx`;
+- первая таблица группирует задания по компетенциям и выводит соответствующие индикаторы; если индикаторы не заполнены, используется прочерк;
 - при отсутствии заданий или превышении лимита view возвращает форму с ошибкой.
 
 ## Management commands
@@ -877,7 +904,7 @@ Selectors учитывают как legacy `AssessmentItem.competence`, так �
 | `python manage.py setup_teacher_group` | Создает/обновляет группы `Преподаватель` и `Старший преподаватель` с permissions. |
 | `python manage.py createsuperuser` | Стандартная команда Django для superuser. |
 | `python manage.py collectstatic --noinput` | Сбор static в `staticfiles`. |
-| `DJANGO_ENABLE_LOCAL_MIGRATIONS=1 python manage.py migrate` | Применяет ручные local migrations для `teachers` и `disciplines`; использовать только после backup. |
+| `DJANGO_ENABLE_LOCAL_MIGRATIONS=1 python manage.py migrate` | Применяет ручные local migrations для `teachers`, `disciplines`, `competencies` и `programs`; использовать только после backup. |
 | `python manage.py check` | Django system checks. |
 
 ## Logging, sessions и cache
@@ -912,7 +939,7 @@ python -m pip install pytest
 pytest -q
 ```
 
-Обычные тесты используют `DJANGO_ENV=dev`, SQLite in-memory и не требуют PostgreSQL. Покрыты selectors, schema contract, PLX mapping/import/update сценарии, permissions, фильтры рабочих областей и базовые dashboard smoke checks.
+Обычные тесты используют `DJANGO_ENV=dev`, SQLite in-memory и не требуют PostgreSQL. Покрыты selectors, schema contract, PLX mapping/import/update, импорт `.doc`/`.docx` индикаторов, кафедральные permissions, фильтры рабочих областей и dashboard smoke checks.
 
 PostgreSQL invariant tests помечены `postgres_integration` и запускаются только при:
 

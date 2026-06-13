@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% for hidden_field in form.hidden_fields %}{{ hidden_field }}{% endfor %}
+
+    {% if form.non_field_errors %}
+        <div class="alert">
+            {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Основные данные</h2>
+                <p class="muted">Код компетенции используется для автоматического формирования кодов индикаторов.</p>
+            </div>
+        </div>
+
+        <div class="competence-form-grid">
+            <div class="field competence-form-wide">
+                <label for="{{ form.educational_program.id_for_label }}">{{ form.educational_program.label }} *</label>
+                {{ form.educational_program }}
+                {% if form.educational_program.help_text %}<small class="helptext">{{ form.educational_program.help_text }}</small>{% endif %}
+                {% if form.educational_program.errors %}<ul class="errors">{% for error in form.educational_program.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="field">
+                <label for="{{ form.competence_type.id_for_label }}">{{ form.competence_type.label }} *</label>
+                {{ form.competence_type }}
+                {% if form.competence_type.errors %}<ul class="errors">{% for error in form.competence_type.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="field">
+                <label for="{{ form.code.id_for_label }}">{{ form.code.label }} *</label>
+                {{ form.code }}
+                {% if form.code.errors %}<ul class="errors">{% for error in form.code.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="field competence-form-wide">
+                <label for="{{ form.name.id_for_label }}">{{ form.name.label }} *</label>
+                {{ form.name }}
+                {% if form.name.errors %}<ul class="errors">{% for error in form.name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Индикаторы достижения компетенции</h2>
+                <p class="muted">
+                    Заполните все три позиции либо оставьте все пустыми. При пустом наборе на странице и в Word-экспорте будут показаны прочерки.
+                </p>
+            </div>
+        </div>
+
+        <div class="indicator-form-grid">
+            <div class="indicator-form-card field">
+                <label for="{{ form.indicator_know.id_for_label }}">{{ form.indicator_know.label }}</label>
+                {{ form.indicator_know }}
+                <small class="helptext">{{ form.indicator_know.help_text }}</small>
+                {% if form.indicator_know.errors %}<ul class="errors">{% for error in form.indicator_know.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="indicator-form-card field">
+                <label for="{{ form.indicator_can.id_for_label }}">{{ form.indicator_can.label }}</label>
+                {{ form.indicator_can }}
+                <small class="helptext">{{ form.indicator_can.help_text }}</small>
+                {% if form.indicator_can.errors %}<ul class="errors">{% for error in form.indicator_can.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="indicator-form-card field">
+                <label for="{{ form.indicator_master.id_for_label }}">{{ form.indicator_master.label }}</label>
+                {{ form.indicator_master }}
+                <small class="helptext">{{ form.indicator_master.help_text }}</small>
+                {% if form.indicator_master.errors %}<ul class="errors">{% for error in form.indicator_master.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="btn" type="submit">{{ submit_text|default:"Сохранить" }}</button>
+        {% if list_url_name %}
+            <a class="btn secondary" href="{% url list_url_name %}">Отмена</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
