@@ -259,7 +259,7 @@ def _add_specification_table(doc: Document, prepared_items: list[dict]):
     groups = build_specification_groups(prepared_items)
     table = doc.add_table(rows=len(groups) + 1, cols=4)
     table.style = 'Table Grid'
-    _set_table_col_widths(table, [4.2, 5.4, 1.8, 4.0])
+    _set_table_col_widths(table, [3.9, 6.9, 1.9, 3.5])
     headers = [
         'Код и наименование компетенции',
         'Код и наименование индикаторов сформированности компетенций',

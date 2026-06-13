@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 
 from assessment.services import (
     TYPE_MATCHING,
@@ -18,6 +19,7 @@ from .errors import WordExportError
 
 RUS_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З', 'И', 'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С', 'Т']
 logger = logging.getLogger(__name__)
+NATURAL_SORT_PART_RE = re.compile(r'(\d+)')
 
 ANSWER_INSTRUCTION_BY_TYPE = {
     TYPE_MATCHING: 'Запишите выбранные цифры под соответствующими буквами, каждый элемент правого столбца используется один раз:',
@@ -74,12 +76,49 @@ def _normalize_sort_text(value) -> str:
     return str(value or '').strip().casefold()
 
 
+def _natural_sort_text(value) -> tuple:
+    return tuple(
+        int(part) if part.isdigit() else part
+        for part in NATURAL_SORT_PART_RE.split(_normalize_sort_text(value))
+    )
+
+
 def _iter_rows(item):
     return list(item.rows.order_by('sort_order', 'id'))
 
 
-def _resolve_indicators_text(item) -> str:
-    return '—'
+def _get_competence_indicators(competence) -> list:
+    prefetched = getattr(competence, '_prefetched_objects_cache', {}).get('indicators')
+    if prefetched is not None:
+        return list(prefetched)
+
+    indicators = getattr(competence, 'indicators', None)
+    if indicators is None:
+        return []
+    if isinstance(indicators, (list, tuple)):
+        return list(indicators)
+    return list(indicators.order_by('code', 'id'))
+
+
+def _resolve_indicators_text(competences: list) -> str:
+    unique = {}
+    for competence in competences:
+        for indicator in _get_competence_indicators(competence):
+            indicator_id = getattr(indicator, 'id', None)
+            key = indicator_id if indicator_id is not None else id(indicator)
+            unique[key] = indicator
+
+    ordered = sorted(
+        unique.values(),
+        key=lambda indicator: (
+            _natural_sort_text(getattr(indicator, 'code', '')),
+            getattr(indicator, 'id', 0) or 0,
+        ),
+    )
+    return '\n'.join(
+        f'{indicator.code} — {indicator.text}'
+        for indicator in ordered
+    ) or '—'
 
 
 def _competence_sort_tuple(competence):
@@ -263,7 +302,7 @@ def _prepare_export_item(item, number: int, rng: random.Random):
         'prompt_text': _cleanup_text(item.prompt_text),
         'criteria': CRITERIA_BY_TYPE.get(type_code, ''),
         'answer_instruction': ANSWER_INSTRUCTION_BY_TYPE.get(type_code, ''),
-        'indicator_text': _resolve_indicators_text(item),
+        'indicator_text': _resolve_indicators_text(competences),
         'answer_key': '',
         'payload': {},
         'competence_text': _format_competences_text(competences),

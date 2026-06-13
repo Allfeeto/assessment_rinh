@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import re
 
+from django.db.models import Prefetch
+
 from assessment.models import AssessmentItem
 from assessment.selectors import filter_items_by_competence
+from competencies.models import CompetenceIndicator
 from disciplines.models import ProgramDiscipline
 
 INVALID_FILENAME_CHARS_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]')
@@ -18,7 +21,17 @@ def filtered_items(program_id, discipline_id, filters):
             'program_discipline__discipline',
             'program_discipline__educational_program__program_profile',
         )
-        .prefetch_related('rows')
+        .prefetch_related(
+            'rows',
+            Prefetch(
+                'competence__indicators',
+                queryset=CompetenceIndicator.objects.order_by('id'),
+            ),
+            Prefetch(
+                'competence_links__competence__indicators',
+                queryset=CompetenceIndicator.objects.order_by('id'),
+            ),
+        )
         .filter(
             program_discipline__educational_program_id=program_id,
             program_discipline__educational_program__is_deleted=False,

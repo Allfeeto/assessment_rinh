@@ -122,8 +122,17 @@ def test_prepare_export_item_hides_unknown_type_details():
     assert 'неподдерживаемым типом' in message
 
 
-def _fake_competence(pk, code, name=None):
-    return SimpleNamespace(id=pk, code=code, name=name or f'Компетенция {code}')
+def _fake_competence(pk, code, name=None, indicators=()):
+    return SimpleNamespace(
+        id=pk,
+        code=code,
+        name=name or f'Компетенция {code}',
+        indicators=list(indicators),
+    )
+
+
+def _fake_indicator(pk, code, text):
+    return SimpleNamespace(id=pk, code=code, text=text)
 
 
 def _fake_type(pk, code, name=None):
@@ -253,6 +262,37 @@ def test_build_numbered_items_assigns_numbers_after_sort(monkeypatch):
         {'item_id': 3, 'number': 2},
         {'item_id': 1, 'number': 3},
     ]
+
+
+def test_prepare_export_item_adds_indicators_for_linked_competences():
+    indicators = [
+        _fake_indicator(3, 'ОПК-1.3', 'Владеет навыками анализа'),
+        _fake_indicator(2, 'ОПК-1.2', 'Умеет применять знания'),
+        _fake_indicator(1, 'ОПК-1.1', 'Знает основные положения'),
+    ]
+    competence = _fake_competence(1, 'ОПК-1', indicators=indicators)
+    item_type = _fake_type(1, assessment_services.TYPE_OPEN)
+    item = _fake_item(1, competence, item_type)
+    item.rows = SimpleNamespace(order_by=lambda *args: [])
+
+    prepared = export_services._prepare_export_item(item, number=1, rng=random.Random(1))
+
+    assert prepared['indicator_text'] == (
+        'ОПК-1.1 — Знает основные положения\n'
+        'ОПК-1.2 — Умеет применять знания\n'
+        'ОПК-1.3 — Владеет навыками анализа'
+    )
+
+
+def test_prepare_export_item_uses_dash_when_competence_has_no_indicators():
+    competence = _fake_competence(1, 'ОПК-1')
+    item_type = _fake_type(1, assessment_services.TYPE_OPEN)
+    item = _fake_item(1, competence, item_type)
+    item.rows = SimpleNamespace(order_by=lambda *args: [])
+
+    prepared = export_services._prepare_export_item(item, number=1, rng=random.Random(1))
+
+    assert prepared['indicator_text'] == '—'
 
 
 def test_get_item_competences_merges_legacy_fk_with_m2m_links():

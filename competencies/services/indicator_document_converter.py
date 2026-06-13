@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import os
-import json
+import signal
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from secrets import token_hex
-
-from docx import Document
 
 from .exceptions import IndicatorParsingError, IndicatorValidationError
 from .indicator_parser import normalize_text
@@ -98,7 +97,21 @@ class IndicatorDocumentConverter:
                 )
             return output_path.read_bytes()
         finally:
-            shutil.rmtree(temp_path, ignore_errors=True)
+            self._remove_temp_directory(temp_path)
+
+    @staticmethod
+    def _remove_temp_directory(temp_path: Path) -> None:
+        for delay in (0, 0.1, 0.3):
+            if delay:
+                time.sleep(delay)
+            try:
+                shutil.rmtree(temp_path)
+                return
+            except FileNotFoundError:
+                return
+            except OSError:
+                continue
+        shutil.rmtree(temp_path, ignore_errors=True)
 
     @staticmethod
     def _convert_with_libreoffice(converter: str, source_path: Path, output_dir: Path) -> None:
@@ -130,39 +143,50 @@ class IndicatorDocumentConverter:
     def _convert_with_microsoft_word(source_path: Path, output_path: Path) -> None:
         source_path = source_path.resolve()
         output_path = output_path.resolve()
+        existing_word_process_ids = IndicatorDocumentConverter._get_word_process_ids()
         script_path = source_path.parent / 'convert-doc.ps1'
         script_path.write_text(
             r"""
-param([string]$Source)
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = [Console]::OutputEncoding
+param([string]$Source, [string]$Output)
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
 $word.AutomationSecurity = 3
+$word.Options.SaveNormalPrompt = $false
+$word.Options.ConfirmConversions = $false
+$signature = @'
+using System;
+using System.Runtime.InteropServices;
+public static class WordWindowProcess {
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+}
+'@
+Add-Type -TypeDefinition $signature
+$wordProcessId = 0
+[void][WordWindowProcess]::GetWindowThreadProcessId([IntPtr]$word.Hwnd, [ref]$wordProcessId)
+$processIdPath = Join-Path (Split-Path -Parent $Source) 'word-process-id.txt'
+$wordProcessId | Set-Content -LiteralPath $processIdPath -Encoding ascii
 $doc = $null
 try {
-    $doc = $word.Documents.Open($Source, $false, $true)
-    $tables = @()
-    foreach ($table in $doc.Tables) {
-        $tableRows = @()
-        for ($rowNumber = 1; $rowNumber -le $table.Rows.Count; $rowNumber++) {
-            $cells = @()
-            for ($columnNumber = 1; $columnNumber -le $table.Columns.Count; $columnNumber++) {
-                try {
-                    $value = $table.Cell($rowNumber, $columnNumber).Range.Text
-                }
-                catch {
-                    $value = ''
-                }
-                $value = ($value -replace '[\r\a]+', ' ' -replace '\s+', ' ').Trim()
-                $cells += $value
-            }
-            $tableRows += [PSCustomObject]@{ cells = $cells }
-        }
-        $tables += [PSCustomObject]@{ rows = $tableRows }
-    }
-    ConvertTo-Json -InputObject $tables -Depth 8 -Compress
+    $doc = $word.Documents.Open(
+        $Source,
+        $false,
+        $true,
+        $false,
+        '',
+        '',
+        $false,
+        '',
+        '',
+        0,
+        0,
+        $false,
+        $true,
+        0,
+        $true
+    )
+    $doc.SaveAs2($Output, 16)
 }
 finally {
     if ($null -ne $doc) {
@@ -188,49 +212,69 @@ finally {
                     '-File',
                     str(script_path.resolve()),
                     str(source_path),
+                    str(output_path),
                 ],
                 check=False,
                 capture_output=True,
                 timeout=60,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except subprocess.TimeoutExpired as exc:
+            IndicatorDocumentConverter._terminate_conversion_word_processes(
+                source_path.parent / 'word-process-id.txt',
+                existing_word_process_ids,
+            )
+            raise IndicatorParsingError('Microsoft Word превысил время обработки .doc-файла.') from exc
+        except OSError as exc:
             raise IndicatorParsingError('Не удалось запустить Microsoft Word для обработки .doc.') from exc
         if result.returncode != 0:
-            raise IndicatorParsingError('Microsoft Word не смог прочитать таблицы загруженного .doc-файла.')
+            raise IndicatorParsingError('Microsoft Word не смог преобразовать загруженный .doc-файл.')
 
+    @staticmethod
+    def _get_word_process_ids() -> set[int]:
+        if os.name != 'nt':
+            return set()
         try:
-            tables = json.loads(result.stdout.decode('utf-8-sig'))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise IndicatorParsingError('Microsoft Word вернул некорректную структуру таблиц .doc-файла.') from exc
-        if isinstance(tables, dict):
-            tables = [tables]
-        if not isinstance(tables, list) or not tables:
-            raise IndicatorParsingError('В загруженном .doc-файле не найдены таблицы.')
-
-        document = Document()
-        for source_table in tables:
-            source_rows = source_table.get('rows') if isinstance(source_table, dict) else None
-            if isinstance(source_rows, dict):
-                source_rows = [source_rows]
-            if not isinstance(source_rows, list) or not source_rows:
-                continue
-            column_count = max(
-                (
-                    len(row.get('cells', []))
-                    for row in source_rows
-                    if isinstance(row, dict)
-                ),
-                default=0,
+            result = subprocess.run(
+                [
+                    'powershell.exe',
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    '(Get-Process WINWORD -ErrorAction SilentlyContinue).Id',
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
-            if column_count == 0:
-                continue
-            target_table = document.add_table(rows=len(source_rows), cols=column_count)
-            for row_number, source_row in enumerate(source_rows):
-                if not isinstance(source_row, dict):
-                    continue
-                source_cells = source_row.get('cells', [])
-                if not isinstance(source_cells, list):
-                    source_cells = [source_cells]
-                for column_number, value in enumerate(source_cells[:column_count]):
-                    target_table.cell(row_number, column_number).text = str(value or '')
-        document.save(output_path)
+        except (OSError, subprocess.TimeoutExpired):
+            return set()
+        return {
+            int(line.strip())
+            for line in result.stdout.splitlines()
+            if line.strip().isdigit()
+        }
+
+    @staticmethod
+    def _terminate_conversion_word_processes(
+        pid_path: Path,
+        existing_process_ids: set[int],
+    ) -> None:
+        process_ids = IndicatorDocumentConverter._get_word_process_ids() - existing_process_ids
+        try:
+            process_id = pid_path.read_text(encoding='ascii').strip()
+        except OSError:
+            process_id = ''
+        if process_id.isdigit():
+            process_ids.add(int(process_id))
+
+        for process_id in process_ids:
+            try:
+                os.kill(process_id, signal.SIGTERM)
+            except OSError:
+                subprocess.run(
+                    ['taskkill.exe', '/PID', str(process_id), '/T', '/F'],
+                    check=False,
+                    capture_output=True,
+                    timeout=10,
+                )

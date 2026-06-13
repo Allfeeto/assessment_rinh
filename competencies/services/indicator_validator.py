@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from .exceptions import IndicatorIssue
 from .indicator_parser import ParsedIndicatorDocument, ParsedIndicatorRow, normalize_code, normalize_text
 
+EXPECTED_INDICATOR_ROLES = {
+    '1': 'Знает',
+    '2': 'Умеет',
+    '3': 'Владеет',
+}
+
 
 @dataclass(frozen=True, slots=True)
 class IndicatorValidationResult:
@@ -49,7 +55,60 @@ class IndicatorValidator:
             seen[key] = row
             unique_rows.append(row)
 
+        errors.extend(self._validate_competence_indicator_sets(unique_rows))
         return IndicatorValidationResult(rows=unique_rows, errors=errors, warnings=warnings)
+
+    def _validate_competence_indicator_sets(
+        self,
+        rows: list[ParsedIndicatorRow],
+    ) -> list[IndicatorIssue]:
+        grouped: dict[str, list[ParsedIndicatorRow]] = {}
+        for row in rows:
+            grouped.setdefault(normalize_code(row.competence_code), []).append(row)
+
+        errors = []
+        for competence_code, competence_rows in grouped.items():
+            expected_codes = {
+                f'{competence_code}.{suffix}'
+                for suffix in EXPECTED_INDICATOR_ROLES
+            }
+            actual_codes = {
+                normalize_code(row.indicator_code)
+                for row in competence_rows
+            }
+            if actual_codes != expected_codes:
+                missing = sorted(expected_codes - actual_codes)
+                unexpected = sorted(actual_codes - expected_codes)
+                details = []
+                if missing:
+                    details.append(f'отсутствуют: {", ".join(missing)}')
+                if unexpected:
+                    details.append(f'лишние: {", ".join(unexpected)}')
+                errors.append(
+                    self._issue(
+                        competence_rows[0],
+                        (
+                            f'Для компетенции {competence_code} должен быть полный набор '
+                            f'из трёх индикаторов .1, .2, .3 '
+                            f'({"; ".join(details)}).'
+                        ),
+                    )
+                )
+
+            for row in competence_rows:
+                indicator_code = normalize_code(row.indicator_code)
+                suffix = indicator_code.rsplit('.', 1)[-1] if '.' in indicator_code else ''
+                expected_role = EXPECTED_INDICATOR_ROLES.get(suffix)
+                if expected_role and not normalize_text(row.text).casefold().startswith(
+                    expected_role.casefold()
+                ):
+                    errors.append(
+                        self._issue(
+                            row,
+                            f'Индикатор {indicator_code} должен начинаться со слова «{expected_role}».',
+                        )
+                    )
+        return errors
 
     def _validate_row(self, row: ParsedIndicatorRow) -> list[IndicatorIssue]:
         errors = []

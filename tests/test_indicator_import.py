@@ -1,5 +1,7 @@
 from io import BytesIO
 from pathlib import Path
+import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -91,13 +93,18 @@ def _program_with_competence(code='ПК-1'):
     return program, competence
 
 
-def _indicator_docx(*, competence_code='ПК-1', first_text='основы анализа данных') -> bytes:
+def _indicator_docx(
+    *,
+    competence_code='ПК-1',
+    first_text='основы анализа данных',
+    indicator_text=None,
+) -> bytes:
     document = Document()
     table = document.add_table(rows=2, cols=2)
     table.cell(0, 0).text = 'Код и наименование профессиональной компетенции выпускника'
     table.cell(0, 1).text = 'Индикаторы достижения компетенции'
     table.cell(1, 0).text = f'{competence_code} Способен решать профессиональные задачи'
-    table.cell(1, 1).text = (
+    table.cell(1, 1).text = indicator_text or (
         f'{competence_code}.1. Знает: {first_text}. '
         f'{competence_code}.2. Умеет: применять методы анализа. '
         f'{competence_code}.3. Владеет: навыками решения задач.'
@@ -167,6 +174,53 @@ def test_libreoffice_conversion_uses_generated_source_docx(monkeypatch):
     assert converted.startswith(b'PK')
 
 
+def test_microsoft_word_timeout_terminates_only_spawned_word_process(monkeypatch):
+    calls = []
+    tmp_path = Path.cwd() / '.tmp_word_timeout_test'
+    tmp_path.mkdir(exist_ok=True)
+    process_snapshots = iter(({100}, {100, 4321}))
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[0] == 'powershell.exe':
+            (Path(command[-2]).parent / 'word-process-id.txt').write_text(
+                '4321',
+                encoding='ascii',
+            )
+            raise subprocess.TimeoutExpired(
+                command,
+                timeout=60,
+            )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(
+        'competencies.services.indicator_document_converter.subprocess.run',
+        fake_run,
+    )
+    monkeypatch.setattr(
+        'competencies.services.indicator_document_converter.os.kill',
+        lambda process_id, signal_number: calls.append(['os.kill', process_id, signal_number]),
+    )
+    monkeypatch.setattr(
+        IndicatorDocumentConverter,
+        '_get_word_process_ids',
+        staticmethod(lambda: next(process_snapshots)),
+    )
+    try:
+        source_path = tmp_path / 'source.doc'
+        source_path.write_bytes(b'old-binary-word')
+
+        with pytest.raises(IndicatorImportError, match='превысил время'):
+            IndicatorDocumentConverter._convert_with_microsoft_word(
+                source_path,
+                tmp_path / 'converted.docx',
+            )
+
+        assert calls[-1][0:2] == ['os.kill', 4321]
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
 def test_repeated_import_skips_duplicates_and_updates_changed_text(indicator_schema):
     program, competence = _program_with_competence()
     service = IndicatorImportService()
@@ -186,6 +240,50 @@ def test_repeated_import_skips_duplicates_and_updates_changed_text(indicator_sch
     assert CompetenceIndicator.objects.get(competence=competence, code='ПК-1.1').text == (
         'Знает: обновлённые основы анализа данных'
     )
+
+
+@pytest.mark.parametrize(
+    ('indicator_text', 'expected_error'),
+    [
+        (
+            'ПК-1.1. Знает: основы анализа. ПК-1.2. Умеет: применять методы.',
+            'полный набор из трёх индикаторов',
+        ),
+        (
+            (
+                'ПК-1.1. Знает: основы анализа. '
+                'ПК-1.2. Владеет: методами анализа. '
+                'ПК-1.3. Умеет: применять методы.'
+            ),
+            'должен начинаться со слова',
+        ),
+        (
+            (
+                'ПК-1.1. Знает: основы анализа. '
+                'ПК-1.2. Умеет: применять методы. '
+                'ПК-1.3. Владеет: навыками. '
+                'ПК-1.4. Дополнительный индикатор.'
+            ),
+            'лишние: ПК-1.4',
+        ),
+    ],
+)
+def test_import_rejects_incomplete_or_invalid_indicator_sets(
+    indicator_schema,
+    indicator_text,
+    expected_error,
+):
+    program, _ = _program_with_competence()
+
+    with pytest.raises(IndicatorImportError, match='Импорт отменён') as captured:
+        IndicatorImportService().import_upload(
+            _upload(_indicator_docx(indicator_text=indicator_text)),
+            educational_program=program,
+        )
+
+    batch = CompetenceIndicatorImport.objects.get(pk=captured.value.batch_id)
+    assert expected_error in batch.error_summary
+    assert not CompetenceIndicator.objects.exists()
 
 
 def test_unknown_competence_blocks_rows_and_records_failed_batch(indicator_schema):
